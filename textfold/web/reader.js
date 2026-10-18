@@ -59,8 +59,11 @@
   function view(uid) {
     const u = U[uid];
     const z = trOf(u);
-    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: z.lad.brief, tn: z.lad.tn, topic: z.lad.topic, p: `${lang}~` };
-    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: u.lad.brief, tn: u.lad.tn, topic: u.lad.topic, p: '' };
+    const l = z ? z.lad : u.lad;
+    // glue: the half of a sentence a page break left in the unit before this one; l3 === false: background the
+    // section already summarises, kept out of Brief so it does not read as a list of documents and years
+    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, l3: l.l3, p: `${lang}~` };
+    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, l3: l.l3, p: '' };
   }
 
   // ── pieces: what a unit shows at a level ─────────────────────────────
@@ -75,6 +78,7 @@
       out = [];
       v.sents.forEach(([a, b], s) => { for (let i = a; i < b; i++) out.push({ id: p + i, i, tok: v.toks[i], lead: ev.has(s) }); });
     } else if (L === 3) {
+      if (v.l3 === false) return [];   // background its section already summarises: Brief would only list documents
       const keep = new Set(v.brief.filter((t) => t.m !== undefined).map((t) => t.m));
       out = [];
       let prevEnd = null;
@@ -82,8 +86,25 @@
       for (const s of sents) {
         const [a, b] = v.sents[s];
         if (prevEnd !== null && a !== prevEnd) out.push({ id: `${p}gap${s}`, gap: true });
-        for (let i = a; i < b; i++) out.push({ id: p + i, i, tok: v.toks[i], lead: keep.has(i) });
+        for (let i = a; i < b; i++) {
+          const raw = v.toks[i], txt = raw && raw.t !== undefined ? raw.t : raw;
+          // a CJK footnote marker (①-⑩, ⑴-⒑, ⒈-⒑) glued into a sentence: dropped for display; a token that is
+          // nothing but markers is not rendered at all (Full keeps the text as written). † ‡ § ¶ are left alone:
+          // English papers use them as ordinary marks
+          const clean = String(txt).replace(/[①②③④⑤⑥⑦⑧⑨⑩⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⒈⒉⒊⒋⒌⒍⒎⒏⒐⒑]/g, "");
+          if (!clean.trim()) continue;
+          out.push({ id: p + i, i, tok: clean === txt ? raw : (typeof raw === "string" ? clean : { ...raw, t: clean }), lead: keep.has(i) });
+        }
         prevEnd = b;
+      }
+      // the page break cut this sentence in two and the first half stays in the unit before: joined here, at the
+      // first word, so the sentence reads whole ("…的法律位阶为行政" + "法规，加强对…") and stays one line
+      if (v.glue) {
+        const first = out.find((x) => !x.gap && x.tok);
+        if (first) {
+          const tk = typeof first.tok === "string" ? { t: first.tok } : first.tok;
+          first.tok = { ...tk, t: v.glue + (tk.t || "") };
+        }
       }
     } else {
       // i: the token of the full text a written word came from (none for the model's own words)
@@ -164,12 +185,15 @@
   // the drawing itself, into the unit's element (or a copy of it: the keyframes' sandbox)
   function drawUnit(uid, L, el, map, hot) {
     el.dataset.l = L;
+    const pcs = pieces(uid, L);
+    if (!pcs.length && L < 4) { el.hidden = true; el._tx.replaceChildren(); return; }   // an apparatus unit (footnote, contents line): not shown at all when folded, as written at Full
+    el.hidden = false;
     if (!hot) {
       el._tx.innerHTML = textHtml(uid, L);
       if (el._tx.querySelector('.texsrc')) texify(el._tx);
       return;
     }
-    const pcs = pieces(uid, L), frag = document.createDocumentFragment();
+    const frag = document.createDocumentFragment();
     let group = null;
     pcs.forEach((p, n) => {
       let s = map.get(p.id);
@@ -314,7 +338,11 @@
       if (b.k === 'h') {
         boxes.length = 0;
         const c = chunkById[b.chunk];
-        const cur = h('section', `chunk l${c.level}${c.units.length ? '' : ' empty'}`);
+        // An empty section whose title is a reference itself ([EB/OL], a URL): the converter read a footnote as a
+        // section heading. Full keeps it as written; every folded level drops the section, or Takeaway shows a
+        // block of quoted text where a heading should be
+        const ref = !c.units.length && /\[[A-Za-z]+\/OL\]|https?:\/\//.test(c.title || '');
+        const cur = h('section', `chunk l${c.level}${c.units.length ? '' : ' empty'}${ref ? ' ref' : ''}`);
         cur.dataset.chunk = c.id; cur.id = c.id;
         const hd = h('h2', 'hd'); hd.dataset.id = `h:${c.id}`;
         hd.hidden = !c.num && !c.title;   // a document's opening text has no heading of its own
@@ -428,7 +456,8 @@
   function renderStake(c, st) {
     const lad = (trOf(c) && trOf(c).lad) || c.lad;
     st.replaceChildren();
-    if (!lad) return;
+    if (!lad || !lad.take.length) { st.hidden = true; return; }   // no section stake: leave no empty row
+    st.hidden = false;
     const mk = stakeMarks(c.id);
     lad.take.forEach((tk, i) => {
       const s = tokEl(tk, `${lad.topic.includes(i) ? 'lead' : ''}${mk && mk.has(i) ? ' hl' : ''}`);

@@ -193,7 +193,7 @@ html.morphing .dot, html.morphing .legend i { animation: none !important; }
 .chunk.l3 > .hd { font-size: 19px; font-weight: 650; margin: 34px 0 10px; }
 .chunk.l4 > .hd, .chunk.l5 > .hd { font-size: 16.5px; font-weight: 650; margin: 26px 0 8px; }
 .stake { display: none; font-family: var(--sans); color: var(--muted); font-size: 15px; line-height: 1.45; margin: -4px 0 14px; }
-.doc[data-level="2"] .stake, .doc[data-level="1"] .stake, .doc[data-level="0"] .stake { display: block; }
+.doc[data-level="3"] .stake, .doc[data-level="2"] .stake, .doc[data-level="1"] .stake, .doc[data-level="0"] .stake { display: block; }
 
 /* ── units ──────────────────────────────────────────────── */
 .u { position: relative; transition: background-color .35s, border-color .35s, color .35s; border: 1px solid transparent; }
@@ -241,9 +241,11 @@ html.morphing .dot, html.morphing .legend i { animation: none !important; }
 .doc[data-level="0"] .chunk .stake { font-size: 12px; line-height: 1.35; margin: 0 0 8px; }
 .doc[data-level="0"] .chunk.empty { grid-column: 1 / -1; background: none; border-color: transparent; box-shadow: none; padding: 10px 2px 0; }
 .doc[data-level="0"] .chunk.empty > .hd { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+/* a reference line the converter read as a section heading (.ref): dropped at every folded level, kept at Full */
+.doc:not([data-level="4"]) .chunk.ref { display: none; }
 .doc[data-level="0"] .chunk ul.list { display: contents; }
 .doc[data-level="0"] .chunk li.u { list-style: none; }
-.doc[data-level="0"] .chunk .body { display: flex; flex-wrap: wrap; align-items: center; }
+.doc[data-level="0"] .chunk .body { display: flex; flex-wrap: wrap; align-items: center; max-height: min(34vh, 340px); overflow-y: auto; overscroll-behavior: contain; }
 
 /* lists */
 ul.list { list-style: none; padding: 0; margin: 0 0 14px; }

@@ -11,6 +11,9 @@ import re
 # a CJK character (Han or kana) is a token of its own (the morph slides characters, as ThoughtDAG's Chinese plaques do)
 CJK = "\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f"  # kana too: Japanese is not spaced
 WORD = re.compile(rf"[{CJK}]|\d+(?:[.,]\d+)+%?|[^\W_{CJK}]+(?:['’\-][^\W_{CJK}]+)*|\S", re.U)
+# a CJK sentence's end (；and：separate clauses, as , and ; do in English), and the closers that may be glued to it
+CJK_STOP = "。！？"
+CJK_CLOSERS = "”’」』）"
 ABBREV = {
     "e", "g", "i", "al", "etc", "vs", "cf", "fig", "figs", "eq", "eqs", "sec", "secs", "tab",
     "ref", "refs", "no", "approx", "resp", "ca", "viz", "dr", "mr", "ms", "prof", "st", "jr",
@@ -46,17 +49,20 @@ def tokenize_text(text, font=None, out=None):
 
 
 def split_sentences(toks):
-    """Sentence ranges [start, end) over a token list."""
+    """Sentence ranges [start, end) over a token list. A CJK stop (。！？) ends a sentence as . ? ! do:
+    CJK is not spaced, so no space is required after the stop, and any token may start the next sentence."""
     bounds, start, n = [], 0, len(toks)
     for i, tk in enumerate(toks):
         t = tk.get("t")
-        if t not in (".", "?", "!") or i + 1 >= n:
+        cjk = bool(t) and t in CJK_STOP
+        if (t not in (".", "?", "!") and not cjk) or i + 1 >= n:
             continue
         end = i
         # a closing bracket or quote glued to the stop belongs to this sentence
-        if not tk.get("s") and toks[i + 1].get("t") in (")", "]", "”", '"', "’") and toks[i + 1].get("s"):
+        if not tk.get("s") and toks[i + 1].get("t") in (")", "]", "”", '"', "’") + tuple(CJK_CLOSERS) \
+                and (toks[i + 1].get("s") or cjk):
             end = i + 1
-        elif not tk.get("s"):
+        elif not tk.get("s") and not cjk:
             continue
         if end + 1 >= n:
             continue
@@ -65,7 +71,7 @@ def split_sentences(toks):
             continue
         nxt = toks[end + 1]
         head = nxt.get("t") or ""
-        if "a" in nxt or re.match(r"[A-Z0-9(\[“\"‘]", head):
+        if "a" in nxt or cjk or re.match(r"[A-Z0-9(\[“\"‘]", head):
             bounds.append((start, end + 1))
             start = end + 1
     if start < n:
