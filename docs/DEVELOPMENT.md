@@ -117,6 +117,13 @@ Models (⚙ Model & API), ported from ThoughtDAG's model access:
   Keys added here stay in `~/.textfold/settings.json` (mode 600), outside the project folder. (Under earlier
   names they were in `~/.paperfold/` (PaperFold) or `~/.dynamic-reader/`: copied from there once, and left in place.)
 
+The landing and Settings open from saved configuration and the last discovery results. `GET /api/models` reads
+that snapshot without contacting local services; `POST /api/models/refresh` starts one shared background refresh.
+The page asks for progress only while discovery or the startup agent scan runs, then stops. Opening Settings refreshes
+again. Failed service probes keep that service's previous results and show an error with retry, including on first
+use without results. Agent Rescan, provider Fetch models and the actual model Connection test keep their separate jobs;
+generation still resolves its model when it runs. `tests/test_model_discovery.py` covers opening and refresh failures.
+
 Command line, without the server:
 
 ```bash

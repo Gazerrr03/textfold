@@ -33,7 +33,7 @@ _OR = {}   # the authorisation under way: verifier, back (where to return), mint
 _SEEN = {"at": 0.0, "status": None}   # the bridge's last status, asked for again after a few seconds
 
 
-def bridge_status(fresh=False):
+def bridge_status(fresh=False, strict=False):
     if not fresh and _SEEN["status"] is not None and time.time() - _SEEN["at"] < 5:
         return _SEEN["status"]
     try:
@@ -41,15 +41,17 @@ def bridge_status(fresh=False):
             ids = [m.get("id") for m in json.loads(r.read()).get("data", []) if m.get("id")]
         st = {"running": True, "models": ids}
     except Exception:
+        if strict:
+            raise
         npx = shutil.which("npx", path=agents.child_env()["PATH"])
         st = {"running": False, "node": bool(npx), "codexLogin": (Path.home() / ".codex" / "auth.json").exists()}
     _SEEN.update({"at": time.time(), "status": st})
     return st
 
 
-def bridge_provider(text_only):
+def bridge_provider(text_only, status=None):
     """The running bridge as a provider found on its own (as a running Ollama is): no key, its text models."""
-    st = bridge_status()
+    st = bridge_status() if status is None else status
     if not st.get("running"):
         return None
     ids = [i for i in st["models"] if not text_only.search(i)]

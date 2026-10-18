@@ -9,7 +9,8 @@
   POST /api/generate          {paper, lang, force}: queue a generation; one runs at a time. paper: an arXiv id or
                               link, a PMC or PPR id, a DOI (Europe PMC, epmc.py), or a stored document's id
   POST /api/import            {name, text}: store a Markdown file as a paper (local.py); its id, to generate
-  GET  /api/models            every model this computer can reach: local agents and API providers
+  GET  /api/models            saved configuration and the last model discovery results (no service probes)
+  POST /api/models/refresh    refresh local model services in the background; GET /api/models reports progress/errors
   POST /api/models/select     {model, effort}: the model generations use; {task: "ask", model, effort}: the one questions
                               are answered with (none: the same) and its reasoning level (none: the default)
   POST /api/agents/scan       look for agents again (also done at startup)
@@ -78,16 +79,60 @@ def vendor_file(rel):
     return f if rel and root in f.parents and f.is_file() and f.suffix in VENDOR_TYPES else None
 
 
+# Only an explicit refresh contacts local services. Page rendering reads the last results,
+# and a failed probe leaves that service's previous result available.
+DISCOVERY = {"live": {"ollama": [], "bridge": None}, "bridge": {"running": False, "node": bool(shutil.which("npx"))},
+             "refreshing": False, "ready": False, "error": ""}
+DISCOVERY_LOCK = threading.Lock()
+
+
+def refresh_models():
+    with DISCOVERY_LOCK:
+        if DISCOVERY["refreshing"]:
+            return
+        DISCOVERY["refreshing"] = True
+
+    def refresh():
+        live = dict(DISCOVERY["live"])
+        status = DISCOVERY["bridge"]
+        errors = []
+        try:
+            if not os.environ.get("TEXTFOLD_NO_MODELS"):
+                try:
+                    live["ollama"] = providers.ollama_models(strict=True)
+                except Exception:
+                    errors.append("Ollama")
+                try:
+                    status = bridges.bridge_status(fresh=True, strict=True)
+                    live["bridge"] = bridges.bridge_provider(providers.NOT_TEXT, status)
+                except Exception:
+                    errors.append("ChatGPT bridge")
+        finally:
+            with DISCOVERY_LOCK:
+                DISCOVERY.update(live=live, bridge=status, ready=DISCOVERY["ready"] or not errors,
+                                 error=", ".join(errors), refreshing=False)
+
+    threading.Thread(target=refresh, daemon=True).start()
+
+
 def models_payload():
     s = models.load_settings()
-    cat, provs = models.catalog(s)
-    selected = models.default_model(s, cat)
-    ask, ask_effort = models.ask_choice(s, cat)
+    with DISCOVERY_LOCK:
+        discovery = dict(DISCOVERY)
+    cat, provs = models.catalog(s, discovery["live"])
+    # The UI shows the reader's saved choices even while their service is unavailable.
+    # Generation still resolves availability through models.resolve as before.
+    for mid in (s.get("model"), s.get("ask_model")):
+        if mid and not any(m["id"] == mid for m in cat):
+            cat.append({"id": mid, "name": mid, "kind": "api", "group": "saved", "efforts": []})
+    selected = s.get("model") or models.default_model(s, cat)
+    ask, ask_effort = s.get("ask_model"), s.get("ask_effort")
     name = lambda mid: next((m["name"] for m in cat if m["id"] == mid), mid)
     return {
         "models": cat, "selected": selected, "selectedName": name(selected),
         "askModel": ask, "askEffort": ask_effort, "askName": name(ask) if ask and ask != selected else "",
-        "efforts": s.get("efforts") or {}, "bridge": bridges.bridge_status(),
+        "efforts": s.get("efforts") or {}, "bridge": discovery["bridge"],
+        "discovery": {k: discovery[k] for k in ("refreshing", "ready", "error")},
         "agents": [{k: a[k] for k in ("runtime", "label", "binary", "path", "version", "runnable", "error")} | {"models": len(a["models"])}
                    for a in agents.STATE["agents"]],
         "scanning": agents.STATE["scanning"], "scannedAt": agents.STATE["scanned_at"],
@@ -419,12 +464,10 @@ def listed():
 
 
 def landing_page(jobs):
-    s = models.load_settings()
-    chosen = models.default_model(s)
-    ask = models.ask_choice(s)[0]
-    boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": models.label(chosen, s) if chosen else "",
-            "askName": models.label(ask, s) if ask and ask != chosen else "",
-            "bridge": bridges.bridge_status(), "langs": [[code, v[1]] for code, v in langs.LANGS.items()]}
+    data = models_payload()
+    boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": data["selectedName"] or "",
+            "askName": data["askName"], "modelData": data,
+            "bridge": data["bridge"], "langs": [[code, v[1]] for code, v in langs.LANGS.items()]}
     t = (build.WEB / "app.html").read_text()
     return t.replace("{{HEAD}}", build.fonts_head(build.APP_ASSETS)).replace("{{BOOT}}", json.dumps(boot, ensure_ascii=False).replace("</", "<\\/"))
 
@@ -709,8 +752,14 @@ def make_handler(jobs):
                             s["efforts"].pop(s["model"], None)
                     models.save_settings(s)
                     return self.json(models_payload())
+                if u.path == "/api/models/refresh":
+                    refresh_models()
+                    return self.json(models_payload())
                 if u.path == "/api/agents/scan":
-                    agents.scan()
+                    try:
+                        agents.scan()
+                    finally:
+                        agents.STATE["scanning"] = False
                     return self.json(models_payload())
                 if u.path == "/api/providers/probe":
                     key = (bridges.minted() if body.get("minted") else None) or body.get("api_key") or \

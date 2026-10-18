@@ -133,12 +133,14 @@ def ui_providers(settings):
     return out
 
 
-def ollama_models(base="http://localhost:11434"):
+def ollama_models(base="http://localhost:11434", strict=False):
     """What a running Ollama has pulled ([] when it is not running)."""
     try:
         with urllib.request.urlopen(f"{base.rstrip('/')}/api/tags", timeout=1.5) as r:
             return [m["name"] for m in json.loads(r.read()).get("models", [])]
     except Exception:
+        if strict:
+            raise
         return []
 
 
