@@ -282,3 +282,36 @@ Corrections vs the plan itself, found in execution: the final wording of the
 README landed as `07dbbfb` amends `9c94074`→`8dd3221` split (probe fix moved
 after docs); S2's assertion now requires the reply + panel refresh (folds do not
 exist at Full); S5 asserts durable evidence, the notify is reported not asserted.
+
+---
+
+## 12. Difference vs the remote main (`origin/main` = `2cd77e0`, unchanged since the branch was cut)
+
+`d3-port` is 9 commits ahead of `origin/main`; the remote has nothing the branch lacks
+(fast-forwardable; no rebase needed). **No upstream file was touched beyond the two meant to
+change:** `extension/fold.ts`, `extension/level.ts`, `package.json`, `package-lock.json`,
+`tsconfig.json`, `tests/fold.test.ts`, `tests/level.test.ts` are blob-identical to main —
+merge conflicts are structurally impossible outside the two adapted files.
+
+15 files, +1517 / −117 (the plan itself is 317 of those lines; code + tests alone are
++1201 / −117 over 14 files):
+
+| File | Δ | What it adds over main |
+|---|---|
+| `extension/index.ts` | +108/−, 4 hunks | C1: restore scan at `session_start` (before install), `appendEntry` + notify in `apply`; C2: `registerFlag("textfold-digits")` + digit shortcuts registered lazily at `session_start`; panel: `message_end` → preview widget refresh |
+| `extension/persist.ts` | new (+24) | the C1 scan/store rules: branch's last valid `textfold-level` entry, corrupt entries skipped, restore writes nothing |
+| `extension/guard.ts` | new (+18) | the C2 pure decision: digit folds an empty prompt, reinserts in a draft |
+| `extension/panel.ts` | new (+56) | the preview panel lines + word-wrap (parseLevelArg stayed in upstream `level.ts`) |
+| `README.md` | +8/−2, 2 hunks | documents persistence, the panel, and `--textfold-digits` — each as the battery proves it |
+| `docs/D3-PORT-PLAN.md` | new | this plan, its verified-evidence matrix, execution log, and this manifest |
+| `tests/wiring.test.ts` | new (+313) | restore / dedupe / flag-timing / digit / panel-content / section contracts against a fake pi |
+| `tests/persist.test.ts`, `guard.test.ts`, `panel.test.ts` | new | the pure modules' unit contracts (54 tests total, floor 46) |
+| `tests/tui_smoke.py` | rewritten (+373/−) | 7-stage live battery with per-stage checkpoint + `TEXTFOLD_SMOKE_RUNID` resume, bounded waits, durable-evidence assertions |
+| `tests/ansiclean.py` | new | the one shared ANSI-stripping rule |
+| `tests/s6_probe.py`, `tests/pi_install_smoke.py` | new | single-purpose probes: digits end-to-end; the README install flow on plain `pi` |
+| `scripts/check-pi-api.py` | new | S0b preflight of every API the port needs, against the installed pi |
+
+Behavior a main user gains: the fold level survives a restart (and a resumed session points
+the row at it before any reply); a small panel previews the reply's fold with every stage;
+and, behind `--textfold-digits`, plain 1–5 fold empty prompts and reinsert themselves in a
+draft. Alt keys, `/fold`, the fold engine, the prompt section, and the row are untouched.
