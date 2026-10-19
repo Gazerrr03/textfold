@@ -30,6 +30,25 @@ export function hintForKeys(keys?: Record<string, string>): string {
 }
 
 /**
+ * Which level a click at visible column `x` of the plain row names, if any.
+ * The row is `fold` + five level segments in order, joined on double spaces,
+ * with an optional hint after them: only a column inside a level segment
+ * counts, so label, gaps, and hint clicks never misfire to a neighbor.
+ */
+export function levelAtColumn(row: string, x: number): Level | undefined {
+	// Full rows join on double spaces; narrow rows use one ("fold 4 Outline").
+	const m = /^fold +/.exec(row);
+	if (!m || x < m[0].length) return undefined;
+	let i = m[0].length;
+	for (const chunk of row.slice(i).split("  ")) {
+		const hit = /^[1-5] /.exec(chunk);
+		if (hit && x >= i && x < i + chunk.length) return Number(hit[0][0]) as Level;
+		i += chunk.length + 2;
+	}
+	return undefined;
+}
+
+/**
  * The row above the prompt: the five levels with their keys, the one read at marked, as Claude Code's mod
  * shows them. Where it is too narrow the hint goes first, then every level but the one read at.
  */

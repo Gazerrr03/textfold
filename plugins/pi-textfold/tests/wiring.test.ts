@@ -25,8 +25,10 @@ beforeEach(() => {
 });
 
 type TestTheme = { fg: (_kind: string, s: string) => string; bold: (s: string) => string; dim: (s: string) => string };
+type MouseLike = { type: string; button: string; x: number; y?: number };
 type WidgetFactory = (tui: unknown, theme: TestTheme) => {
 	render: (width: number) => string[];
+	handleMouse?: (event: MouseLike) => { handled?: boolean } | undefined;
 };
 
 // A fake pi with the surface the ported index.ts uses, recording everything it does.
@@ -327,6 +329,40 @@ describe("--textfold-digits registers plain digits from session_start, not the f
 		draft.press("3");
 		expect(draft.editorWrites).toEqual(["ab 3"]);
 		expect(draft.entries).toEqual([]); // no fold while typing
+	});
+});
+
+describe("clicking the row folds: the pointer without the keyboard", () => {
+	// The row's first line starts with one space; the plain row underneath sits at
+	// x-1. "fold  1 Full  2 Brief  3 Points …": "3 Points" spans row-local 23..30.
+	const click = (mk: { widgets: Map<string, { factory?: WidgetFactory }> }, x: number, button = "left") => {
+		const f = mk.widgets.get("textfold")?.factory;
+		if (!f) throw new Error("no row widget");
+		const screen = { requestRender: () => {} };
+		const theme: TestTheme = { fg: (_k: string, s: string) => s, bold: (s: string) => s, dim: (s: string) => s };
+		return f(screen, theme).handleMouse?.({ type: "press", button, x, y: 0 });
+	};
+
+	test("a left press on a level segment folds to it, like its shortcut", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		const out = click(mk, 1 + 24); // inside "3 Points" (23..30)
+		expect(out?.handled).toBe(true);
+		expect(mk.entries).toEqual([{ type: ENTRY_TYPE, payload: { level: 3 } }]);
+		expect(mk.notifications.join(" ")).toContain("Points");
+	});
+
+	test("presses on the label, the gaps, the hint, or another button fold nothing", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		expect(click(mk, 1 + 0)).toBeUndefined(); // "fold" label
+		expect(click(mk, 1 + 60)).toBeUndefined(); // the hint
+		expect(click(mk, 1 + 24, "right")).toBeUndefined(); // not the primary button
+		expect(mk.entries).toEqual([]);
 	});
 });
 

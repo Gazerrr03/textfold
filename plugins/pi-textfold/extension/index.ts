@@ -13,13 +13,13 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { parseKey, type KeyId, type TUI } from "@earendil-works/pi-tui";
+import { parseKey, type KeyId, type TUI, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
 import { hasBeenWelcomed, keysFile, loadKeys, markWelcomed, saveKeys, type KeysMap } from "./keys";
 import { guardDigit } from "./guard";
 import { foldPanelLines, PANEL_KEY } from "./panel";
-import { KEY, levelRow, parseLevelArg, type Level } from "./level";
+import { KEY, levelAtColumn, levelRow, parseLevelArg, type Level } from "./level";
 import { ENTRY_TYPE, levelEntryDraft, restoredLevel } from "./persist";
 
 // Debug tap: writes every shortcut/apply/restore decision when TEXTFOLD_PI_DEBUG
@@ -84,15 +84,38 @@ export default function textfoldFold(pi: ExtensionAPI) {
 
 	// The row above the prompt names the five levels and marks the one read at. Pi hands its screen to the
 	// row's factory, which the extension keeps: a new level has to be drawn on all of it.
+	// The factory also keeps the latest command context, so a mouse press on a level
+	// segment can fold without any key: the click path shares apply() with the keys.
 	let screen: TUI | undefined;
+	let mouseCtx: ExtensionContext | undefined;
 	const install = (ctx: ExtensionContext) =>
 		ctx.ui.setWidget(
 			KEY,
 			(tui, theme) => {
 				screen = tui;
+				mouseCtx = ctx;
 				DEBUG?.("row installed");
 				const paint = { label: (s: string) => theme.fg("muted", s), current: (s: string) => theme.bold(theme.fg("accent", s)), other: (s: string) => theme.fg("dim", s) };
-				return { render: (width: number) => [` ${levelRow(level, width - 1, paint, learnedKeys)}`], invalidate: () => {} };
+				let lastWidth = 78;
+				return {
+					render: (width: number): string[] => {
+						lastWidth = width;
+						return [` ${levelRow(level, width - 1, paint, learnedKeys)}`];
+					},
+					invalidate: (): void => {},
+					handleMouse: (event: TuiMouseEvent): TuiMouseEventResult | undefined => {
+						// Primary-button presses only, on a level segment: the label, the
+						// gaps, and the hint never misfire (levelAtColumn says undefined).
+						// Coordinates are component-local; the line starts with one space.
+						if ((event.type !== "press" && event.type !== "click") || event.button !== "left") return undefined;
+						const plain = { label: (s: string) => s, current: (s: string) => s, other: (s: string) => s };
+						const hit = levelAtColumn(levelRow(level, lastWidth - 1, plain, learnedKeys), event.x - 1);
+						if (hit === undefined || !mouseCtx) return undefined;
+						DEBUG?.(`row click level=${hit}`);
+						void apply(hit, mouseCtx);
+						return { handled: true };
+					},
+				};
 			},
 			{ placement: "aboveEditor" },
 		);
