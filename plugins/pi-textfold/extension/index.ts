@@ -16,6 +16,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { KeyId, TUI } from "@earendil-works/pi-tui";
 import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
+import { guardDigit } from "./guard";
 import { KEY, levelRow, parseLevelArg, type Level } from "./level";
 import { ENTRY_TYPE, levelEntryDraft, restoredLevel } from "./persist";
 
@@ -47,6 +48,11 @@ The person reading this session can fold your replies with one key: to each para
 This changes the order of what you write, not its content or its length.`;
 
 export default function textfoldFold(pi: ExtensionAPI) {
+	pi.registerFlag("textfold-digits", {
+		type: "boolean",
+		default: false,
+		description: "Digits 1..5 fold on an empty prompt and are reinserted while typing",
+	});
 	// The level every reply is read at: 1 Full (as written) to 5 Gist. Full at start, then
 	// restored from the session's branch so a resumed session continues where the reader
 	// left off (C1). Restore writes nothing: the level is already on disk.
@@ -85,10 +91,22 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			{ placement: "aboveEditor" },
 		);
 
+	// Plain digits exist only behind --textfold-digits, because Pi dispatches extension
+	// shortcuts before the editor sees any input. Registration must wait for session
+	// start: pi commits CLI flag values after the factory runs, so reading the flag at
+	// factory time always yields the default (a real bug this port inherited and fixed).
+	let digitKeysRegistered = false;
+
 	// Restore is unconditional on session start: a `--session` resume reports reason
 	// "startup", so no reason-based gating can be trusted. The scan takes the branch's
 	// last valid textfold entry; corrupt ones are skipped (persist.ts).
 	pi.on("session_start", (event, ctx) => {
+		if (!digitKeysRegistered) {
+			digitKeysRegistered = true;
+			if ((typeof (pi as { getFlag?: unknown }).getFlag === "function"
+				&& (pi as { getFlag: (n: string) => unknown }).getFlag("textfold-digits") === true)) registerDigitKeys();
+		}
+
 		const branch = (ctx?.sessionManager as unknown as { getBranch?: () => unknown[] } | undefined)?.getBranch?.();
 		const restored = restoredLevel(branch);
 		DEBUG?.(`restore reason=${(event as { reason?: string }).reason} entries=${Array.isArray(branch) ? branch.length : -1} restored=${restored}`);
@@ -127,6 +145,28 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			handler: async (ctx) => apply(n, ctx),
 		});
 	}
+
+	// --textfold-digits's shortcuts: a digit changes the level when the prompt is
+	// empty and reinserts itself anywhere else, so the editor never swallows a pressed
+	// digit the shortcut intercepted.
+	const registerDigitKeys = () => {
+		for (const n of [1, 2, 3, 4, 5] as const) {
+			const key = `${n}` as KeyId;
+			pi.registerShortcut(key, {
+				description: `Fold replies to ${levelName(n)} when the prompt is empty; reinsert the digit otherwise`,
+				handler: async (ctx) => {
+					const editorText = (typeof ctx?.ui?.getEditorText === "function" ? ctx.ui.getEditorText() : "") ?? "";
+					const decision = guardDigit({ editorText, digit: `${n}`, digitsEnabled: true });
+					DEBUG?.(`digit ${n} decision=${decision.kind}${decision.kind === "level" ? ` level=${decision.level}` : ""} editorLen=${editorText.length}`);
+					if (decision.kind === "level") {
+						apply(decision.level, ctx as ExtensionContext);
+					} else if (decision.kind === "reinsert" && typeof ctx?.ui?.setEditorText === "function") {
+						ctx.ui.setEditorText(editorText + `${n}`);
+					}
+				},
+			});
+		}
+	};
 
 	pi.registerCommand("fold", {
 		description: "Fold replies: 1..5, a level name, off, or nothing for the next level",

@@ -12,7 +12,7 @@ type WidgetFactory = (tui: unknown, theme: TestTheme) => {
 };
 
 // A fake pi with the surface the ported index.ts uses, recording everything it does.
-function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean } = {}) {
+function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsFlag?: boolean; editorText?: string } = {}) {
 	const handlers = new Map<string, (event: any, ctx: any) => unknown>();
 	const shortcuts = new Map<string, { description: string; handler: (ctx: any) => void }>();
 	const commands = new Map<string, { handler: (arg: string | undefined, ctx: any) => void }>();
@@ -20,6 +20,8 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean } = {}) 
 	const notifications: string[] = [];
 	const widgets = new Map<string, { factory?: WidgetFactory; content?: string[]; opts?: unknown }>();
 	const calls: string[] = [];
+	let editorText = opts.editorText ?? "";
+	const editorWrites: string[] = [];
 
 	const branch = opts.branch as unknown[];
 	const theme: TestTheme = { fg: (_kind: string, s: string) => s, bold: (s: string) => s, dim: (s: string) => s };
@@ -48,6 +50,10 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean } = {}) 
 		registerMarkdownTransformer: () => {
 			calls.push("markdownTransformer");
 		},
+		registerFlag: (name: string, flag: { type: string; default?: unknown; description?: string }) => {
+			calls.push(`flag:${name}=${String(flag.default)}`);
+		},
+		getFlag: (name: string) => (name === "textfold-digits" ? opts.digitsFlag === true : undefined),
 		appendEntry: (type: string, payload: unknown) => {
 			if (opts.appendEntryThrows) throw new Error("disk full");
 			entries.push({ type, payload });
@@ -59,6 +65,11 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean } = {}) 
 		sessionManager: { getBranch: () => branch },
 		ui: {
 			notify: (message: string, _kind?: string) => notifications.push(message),
+			getEditorText: () => editorText,
+			setEditorText: (t: string) => {
+				editorText = t;
+				editorWrites.push(t);
+			},
 			setWidget: (key: string, build: unknown, placement?: unknown) => {
 				const w: { factory?: WidgetFactory; content?: string[]; opts?: unknown } = { opts: placement };
 				if (typeof build === "function") w.factory = build as WidgetFactory;
@@ -92,6 +103,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean } = {}) 
 		entries,
 		ctx: ctx as never,
 		screen,
+		editorWrites,
 	};
 }
 
@@ -188,6 +200,53 @@ describe("the fold command", () => {
 		mk.runCommand("fold", "3");
 		mk.runCommand("fold", "off");
 		expect(mk.entries.map((e) => e.payload)).toEqual([{ level: 3 }, { level: 1 }]);
+	});
+});
+
+describe("--textfold-digits registers plain digits from session_start, not the factory", () => {
+	test("the flag is registered at the factory; no digit shortcuts before session_start", async () => {
+		const textfold = await load();
+		const mk = makePi({ digitsFlag: true });
+		textfold(mk.pi);
+		expect(mk.calls).toContain("flag:textfold-digits=false");
+		expect(mk.calls).not.toContain("shortcut:3"); // factory time: the flag is not yet committed
+		expect(mk.calls).toContain("shortcut:alt+3");
+	});
+
+	test("session_start with the flag on registers 1..5 once", async () => {
+		const textfold = await load();
+		const mk = makePi({ digitsFlag: true });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		for (const n of [1, 2, 3, 4, 5]) expect(mk.calls).toContain(`shortcut:${n}`);
+		mk.handler("session_start")({ reason: "resume" }, mk.ctx); // idempotent across sessions
+		expect(mk.calls.filter((c) => c === "shortcut:3")).toHaveLength(1);
+	});
+
+	test("session_start with the flag off registers no digits; alt keys untouched", async () => {
+		const textfold = await load();
+		const mk = makePi({ digitsFlag: false });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		expect(mk.calls).not.toContain("shortcut:3");
+		expect(mk.calls).toContain("shortcut:alt+3");
+	});
+
+	test("a digit on an empty editor folds to its level; a digit in a draft reinserts itself", async () => {
+		const textfold = await load();
+		const mk = makePi({ digitsFlag: true, editorText: "" });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		mk.press("3");
+		expect(mk.entries).toEqual([{ type: ENTRY_TYPE, payload: { level: 3 } }]);
+		expect(mk.notifications.join(" ")).toContain("Points");
+
+		const draft = makePi({ digitsFlag: true, editorText: "ab " });
+		textfold(draft.pi);
+		draft.handler("session_start")({ reason: "startup" }, draft.ctx);
+		draft.press("3");
+		expect(draft.editorWrites).toEqual(["ab 3"]);
+		expect(draft.entries).toEqual([]); // no fold while typing
 	});
 });
 
