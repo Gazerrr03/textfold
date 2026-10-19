@@ -278,6 +278,7 @@ Commits, one logical change each, all gates green per commit:
 | `07dbbfb` | P5-fix install-smoke cwd + foldable prompt (fix-forward) | base/digits/resume install smoke exit 0 on plain pi |
 | `1b73c78` | taught keys: `/fold calibrate` + `/fold keys` + `keys.ts` (any keyboard, no layout table) | 63 tests · tsc clean · live teach probe exit 0 (real pi TTY: overlay → AZERTY-style `ESC+& 2 ESC+' 4 ESC+(` → saved file + `Saved` notify → learned keys fold same-session after reload → fresh process folds from the file alone); S1–S6 battery PASS |
 | (this commit) | first-run welcome + taught hints: one `session_start` notice naming the terminal-eats-Alt check and `/fold calibrate` (marker file, once ever; skipped when keys are taught or the branch folds); row/panel hints name the taught glyphs | 72 tests · tsc clean · suite writes nothing outside per-process tmp (empty override means unset; default tmp override in wiring `beforeEach`) |
+| (this commit) | click-to-fold: `levelAtColumn` maps a press to its level segment (label/gaps/hint never misfire); the row widget's `handleMouse` folds through the same `apply()` as the keys, left-button presses/clicks only | 76 tests · tsc clean · live click probe exit 0 (real pi pty: SGR press routes to the row, `row click level=1` + apply in the debug tap) |
 
 Acceptance: § 9.1–7 all hold — 54 tests ≥ 46 floor, harness self-sufficient
 (installed pi + Node 22 coded in), the checkpoint path **proven** by an injected
