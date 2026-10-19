@@ -27,7 +27,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-from . import agents
+from . import agents, providers
 from .store import HOME
 
 BRIDGE = "http://127.0.0.1:10531/v1"
@@ -45,15 +45,18 @@ def codex_login():
     return any(h and (Path(h) / "auth.json").exists() for h in homes)
 
 
-def bridge_status(fresh=False):
+def bridge_status(fresh=False, strict=False):
     """Whether the bridge answers, and its models; when it does not, what starting it needs, and of a start under way its
-    sign-in link (login) or what stopped it (error)."""
+    sign-in link (login) or what stopped it (error). strict: a probe that failed for another reason than nothing
+    answering raises (the discovery keeps its last result); a bridge that is not running is not a failure."""
     if fresh or _SEEN["status"] is None or time.time() - _SEEN["at"] >= 5:
         try:
             with urllib.request.urlopen(f"{BRIDGE}/models", timeout=2) as r:
                 ids = [m.get("id") for m in json.loads(r.read()).get("data", []) if m.get("id")]
             st = {"running": True, "models": ids}
-        except Exception:
+        except Exception as e:
+            if strict and not providers.unreachable(e):
+                raise
             npx = shutil.which("npx", path=agents.child_env()["PATH"])
             st = {"running": False, "node": bool(npx), "codexLogin": codex_login()}
         _SEEN.update({"at": time.time(), "status": st})
@@ -63,9 +66,9 @@ def bridge_status(fresh=False):
     return st
 
 
-def bridge_provider(text_only):
+def bridge_provider(text_only, status=None):
     """The running bridge as a provider found on its own (as a running Ollama is): no key, its text models."""
-    st = bridge_status()
+    st = bridge_status() if status is None else status
     if not st.get("running"):
         return None
     ids = [i for i in st["models"] if not text_only.search(i)]

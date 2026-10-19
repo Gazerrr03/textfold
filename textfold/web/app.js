@@ -13,6 +13,19 @@
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const api = (path, body) => fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText); return d; });
+  let modelData = BOOT.modelData || null, modelRefresh = null;
+  function refreshModels() {
+    if (!modelRefresh) modelRefresh = (async () => {
+      let d = await api('/api/models/refresh', {});
+      while (d.discovery.refreshing || d.scanning) {
+        await new Promise((r) => setTimeout(r, 400));
+        d = await api('/api/models');
+      }
+      modelData = d;
+      return d;
+    })().finally(() => { modelRefresh = null; });
+    return modelRefresh;
+  }
 
   // The ChatGPT bridge started, and waited for: a sign-in first when Codex has none (a browser opens; its link shows
   // too), then the bridge. What stopped it ends the wait at once, with openai-oauth's words, not five minutes on (#12).
@@ -728,7 +741,7 @@
         submit(PAPER.id, lang, force, update).catch(update.fail);
       },
     };
-    api('/api/models').then((d) => { modelName = d.selectedName || ''; askName = d.askName || ''; renderSidebar(); }).catch(() => {});
+    api('/api/models').then((d) => { modelData = d; modelName = d.selectedName || ''; askName = d.askName || ''; renderSidebar(); }).catch(() => {});
     api('/api/papers').then((p) => { papers = p; renderSidebar(); }).catch(() => {});
     api('/api/folders').then((f) => { folders = f; renderSidebar(); }).catch(() => {});
     api('/api/jobs').then((j) => {
@@ -791,7 +804,7 @@
       bridgeStarting = true; bridgeState = null; renderConnect();
       try { bridgeState = await startBridge((st) => { bridgeState = st; renderConnect(); }); } catch (x) { bridgeState = { error: x.message }; }
       bridgeStarting = false;
-      const d = await api('/api/models');
+      const d = await refreshModels();
       modelName = d.selectedName || '';
       askName = d.askName || '';
       renderSidebar(); renderLanding();
@@ -1060,9 +1073,9 @@
   async function openSettings(opts) {
     if (settingsOpen) return;
     settingsOpen = true;
-    let data;
-    try { data = await api('/api/models'); } catch (x) { settingsOpen = false; throw x; }
-    const app = window.desktop && window.desktop.checkForUpdates ? await Promise.resolve().then(() => window.desktop.version()).catch(() => null) : null;   // in the app: its version
+    let data = modelData || { models: [], agents: [], providers: [], presets: [], bridge: {}, engine: {} };
+    let loaded = !!modelData, refreshing = true, refreshError = '';
+    let app = null;   // in the app: its version, loaded after the dialog is visible
     let form = null;          // the provider being added or edited: {key?, preset, name, base, api_key, found, picked}
     const tests = {};         // the last connection test of each model: the levels' (gen), the questions' (ask)
     let bridgeStarting = false, bridgeState = null;
@@ -1074,7 +1087,10 @@
 
     function modelSection() {
       const t = T();
-      if (!data.models.length) return `<div class="st-list"><p class="st-empty">${esc(t.st_none)}</p></div>`;
+      if (!data.models.length) {
+        if (!refreshing && (refreshError || (data.discovery && data.discovery.error))) return '';
+        return `<div class="st-list"><p class="st-empty">${esc(refreshing ? t.st_scanning : t.st_none)}</p></div>`;
+      }
       const groups = [];
       for (const m of data.models) {
         let g = groups.find((x) => x.key === m.group);
@@ -1156,6 +1172,11 @@
     }
 
     let formShown = false;
+    function discoveryState() {
+      const t = T(), error = refreshError || (data.discovery && data.discovery.error);
+      return `<div class="st-discovery" role="status">${refreshing ? `<p class="st-note">${esc(t.st_scanning)}</p>` : error ?
+        `<p class="st-models-err">${esc(t.st_discovery_failed)} ${esc(error)}</p><button type="button" class="st-btn st-retry">${esc(t.st_retry)}</button>` : ''}</div>`;
+    }
     function render() {
       const t = T(), body = q('.stp-body'), y = body ? body.scrollTop : 0;   // (drawn again on each change: the place is kept)
       dlg.innerHTML = `<div class="stp" tabindex="-1" autofocus>
@@ -1165,9 +1186,9 @@
           <div class="st-item"><label class="st-main" for="st-ui"><b>${esc(t.language)}</b></label><select class="st-ui" id="st-ui">${I18N.CODES.map((c) => `<option value="${c}"${c === uiLang ? ' selected' : ''}>${esc(I18N.NATIVE[c])}</option>`).join('')}</select></div>
           ${app ? `<div class="st-item st-app"><div class="st-main"><b>TextFold ${esc(app)}</b><span class="st-meta">${esc(t.up_note)} <a href="https://github.com/chenxiachan/textfold" target="_blank" rel="noopener">★ ${esc(t.up_star)}</a></span><span class="st-upd-msg" aria-live="polite"></span></div><button type="button" class="st-btn st-upd">${esc(t.up_check)}</button></div>` : ''}
         </div></section>
-        <section><h3>${esc(t.st_models_h)}</h3>${modelSection()}</section>
-        <section><h3>${esc(t.st_agents)}</h3>${agentSection()}</section>
-        <section><h3>${esc(t.st_providers)}</h3>${providerSection()}</section>
+        <section><h3>${esc(t.st_models_h)}</h3><div class="st-model-area">${modelSection()}${discoveryState()}</div></section>
+        <section><h3>${esc(t.st_agents)}</h3><div class="st-agent-area">${loaded ? agentSection() : ''}</div></section>
+        <section><h3>${esc(t.st_providers)}</h3><div class="st-provider-area">${loaded ? providerSection() : ''}</div></section>
         <section class="st-engine"></section>
         </div>
         <footer class="stp-foot"><p>${esc(t.key_note)}</p><button type="button" class="primary st-close">${esc(t.st_close)}</button></footer></div>`;
@@ -1209,9 +1230,36 @@
         renderEngine();
       }, 1500);
     }
-    const update = (d) => { data = d; modelName = d.models.length ? (d.selectedName || '') : ''; askName = d.askName || ''; renderSidebar(); if (landing) renderLanding(); render(); };
+    const update = (d, background = false) => {
+      data = modelData = d; loaded = true;
+      modelName = d.selectedName || ''; askName = d.askName || '';
+      renderSidebar(); if (landing) renderLanding();
+      if (!background) { render(); return; }
+      // A discovery result must not rebuild a provider form the reader is editing.
+      q('.st-model-area').innerHTML = modelSection() + discoveryState();
+      q('.st-agent-area').innerHTML = agentSection();
+      if (!form) q('.st-provider-area').innerHTML = providerSection();
+      renderEngine();
+      wire();
+    };
+    async function discover() {
+      refreshing = true; refreshError = '';
+      q('.st-model-area').innerHTML = modelSection() + discoveryState(); wire();
+      try {
+        const d = await refreshModels();
+        if (dlg.isConnected) { refreshing = false; update(d, true); }
+      } catch (x) {
+        if (!dlg.isConnected) return;
+        refreshing = false; refreshError = x.message; data.scanning = false;
+        q('.st-model-area').innerHTML = modelSection() + discoveryState();
+        if (loaded) q('.st-agent-area').innerHTML = agentSection();
+        wire();
+      }
+    }
 
     function wire() {
+      const retry = q('.st-retry');
+      if (retry) retry.onclick = discover;
       dlg.querySelectorAll('.st-close').forEach((b) => { b.onclick = () => dlg.close(); });
       const up = q('.st-upd');
       if (up) up.onclick = async () => {   // an answer either way; one found shows as the corner's toast too
@@ -1236,7 +1284,12 @@
           render();
         };
       });
-      q('.st-scan').onclick = async () => { data.scanning = true; render(); update(await api('/api/agents/scan', {})); };
+      const scan = q('.st-scan');
+      if (scan) scan.onclick = async () => {
+        data.scanning = true; q('.st-agent-area').innerHTML = agentSection(); wire();
+        try { update(await api('/api/agents/scan', {}), true); }
+        catch (x) { data.scanning = false; refreshError = x.message; update(data, true); }
+      };
       const td = q('.st-td');
       if (td) td.onchange = async () => update(await api('/api/settings', { use_thoughtdag_env: td.checked }));
       dlg.querySelectorAll('.st-del').forEach((b) => { b.onclick = async () => update(await api('/api/providers/remove', { key: b.dataset.key })); });
@@ -1250,7 +1303,7 @@
           bridgeState = await startBridge((st) => { if (!dlg.isConnected) return false; bridgeState = st; render(); });
         } catch (x) { bridgeState = { error: x.message }; }
         bridgeStarting = false;
-        if (dlg.isConnected) update(await api('/api/models'));
+        if (dlg.isConnected) update(await refreshModels(), true);
       };
       const add = q('.st-add');
       if (add) add.onclick = () => { const p = data.presets[0]; form = { preset: p.id, name: '', base: p.base }; render(); };
@@ -1306,24 +1359,32 @@
     }
 
     dlg.addEventListener('close', () => dlg.remove());
-    if (opts && opts.add) form = { preset: data.presets[0].id, name: '', base: data.presets[0].base };   // straight to adding one
-    if (opts && opts.minted) {   // back from OpenRouter with a key: the models to pick, free ones first
-      const p = data.presets.find((x) => x.id === 'openrouter');
-      form = { preset: 'openrouter', name: '', base: p.base, minted: true };
-    }
     render();
     dlg.showModal();
-    if (opts && opts.minted) fetchModels();
-    if (jobs.some((j) => j.kind === 'install' && live(j))) follow();   // an install started on the landing
-    // the startup scan may still be running: show what it finds as it lands
-    const wait = async () => {   // (a provider being edited is left alone: what is typed in it is not drawn over)
+    if (window.desktop && window.desktop.checkForUpdates) window.desktop.version().then((v) => {
+      app = v;
+      if (dlg.isConnected && !form) render();
+    }).catch(() => {});
+    try {
+      const snapshot = await api('/api/models');
       if (!dlg.isConnected) return;
-      if (data.scanning) { await new Promise((r) => setTimeout(r, 800)); const d = await api('/api/models'); if (form) data = d; else update(d); wait(); }
-    };
-    wait();
+      update(snapshot, true);
+      if (opts && opts.add) { const p = data.presets[0]; form = { preset: p.id, name: '', base: p.base }; render(); }
+      if (opts && opts.minted) {
+        const p = data.presets.find((x) => x.id === 'openrouter');
+        form = { preset: 'openrouter', name: '', base: p.base, minted: true }; render(); fetchModels();
+      }
+    } catch (x) { refreshError = x.message; }
+    if (!dlg.isConnected) return;
+    discover();
+    if (jobs.some((j) => j.kind === 'install' && live(j))) follow();   // an install started on the landing
   }
 
   renderSidebar();
+  if (landing) refreshModels().then((d) => {
+    modelName = d.selectedName || ''; askName = d.askName || ''; BOOT.bridge = d.bridge;
+    renderSidebar(); renderLanding();
+  }).catch(() => {});
   // back from OpenRouter's consent page (#or-minted, or #or-failed=why)
   if (location.hash.startsWith('#or-')) {
     const hash = location.hash;

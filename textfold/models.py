@@ -63,10 +63,11 @@ def save_settings(s):
     os.chmod(SETTINGS, 0o600)
 
 
-def provider_list(s):
+def provider_list(s, live=None):
     if os.environ.get("TEXTFOLD_NO_MODELS"):   # (agents.scan): no provider, no bridge
         return []
-    env = providers.env_providers(s.get("use_thoughtdag_env", True), providers.ollama_models())
+    env = providers.env_providers(s.get("use_thoughtdag_env", True),
+                                  providers.ollama_models() if live is None else live["ollama"])
     ui = []
     for p in providers.ui_providers(s):
         raw = next(x for x in s["providers"] if x["key"] == p["key"])
@@ -74,20 +75,20 @@ def provider_list(s):
             p["protocol"] = "anthropic"
         ui.append(p)
     # the ChatGPT bridge, when it runs, joins without being added (unless it was added by hand)
-    bridge = bridges.bridge_provider(providers.NOT_TEXT)
+    bridge = bridges.bridge_provider(providers.NOT_TEXT) if live is None else live["bridge"]
     if bridge and not any(p["base"].rstrip("/") == bridges.BRIDGE for p in ui):
         env.append(bridge)
     return env + ui
 
 
-def catalog(s=None):
+def catalog(s=None, live=None):
     s = s or load_settings()
     out, seen = [], set()
     for m in agents.models():
         out.append({"id": m["id"], "name": m["name"], "kind": "agent", "group": m["runtime"],
                     "efforts": m.get("efforts") or [], "defaultEffort": m.get("defaultEffort")})
         seen.add(m["id"])
-    provs = provider_list(s)
+    provs = provider_list(s, live)
     for p in provs:
         for m in p["models"]:
             if m["id"] in seen:

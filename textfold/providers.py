@@ -133,12 +133,24 @@ def ui_providers(settings):
     return out
 
 
-def ollama_models(base="http://localhost:11434"):
-    """What a running Ollama has pulled ([] when it is not running)."""
+def unreachable(e):
+    """Whether a probe failed because nothing answers there: a refused port, or one that stays silent (Windows is slow to
+    refuse). That is a service not running, which is no failure; an answer that is wrong is (an HTTP error, bad JSON)."""
+    if isinstance(e, urllib.error.HTTPError):
+        return False
+    reason = e.reason if isinstance(e, urllib.error.URLError) else e
+    return isinstance(reason, (OSError, TimeoutError))
+
+
+def ollama_models(base="http://localhost:11434", strict=False):
+    """What a running Ollama has pulled ([] when it is not running). strict: a probe that failed for another reason than
+    nothing answering raises, so the discovery keeps its last result."""
     try:
         with urllib.request.urlopen(f"{base.rstrip('/')}/api/tags", timeout=1.5) as r:
             return [m["name"] for m in json.loads(r.read()).get("models", [])]
-    except Exception:
+    except Exception as e:
+        if strict and not unreachable(e):
+            raise
         return []
 
 
