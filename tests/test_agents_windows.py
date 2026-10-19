@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -102,9 +103,22 @@ class JsonLines(unittest.TestCase):
         self.assertEqual({k: v["result"] for k, v in got.items()}, {"1": "model/list", "2": "x"})
 
     def test_a_program_that_ends_early_does_not_hold_the_server(self):
-        s = self.script("import sys; sys.stdin.readline(); print('bye')")
+        s = self.script("import sys; sys.stdin.readline(); print('bye'); sys.exit('no default model')")
+        t0 = time.time()
+        with self.assertRaises(RuntimeError) as e:   # it says why, in the program's own words, rather than "no models"
+            agents._rpc([sys.executable, str(s)], [{"id": "1"}], timeout=20)
+        self.assertLess(time.time() - t0, 10)
+        self.assertIn("no default model", str(e.exception))
+
+    def test_a_reply_that_is_not_ascii_is_read_as_utf8(self):
+        s = self.script("""
+            import json, sys
+            sys.stdout.reconfigure(encoding="utf-8")
+            for line in sys.stdin:
+                print(json.dumps({"id": json.loads(line)["id"], "name": "GPT-5.5（中转）"}, ensure_ascii=False), flush=True)
+            """)
         got = agents._rpc([sys.executable, str(s)], [{"id": "1"}], timeout=20)
-        self.assertEqual(got, {})
+        self.assertEqual(got["1"]["name"], "GPT-5.5（中转）")
 
 
 @unittest.skipUnless(os.name == "nt", "Windows only")

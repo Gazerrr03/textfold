@@ -14,6 +14,22 @@
   const api = (path, body) => fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText); return d; });
 
+  // The ChatGPT bridge started, and waited for: a sign-in first when Codex has none (a browser opens; its link shows
+  // too), then the bridge. What stopped it ends the wait at once, with openai-oauth's words, not five minutes on (#12).
+  // onState sees each status as it comes, and stops the wait by returning false.
+  async function startBridge(onState) {
+    let st = await api('/api/bridge/start', {});
+    for (let k = 0; k < 160; k++) {   // a little over 5 minutes: openai-oauth's own sign-in waits as long
+      if (onState(st) === false || st.running || st.error) return st;
+      await new Promise((r) => setTimeout(r, 2000));
+      st = await api('/api/bridge');
+    }
+    return st;
+  }
+  const bridgeNote = (st, T) => !st || st.running ? '' : st.error
+    ? `<p class="st-note warn">${esc(T.bridge_failed.replace('{error}', st.error))}</p>`
+    : st.login ? `<p class="st-note">${esc(T.bridge_login)} <a href="${esc(st.login)}" target="_blank" rel="noopener">${esc(T.bridge_login_open)}</a></p>` : '';
+
   // the reader's language (settings; else the browser's): the interface speaks it, papers are read and made in it, and a
   // switch of a paper's language is a switch of it (reader.js)
   const UI_KEY = 'pf-ui-lang';
@@ -757,7 +773,7 @@
   }
   // No model yet (no agent on this computer, no provider): the ways in, on the landing itself. OpenRouter's one-click
   // authorisation (free models); the ChatGPT plan through the local bridge, started from here; or the settings.
-  let bridgeStarting = false;
+  let bridgeStarting = false, bridgeState = null;
   function renderConnect() {
     const box = document.getElementById('connect');
     if (!box) return;
@@ -767,17 +783,13 @@
     box.innerHTML = `<div class="cn-t">${esc(T.cn_title)}</div><p>${esc(T.cn_sub)}</p><div class="cn-ways">` +
       `<button type="button" class="primary cn-or">${esc(T.cn_or)}</button>` +
       (br.node || br.running ? `<button type="button" class="cn-gpt"${bridgeStarting ? ' disabled' : ''}>${esc(bridgeStarting ? T.bridge_starting : T.cn_gpt)}</button>` : '') +
-      `</div><button type="button" class="linkbtn cn-more">${esc(T.cn_more)}</button>`;
+      `</div>${bridgeNote(bridgeState, T)}<button type="button" class="linkbtn cn-more">${esc(T.cn_more)}</button>`;
     box.querySelector('.cn-or').onclick = async (e) => { e.target.disabled = true; await connectOpenRouter('/'); e.target.disabled = false; };
     box.querySelector('.cn-more').onclick = () => openSettings({ add: true });
     const g = box.querySelector('.cn-gpt');
     if (g) g.onclick = async () => {
-      bridgeStarting = true; renderConnect();
-      try { await api('/api/bridge/start', {}); } catch (x) { bridgeStarting = false; renderConnect(); return; }
-      for (let k = 0; k < 150 && bridgeStarting; k++) {   // up to 5 minutes: a ChatGPT sign-in may be under way
-        await new Promise((r) => setTimeout(r, 2000));
-        if ((await api('/api/bridge')).running) break;
-      }
+      bridgeStarting = true; bridgeState = null; renderConnect();
+      try { bridgeState = await startBridge((st) => { bridgeState = st; renderConnect(); }); } catch (x) { bridgeState = { error: x.message }; }
       bridgeStarting = false;
       const d = await api('/api/models');
       modelName = d.selectedName || '';
@@ -1044,13 +1056,18 @@
   }
 
   // ── settings: the model, the agents on this computer, the API providers (ThoughtDAG's model access) ──
+  let settingsOpen = false;   // one Settings at a time: a click while it opens, or while it is open, opens no other (#12)
   async function openSettings(opts) {
-    let data = await api('/api/models');
-    const app = window.desktop && window.desktop.checkForUpdates ? await window.desktop.version() : null;   // in the app: its version
+    if (settingsOpen) return;
+    settingsOpen = true;
+    let data;
+    try { data = await api('/api/models'); } catch (x) { settingsOpen = false; throw x; }
+    const app = window.desktop && window.desktop.checkForUpdates ? await Promise.resolve().then(() => window.desktop.version()).catch(() => null) : null;   // in the app: its version
     let form = null;          // the provider being added or edited: {key?, preset, name, base, api_key, found, picked}
     const tests = {};         // the last connection test of each model: the levels' (gen), the questions' (ask)
-    let bridgeStarting = false;
+    let bridgeStarting = false, bridgeState = null;
     const dlg = h('dialog', 'settings prefs'); document.body.append(dlg);
+    dlg.addEventListener('close', () => { settingsOpen = false; });
     const T = () => t();
     const host = (u) => { try { return new URL(u).host; } catch { return u; } };
     const groupName = (g) => (data.agents.find((a) => a.runtime === g) || {}).label || (data.providers.find((p) => p.key === g) || {}).name || g;
@@ -1087,7 +1104,7 @@
       const found = data.agents.filter((a) => a.path);
       const missing = data.agents.filter((a) => !a.path && !a.error);
       const rows = found.map((a) => `<div class="st-item"><i class="st-dot${a.runnable ? '' : ' warn'}"></i><div class="st-main"><b>${esc(a.label)}</b>
-        <span class="st-meta">${a.version ? `${esc(a.version)} · ` : ''}<code title="${esc(a.path)}">${esc(a.binary)}</code></span></div>
+        <span class="st-meta">${a.version ? `${esc(a.version)} · ` : ''}<code title="${esc(a.path)}">${esc(a.binary)}</code></span>${a.error ? `<p class="st-models-err">${esc(a.error)}</p>` : ''}</div>
         <span class="st-aside">${a.runnable ? esc(t.st_models.replace('{n}', a.models)) : esc(t.st_unsupported)}</span></div>`).join('');
       return `<div class="st-list">${rows}<div class="st-item st-foot-line"><span class="st-main st-meta">${missing.length ? `${esc(t.st_notfound)}: ${missing.map((a) => esc(a.label)).join(', ')}` : ''}</span>
         <button type="button" class="st-btn st-scan"${data.scanning ? ' disabled' : ''}>${esc(data.scanning ? t.st_scanning : t.st_rescan)}</button></div></div>`;
@@ -1102,7 +1119,7 @@
       const td = '';   // (ThoughtDAG's .env is no longer read: its providers were copied into these settings once, v0.8.3)
       const br = data.bridge || {};
       const bridgeRow = br.running || data.providers.some((p) => p.preset === 'chatgpt-bridge') ? '' : `<div class="st-item"><i class="st-dot off"></i><div class="st-main"><b>${esc(t.bridge_name)}</b>
-        <span class="st-meta">127.0.0.1:10531 · ${esc(bridgeStarting ? t.bridge_starting : t.bridge_off)}</span></div>
+        <span class="st-meta">127.0.0.1:10531 · ${esc(bridgeStarting ? t.bridge_starting : t.bridge_off)}</span>${bridgeNote(bridgeState, t)}</div>
         ${br.node && !bridgeStarting ? `<button type="button" class="st-btn st-bridgego">${esc(t.bridge_start)}</button>` : ''}</div>`;
       return `<div class="st-list">${rows}${bridgeRow}${td}${form ? providerForm() : `<button type="button" class="st-addrow st-add"><span aria-hidden="true">＋</span>${esc(t.st_add)}</button>`}</div>`;
     }
@@ -1126,14 +1143,14 @@
       const bridge = !preset.bridge ? '' : !b ? `<p class="st-note">…</p>` : b.running
         ? `<div class="st-bridge on"><i></i>${esc(t.bridge_on.replace('{n}', b.models.length))}</div><p class="st-note">${esc(t.bridge_hint)}</p>`
         : `<div class="st-bridge"><i></i><span>${esc(form.bridgeStarting ? t.bridge_starting : t.bridge_off)}</span>${b.node && !form.bridgeStarting ? `<button type="button" class="pf-bridge">${esc(t.bridge_start)}</button>` : ''}</div>
-          <p class="st-note">${esc(t.bridge_hint)}</p>${b.node ? '' : `<p class="st-note warn">${esc(t.bridge_no_node)}</p>`}
+          ${bridgeNote(b, t)}<p class="st-note">${esc(t.bridge_hint)}</p>${b.node ? '' : `<p class="st-note warn">${esc(t.bridge_no_node)}</p>`}
           <div class="st-cmd"><code>npx openai-oauth</code><button type="button" class="linkbtn pf-copy">${esc(t.copy)}</button></div>`;
       return `<div class="st-form">
         <label>${esc(t.st_preset)}<select class="pf-preset">${opts}</select></label>${oauth}${minted}${bridge}
         ${form.preset === 'custom' ? `<label>${esc(t.st_name)}<input class="pf-name" value="${esc(form.name || '')}"></label>` : ''}
         <label>${esc(t.base_url)}<input class="pf-base" value="${esc(form.base || '')}" placeholder="https://…/v1"></label>
         ${preset.nokey || form.minted ? '' : `<label><span>${esc(t.api_key)}${preset.keyUrl ? ` · <a href="${preset.keyUrl}" target="_blank" rel="noopener">${esc(host(preset.keyUrl))}</a>` : ''}</span><input class="pf-key" type="password" placeholder="${esc(form.key ? t.st_key_kept : 'sk-…')}"></label>`}
-        <div class="st-row"><button type="button" class="st-btn pf-fetch">${esc(t.st_fetch)}</button><span class="pf-err"></span></div>
+        <div class="st-row"><button type="button" class="st-btn pf-fetch">${esc(t.st_fetch)}</button><span class="pf-err">${esc(form.err || '')}</span></div>
         ${list}
         <div class="st-row end"><button type="button" class="st-btn pf-cancel">${esc(t.cancel)}</button><button type="button" class="primary pf-save"${form.found && form.found.length ? '' : ' disabled'}>${esc(t.st_save_provider)}</button></div></div>`;
     }
@@ -1228,12 +1245,10 @@
       });
       const bg = q('.st-bridgego');
       if (bg) bg.onclick = async () => {   // start the bridge; its models join the list once it answers
-        bridgeStarting = true; render();
-        try { await api('/api/bridge/start', {}); } catch { bridgeStarting = false; render(); return; }
-        for (let k = 0; k < 150 && dlg.isConnected && bridgeStarting; k++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          if ((await api('/api/bridge')).running) break;
-        }
+        bridgeStarting = true; bridgeState = null; render();
+        try {
+          bridgeState = await startBridge((st) => { if (!dlg.isConnected) return false; bridgeState = st; render(); });
+        } catch (x) { bridgeState = { error: x.message }; }
         bridgeStarting = false;
         if (dlg.isConnected) update(await api('/api/models'));
       };
@@ -1258,13 +1273,13 @@
       const bs = q('.pf-bridge');
       if (bs) bs.onclick = async () => {
         form.bridgeStarting = true; render();
-        try { await api('/api/bridge/start', {}); } catch (x) { form.bridgeStarting = false; render(); q('.pf-err').textContent = x.message; return; }
-        for (let k = 0; k < 150 && dlg.isConnected && form && form.bridgeStarting; k++) {   // up to 5 minutes: a sign-in may be under way
-          await new Promise((r) => setTimeout(r, 2000));
-          const st = await api('/api/bridge');
-          if (st.running) { form.bridge = st; form.bridgeStarting = false; render(); fetchModels(); return; }
-        }
-        if (form) { form.bridgeStarting = false; render(); }
+        let st;
+        try {
+          st = await startBridge((s) => { if (!dlg.isConnected || !form) return false; form.bridge = { ...form.bridge, ...s }; render(); });
+        } catch (x) { st = { error: x.message }; }
+        if (!form) return;
+        form.bridge = { ...form.bridge, ...st }; form.bridgeStarting = false; render();
+        if (st.running) fetchModels();
       };
       const pre = data.presets.find((x) => x.id === form.preset) || {};
       if (pre.bridge && !form.bridge) api('/api/bridge').then((st) => { if (!form) return; form.bridge = st; render(); if (st.running && !form.found) fetchModels(); });
@@ -1282,11 +1297,12 @@
       if (q('.pf-name')) form.name = q('.pf-name').value.trim();
       if (q('.pf-key') && q('.pf-key').value) form.api_key = q('.pf-key').value.trim();
       const err = q('.pf-err');
+      form.err = '…';   // (kept in the form: a redraw while the startup scan lands no longer wipes it, #12)
       if (err) err.textContent = '…';
       try {
         const r = await api('/api/providers/probe', { base: form.base, api_key: form.api_key, key: form.key, preset: form.preset, minted: !!form.minted });
-        form.found = r.models; form.picked = r.picked; render();
-      } catch (x) { const e2 = q('.pf-err'); if (e2) e2.textContent = x.message; }
+        form.found = r.models; form.picked = r.picked; form.err = ''; render();
+      } catch (x) { if (!form) return; form.err = x.message; const e2 = q('.pf-err'); if (e2) e2.textContent = x.message; }
     }
 
     dlg.addEventListener('close', () => dlg.remove());
@@ -1300,7 +1316,10 @@
     if (opts && opts.minted) fetchModels();
     if (jobs.some((j) => j.kind === 'install' && live(j))) follow();   // an install started on the landing
     // the startup scan may still be running: show what it finds as it lands
-    const wait = async () => { if (!dlg.isConnected) return; if (data.scanning) { await new Promise((r) => setTimeout(r, 800)); update(await api('/api/models')); wait(); } };
+    const wait = async () => {   // (a provider being edited is left alone: what is typed in it is not drawn over)
+      if (!dlg.isConnected) return;
+      if (data.scanning) { await new Promise((r) => setTimeout(r, 800)); const d = await api('/api/models'); if (form) data = d; else update(d); wait(); }
+    };
     wait();
   }
 

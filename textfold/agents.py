@@ -161,9 +161,12 @@ def _claude_models(path):
 
 
 def _rpc(args, requests, timeout=30, cwd=None):
-    """Write JSON lines, collect the replies whose id we asked for."""
-    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-                         env=child_env(), cwd=cwd or str(HOME))
+    """Write JSON lines, collect the replies whose id we asked for. When none comes back, an error that says why, in the
+    program's own words (what it wrote to stderr) when it stopped: a scan then shows it, not "0 models" (#12). The pipes
+    are UTF-8 whatever the system's codepage (a Chinese Windows would read them as cp936)."""
+    err = tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace")
+    p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8",
+                         errors="replace", env=child_env(), cwd=cwd or str(HOME))
     lines = queue.Queue()   # read by a thread: select() cannot wait on a pipe on Windows
     threading.Thread(target=lambda: [*map(lines.put, p.stdout), lines.put(None)], daemon=True).start()
     got = {}
@@ -187,7 +190,14 @@ def _rpc(args, requests, timeout=30, cwd=None):
             if d.get("id") in want:
                 got[d["id"]] = d
     finally:
+        code = p.poll()   # None: still running when we stopped waiting
         p.kill()
+    if not got and any("id" in r for r in requests):
+        err.seek(0)
+        said = " ".join(err.read().split())[-300:]
+        name = Path(args[0]).name
+        raise RuntimeError(f"{name} stopped (exit {code}){': ' + said if said else ''}" if code is not None else
+                           f"{name} gave no reply in {timeout} s{': ' + said if said else ''}")
     return got
 
 
@@ -214,7 +224,10 @@ def _codex_models(path):
 
 def _pi_models(path):
     levels = _help_levels(path, "--thinking", r"--thinking <level>\s+Set thinking level:\s*([^\n]*)")
-    got = _rpc([*argv(path), "--mode", "rpc", "--no-session"], [{"id": "1", "type": "get_available_models"}])
+    # without the extensions, skills and context files a generation runs without (run_pi): an extension Pi cannot load
+    # would stop it here, and a model only an extension adds could not be used anyway
+    got = _rpc([*argv(path), "--mode", "rpc", "--no-session", "--no-extensions", "--no-skills", "--no-prompt-templates",
+                "--no-context-files"], [{"id": "1", "type": "get_available_models"}])
     data = (got.get("1") or {}).get("data")
     rows = data.get("models", []) if isinstance(data, dict) else (data or [])
     return [{"id": f"pi/{r['provider']}/{r['id']}", "name": f"Pi · {r.get('name') or r['id']}", "runtime": "pi",
