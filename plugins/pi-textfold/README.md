@@ -16,6 +16,12 @@ Hold Alt and type the digit, or type `/fold` and a level: `/fold 3`, `/fold poin
 
 **Every reply at once.** A new level folds every reply in place, the earlier ones too, and the row above the prompt shows the five levels, the one you read at marked. Pi keeps each reply as it drew it, so the extension has the whole conversation drawn again when the level changes.
 
+**The level survives a restart.** Each change is written to the session, and starting Pi again — or resuming a session — comes back at the level you read at; nothing is written twice for the same level. A restart tells you it restored, and the panel (below) names it even before any reply arrives.
+
+**The panel shows the fold.** Under the row, a small panel previews the latest reply at the level in force — before any reply when a restart restored a level, and after one at the newest. It re-draws with every change, where the transcript's own copies only change when Pi re-renders them.
+
+**Digits, on request.** `--textfold-digits` puts plain 1–5 to work: on an empty prompt a digit folds to its level; while you type it reinserts itself, so the digit you meant to write still lands (the flag is registered once a session starts, because Pi commits flags after extensions load — a bare digit otherwise gives up its key, which is why the short answer is Alt). Without the flag the Alt keys do everything.
+
 **Why Alt.** Pi hands every key to its extensions before the prompt sees it, so a bare digit would never reach what you type.
 
 ## Why you can trust a fold
@@ -24,7 +30,7 @@ Nothing is paraphrased. TextFold adds a short section to the system prompt that 
 
 ## Install
 
-It needs Pi 1.2.0 or later, on Node 22.15 or later.
+It needs Pi 1.2.0 or later, on Node 22.15 or later — every behavior above is verified on Pi 1.3.0; `--textfold-digits` is only as old as its flag support in Pi (the preflight script `scripts/check-pi-api.py` checks the APIs it needs against your installed pi).
 
 ```bash
 git clone https://github.com/chenxiachan/textfold.git
