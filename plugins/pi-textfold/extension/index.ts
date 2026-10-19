@@ -14,8 +14,28 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { KeyId, TUI } from "@earendil-works/pi-tui";
+import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
 import { KEY, levelRow, parseLevelArg, type Level } from "./level";
+import { ENTRY_TYPE, levelEntryDraft, restoredLevel } from "./persist";
+
+// Debug tap: writes every shortcut/apply/restore decision when TEXTFOLD_PI_DEBUG
+// is set. Zero-cost otherwise.
+const DEBUG = process.env.TEXTFOLD_PI_DEBUG
+	? (s: string) => {
+		const line = new Date().toISOString().slice(11, 19) + " " + s;
+		try {
+			appendFileSync(process.env.TEXTFOLD_PI_DEBUG_FILE ?? "/tmp/textfold-pi-debug.log", line + "\n");
+		} catch {
+			// stderr below still exposes it
+		}
+		try {
+			(process as unknown as { stderr?: { write(s: string): void } }).stderr?.write?.(line + "\n");
+		} catch {
+			// best effort
+		}
+	}
+	: undefined;
 
 // Identical to the Claude Code mod's prompt section, so replies fold the same way
 // on every harness. It asks for the point first at every scale.
@@ -27,7 +47,9 @@ The person reading this session can fold your replies with one key: to each para
 This changes the order of what you write, not its content or its length.`;
 
 export default function textfoldFold(pi: ExtensionAPI) {
-	// The level every reply is read at: 1 Full (as written) to 5 Gist. Full at start.
+	// The level every reply is read at: 1 Full (as written) to 5 Gist. Full at start, then
+	// restored from the session's branch so a resumed session continues where the reader
+	// left off (C1). Restore writes nothing: the level is already on disk.
 	let level: Level = 1;
 
 	// The style section, appended as a structured prompt section so the session
@@ -56,18 +78,41 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			KEY,
 			(tui, theme) => {
 				screen = tui;
+				DEBUG?.("row installed");
 				const paint = { label: (s: string) => theme.fg("muted", s), current: (s: string) => theme.bold(theme.fg("accent", s)), other: (s: string) => theme.fg("dim", s) };
 				return { render: (width: number) => [` ${levelRow(level, width - 1, paint)}`], invalidate: () => {} };
 			},
 			{ placement: "aboveEditor" },
 		);
-	pi.on("session_start", (_event, ctx) => install(ctx));
+
+	// Restore is unconditional on session start: a `--session` resume reports reason
+	// "startup", so no reason-based gating can be trusted. The scan takes the branch's
+	// last valid textfold entry; corrupt ones are skipped (persist.ts).
+	pi.on("session_start", (event, ctx) => {
+		const branch = (ctx?.sessionManager as unknown as { getBranch?: () => unknown[] } | undefined)?.getBranch?.();
+		const restored = restoredLevel(branch);
+		DEBUG?.(`restore reason=${(event as { reason?: string }).reason} entries=${Array.isArray(branch) ? branch.length : -1} restored=${restored}`);
+		if (restored && restored !== level) {
+			level = restored as Level;
+			ctx?.ui.notify(`TextFold level restored: ${levelName(restored)}`, "info");
+		}
+		install(ctx);
+	});
 
 	// A new level folds every reply in place at once, the earlier ones too. Pi keeps each reply as it drew it
 	// until its text or the screen's width changes, so what it kept is dropped and the whole screen drawn again.
+	// The level is also written to the session (C1): one entry per real change, so a restart
+	// resumes where the reader left off. A failed write (a full disk) must not strand the
+	// reader: the level still changes on the screen.
 	const apply = (next: Level, ctx: ExtensionContext) => {
 		if (next === level) return;
 		level = next;
+		try {
+			pi.appendEntry(ENTRY_TYPE, levelEntryDraft(next));
+		} catch (e) {
+			DEBUG?.(`append failed: ${(e as Error)?.message ?? String(e)}`);
+		}
+		ctx.ui.notify(`Fold: ${levelName(next)}`, "info");
 		if (!screen) install(ctx);
 		screen?.invalidate();
 		screen?.requestRender(true);
