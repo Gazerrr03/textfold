@@ -17,7 +17,9 @@ export type KeysMap = Record<string, string>;
 /** Where the taught keys live. TEXTFOLD_PI_KEYS_FILE overrides — mostly so the
  *  harness and the tests can point elsewhere (never at the user's file). */
 export function keysFile(): string {
-	const override = process.env["TEXTFOLD_PI_KEYS_FILE"];
+	// Empty counts as unset: the suite clears the override with "", and dirname("")
+	// is "." — which once wrote a marker into the repo. Never a relative path.
+	const override = process.env["TEXTFOLD_PI_KEYS_FILE"] || undefined;
 	return override ?? join(homedir(), ".pi", "agent", "textfold-keys.json");
 }
 

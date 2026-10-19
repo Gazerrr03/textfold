@@ -18,6 +18,10 @@ const readMaybe = (p: string): string | undefined => {
 
 beforeEach(() => {
 	vi.resetModules();
+	// Default the keys file into a per-process tmp dir. Tests that fire session_start
+	// without setting the override would otherwise write the welcome marker to the
+	// real home; tests that need their own file set it themselves afterwards.
+	process.env.TEXTFOLD_PI_KEYS_FILE = `/tmp/textfold-wiring-${process.pid}/keys.json`;
 });
 
 type TestTheme = { fg: (_kind: string, s: string) => string; bold: (s: string) => string; dim: (s: string) => string };

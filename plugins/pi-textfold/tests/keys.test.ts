@@ -18,6 +18,14 @@ async function importKeys() {
 }
 
 describe("the learned keyboard map file", () => {
+	test("keysFile() treats an empty override as unset, never a relative path", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+		const keys = await importKeys();
+		const f = keys.keysFile();
+		expect(f.endsWith("textfold-keys.json")).toBe(true);
+		expect(f.startsWith("/")).toBe(true);
+	});
+
 	test("keysFile() follows TEXTFOLD_PI_KEYS_FILE when set, and lives in the agent dir otherwise", async () => {
 		process.env.TEXTFOLD_PI_KEYS_FILE = TMP + "/keys.json";
 		const keys = await importKeys();
