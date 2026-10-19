@@ -9,8 +9,9 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
 
-from textfold import llm_openai
+from textfold import llm_openai, providers
 
 REPLY = {"takeaway": "流式的回复也能读", "topic": "流式"}
 
@@ -115,6 +116,50 @@ class Events(unittest.TestCase):
         d = llm_openai._events(b'data: {"error": {"message": "quota exceeded"}}\n\n')
         self.assertIsNone(llm_openai._content(d))
         self.assertEqual(d["error"]["message"], "quota exceeded")
+
+
+class WorkBuddy(unittest.TestCase):
+    """WorkBuddy Cloud, as its SDK (@tencent-ai/workbuddy-cloud-sdk 0.1.4) speaks to it: the publishable key in
+    x-wb-webapp-access-key, no Authorization (a signed-in user's session token goes there), stream: true at once."""
+    BASE = "https://demo.workbuddy.host/.cloud/llm"
+
+    def setUp(self):
+        llm_openai._WORKED.clear()
+
+    def test_a_stream_asked_for_at_once_with_the_key_its_way(self):
+        sent = []
+
+        def post(url, body, headers, timeout):
+            sent.append((url, body, headers))
+            return llm_openai._events(sse(json.dumps(REPLY, ensure_ascii=False)).encode())
+
+        spec = {"base": self.BASE, "model": "auto", "api_key": "pk_demo", "provider": "WorkBuddy"}
+        with mock.patch.object(llm_openai, "_post", post):
+            self.assertEqual(llm_openai.call("Fold this.", {"type": "object"}, spec, "system", 10), (REPLY, None))
+        url, body, headers = sent[0]
+        self.assertEqual((url, len(sent)), (f"{self.BASE}/chat/completions", 1))
+        self.assertIs(body["stream"], True)
+        self.assertEqual(body["messages"][0]["role"], "system")   # (its model hub wants the app's system prompt first)
+        self.assertEqual(headers["x-wb-webapp-access-key"], "pk_demo")
+        self.assertNotIn("Authorization", headers)
+
+    def test_its_models_listed_with_the_key_its_way(self):
+        seen = []
+
+        def urlopen(req, timeout=None):
+            seen.append(req)
+            r = mock.MagicMock()
+            r.__enter__.return_value.read.return_value = b'{"object": "list", "data": [{"id": "auto", "owned_by": "workbuddy"}]}'
+            return r
+
+        with mock.patch("urllib.request.urlopen", urlopen):
+            self.assertEqual([m["id"] for m in providers.probe(self.BASE, "pk_demo")], ["auto"])
+        self.assertEqual(seen[0].get_header("X-wb-webapp-access-key"), "pk_demo")
+        self.assertFalse(seen[0].has_header("Authorization"))
+
+    def test_every_other_endpoint_keeps_its_bearer(self):
+        self.assertEqual(llm_openai.auth("https://api.deepseek.com/v1", "sk"), {"Authorization": "Bearer sk"})
+        self.assertEqual(llm_openai.auth("https://workbuddy.host.example.com/v1", "sk"), {"Authorization": "Bearer sk"})
 
 
 if __name__ == "__main__":

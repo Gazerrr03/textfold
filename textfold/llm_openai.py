@@ -6,7 +6,9 @@ a provider that rejects JSON mode is asked again without it.
 
 A service that answers only streamed (server-sent events) is read too: a reply that comes as a stream is joined into
 one, and a service that refuses a request not streamed is asked again with "stream": true. Every other endpoint gets
-the requests it got before: the stream is asked for only after it refused them.
+the requests it got before: the stream is asked for only after it refused them. WorkBuddy Cloud's applications
+(*.workbuddy.host), which take a stream alone, are asked for one at once, with their publishable key sent the way
+their SDK sends it.
 
 A reasoning level (spec["effort"]: off, low, medium, high; None for the model's own) is spelled the way each provider
 documents it. These spellings change as APIs change, so none of them is relied on: a request a provider refuses is
@@ -22,6 +24,22 @@ import urllib.request
 
 _WORKED = {}   # (base, model, level) -> index of the request shape that was accepted
 WAITS = (5, 15, 30, 45)   # seconds before asking again when rate-limited (free models: 20 requests a minute)
+
+
+def _workbuddy(base):
+    """An application of WorkBuddy Cloud: its chat completions are streamed only (its SDK: "non-streaming is
+    unsupported"), and its key is the application's publishable key."""
+    host = urllib.parse.urlparse(base).hostname or ""
+    return host.endswith(".workbuddy.host")
+
+
+def auth(base, api_key):
+    """The headers that carry a key: a bearer token, as every OpenAI-compatible endpoint takes it; for WorkBuddy Cloud
+    the publishable key in x-wb-webapp-access-key and no Authorization, which its SDK keeps for a signed-in user's
+    session."""
+    if _workbuddy(base):
+        return {"x-wb-webapp-access-key": api_key or ""}
+    return {"Authorization": f"Bearer {api_key or 'none'}"}
 
 
 def _post(url, body, headers, timeout):
@@ -115,7 +133,7 @@ def call(prompt, schema, spec, system, timeout):
             {"role": "user", "content": f"{prompt}\n\nReply with one JSON object that matches this JSON Schema:\n{json.dumps(schema)}"},
         ],
     }
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {spec.get('api_key') or 'none'}"}
+    headers = {"Content-Type": "application/json", **auth(base, spec.get("api_key"))}
     if "openrouter.ai" in base:
         headers["X-Title"] = "TextFold"
     ways = reasoning(base, level)
@@ -123,6 +141,8 @@ def call(prompt, schema, spec, system, timeout):
     shapes = [(r, jm, False) for r in ways for jm in (True, False)]   # each reasoning shape with JSON mode, then without
     streamed = len(shapes)
     shapes += [({}, jm, True) for jm in (True, False)]   # last, for a service that answers only streamed: the plain request
+    if _workbuddy(base):   # streamed only: every shape as a stream
+        shapes, streamed = [(r, jm, True) for r in ways for jm in (True, False)], 0
     start = _WORKED.get(key, 0)
     last, busy = None, 0
     i = start
