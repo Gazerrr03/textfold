@@ -230,6 +230,7 @@ def workbuddy_runner(path):
 
 # CodeBuddy as WorkBuddy runs it: no memory, no reminders, no suggestions, no repository scan (also ~400 tokens a call
 # rather than ~15,000)
+HELP_WAIT = 9.5   # (seconds: CodeBuddy's --help gives the account's models up within 10)
 CODEBUDDY_QUIET = {k: "1" for k in ("CODEBUDDY_DISABLE_AUTO_MEMORY", "CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD",
                                      "CODEBUDDY_CODE_DISABLE_SESSION_SUMMARY", "CODEBUDDY_PROMPT_SUGGESTION_DISABLED",
                                      "CODEBUDDY_GIT_REPO_SCAN_DISABLED", "CODEBUDDY_DISABLE_CRON", "CODEBUDDY_DISABLE_IDE")}
@@ -377,8 +378,13 @@ def _pi_models(path):
 
 def _codebuddy_models(path):
     """The models the account may use, as --help lists them once signed in ("Currently supported: (auto, glm-5.1, …)"),
-    the efforts too."""
-    text = _run([*argv(path), "--help"], 30, env_for(path)).stdout
+    the efforts too. For --help it asks the account for them within 10 s, and lists its own few when that runs out
+    (cli/dist/codebuddy.js, updateModelOptionDescription): a --help that took that long is asked once more."""
+    for attempt in (1, 2):
+        t0 = time.time()
+        text = _run([*argv(path), "--help"], 30, env_for(path)).stdout
+        if time.time() - t0 < HELP_WAIT:
+            break
     m = re.search(r"Currently supported:\s*\(([^)]*)\)", text)
     names = [x.strip() for x in m.group(1).split(",") if x.strip()] if m else ["auto"]
     e = re.search(r"--effort <level>.*?\(([^)]*)\)", text, re.S)

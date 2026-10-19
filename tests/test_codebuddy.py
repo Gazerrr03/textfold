@@ -31,8 +31,13 @@ if log:
 if "--version" in args:
     print("2.115.0")
 elif "--help" in args:
-    print("  --effort <level>    Reasoning effort level (minimal, low, high)")
-    print("  --model <model>     Model for the current session. Currently supported: (auto, glm-5.1, kimi-k2.7)")
+    slow = os.environ.get("FAKE_SLOW_ONCE")
+    if slow and not os.path.exists(slow):   # the account's models not in time: its own few, once
+        open(slow, "w").close()
+        print("  --model <model>     Model for the current session. Currently supported: (auto, glm-4.7)")
+    else:
+        print("  --effort <level>    Reasoning effort level (minimal, low, high)")
+        print("  --model <model>     Model for the current session. Currently supported: (auto, glm-5.1, kimi-k2.7)")
 elif "-p" in args and os.environ.get("FAKE_SIGNED_OUT"):
     print("Authentication required. Please use /login command to sign in to your account")
 elif "-p" in args:
@@ -81,6 +86,7 @@ class CodeBuddy(unittest.TestCase):
         os.environ.pop("WORKBUDDY_CONFIG_DIR", None)
         os.environ.pop("FAKE_ERROR", None)
         os.environ.pop("FAKE_SIGNED_OUT", None)
+        os.environ.pop("FAKE_SLOW_ONCE", None)
 
     def calls(self):
         return [json.loads(x) for x in self.log.read_text(encoding="utf-8").splitlines()] if self.log.exists() else []
@@ -112,6 +118,13 @@ class CodeBuddy(unittest.TestCase):
         self.assertEqual(got[0]["efforts"], ["minimal", "low", "high"])
         self.assertEqual(agents._codebuddy_models(str(self.alone))[1]["name"], "CodeBuddy · glm-5.1")
         self.assertEqual(self.calls()[0]["env"]["ELECTRON_RUN_AS_NODE"], "1")   # (the app's Electron ran it, as node)
+
+    def test_its_models_asked_once_more_when_the_account_was_slow(self):
+        clock = iter([0.0, 10.2, 20.0, 21.0])   # the first --help took 10.2 s: it ran out of time
+        with mock.patch.dict(os.environ, {"FAKE_SLOW_ONCE": str(self.tmp / "slow")}), mock.patch.object(agents.time, "time", lambda: next(clock)):
+            got = agents._codebuddy_models(str(self.cli))
+        self.assertEqual([m["model"] for m in got], ["auto", "glm-5.1", "kimi-k2.7"])
+        self.assertEqual(len([c for c in self.calls() if "--help" in c["args"]]), 2)
 
     def test_scanned_as_workbuddy(self):
         with mock.patch.object(agents, "REGISTRY", [("codebuddy", "CodeBuddy", "codebuddy", [str(self.bin)], True)]), \
