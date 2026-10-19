@@ -52,7 +52,7 @@ Return JSON {{"links": [{{"from": "U12", "to": "U3", "rel": "supports"}}, ...]}}
     for x in rec["out"].get("links", []):
         try:
             f, t = order[int(str(x["from"]).lstrip("U"))], order[int(str(x["to"]).lstrip("U"))]
-        except (ValueError, IndexError, KeyError):
+        except (ValueError, IndexError, KeyError, TypeError):
             continue
         if f == t or x.get("rel") not in RELS or (f, t) in {(e["f"], e["t"]) for e in added}:
             continue

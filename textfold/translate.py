@@ -184,7 +184,7 @@ def build(doc, lang, cfg, cache_dir, jobs=4, log=print, progress=None, force=Fal
             rec, cached = res
             cost += 0 if cached else (rec.get("cost") or 0)
             out = rec["out"]
-            by_id = {x.get("id"): x for x in out.get("units", [])}
+            by_id = {x.get("id"): x for x in llm.units_of(out)}
             for n, uid in enumerate(us):
                 o = by_id.get(f"U{n}")
                 z = assemble(doc["units"][uid], o, doc["atoms"], lang, warnings.append) if o else None
@@ -193,7 +193,7 @@ def build(doc, lang, cfg, cache_dir, jobs=4, log=print, progress=None, force=Fal
                 else:
                     warnings.append(f"{uid}: no translation")
             if k == 0:   # the section's title and lines, and the paper's title, from its first part
-                sec = out.get("section") or {}
+                sec = llm.as_obj(out.get("section"))
                 # an untitled section (a document's opening text) stays untitled: the model would name it
                 title = (unmark(clean(sec.get("title")), doc["atoms"]) or c["title"]) if c["title"] else ""
                 c.setdefault("tr", {})[lang] = {"title": title,

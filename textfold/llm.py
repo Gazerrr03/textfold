@@ -45,6 +45,30 @@ def spec_of(model):
     return resolve(model)
 
 
+def as_obj(v):
+    """A part of a model's reply that should be an object: as one, also when the model wrote it as a JSON string; else {}."""
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return {}
+    return v if isinstance(v, dict) else {}
+
+
+def units_of(out):
+    """A reply's units as asked (a list of objects), also when a model gave them another way: an object keyed by id, a
+    JSON string, or a list of JSON strings. Anything else is dropped: its unit falls back to a local ladder."""
+    us = out.get("units") if isinstance(out, dict) else None
+    if isinstance(us, str):
+        try:
+            us = json.loads(us)
+        except ValueError:
+            return []
+    if isinstance(us, dict):
+        us = [{"id": k, **v} if isinstance(v, dict) else v for k, v in us.items()]
+    return [o for o in map(as_obj, us if isinstance(us, list) else []) if o]
+
+
 class Stopped(Exception):
     """The reader stopped a generation: the calls not yet made are skipped; those under way finish and stay cached."""
 
@@ -65,7 +89,7 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
     cache_dir.mkdir(parents=True, exist_ok=True)
     f = cache_dir / f"{key}.json"
     if f.exists() and not force:
-        return json.loads(f.read_text()), True
+        return {**json.loads(f.read_text()), "file": str(f)}, True
     note = None
     try:
         out, cost = _once(prompt, schema, spec, timeout, system)
@@ -80,7 +104,13 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
     if note:
         rec["note"] = note
     f.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
-    return rec, False
+    return {**rec, "file": str(f)}, False
+
+
+def forget(rec):
+    """A kept reply its caller could not read, dropped: the next generation asks the model again, without a force."""
+    if rec.get("file"):
+        Path(rec["file"]).unlink(missing_ok=True)
 
 
 def _once(prompt, schema, spec, timeout, system):

@@ -26,6 +26,20 @@ def _post(url, body, headers, timeout):
         return json.loads(r.read())
 
 
+def _content(d):
+    """The reply's text: message.content, a string on most endpoints, a list of parts ({type: text, text}) on some.
+    None when the body is not a chat completion at all (an error sent with HTTP 200)."""
+    choices = d.get("choices") if isinstance(d, dict) else None
+    first = choices[0] if isinstance(choices, list) and choices else None
+    if not isinstance(first, dict):
+        return None
+    msg = first.get("message")
+    c = msg.get("content") if isinstance(msg, dict) else msg
+    if isinstance(c, list):
+        c = "".join((p.get("text") or "") if isinstance(p, dict) else str(p) for p in c)
+    return c if isinstance(c, str) else ""
+
+
 def reasoning(base, level):
     """The fields that ask a provider for a level of reasoning, most fitting first: the provider's own spelling, then
     OpenAI's reasoning_effort (which many take), for off down to the least a model allows (some always think), and
@@ -87,7 +101,13 @@ def call(prompt, schema, spec, system, timeout):
             raise RuntimeError(f"{spec.get('provider') or base}: HTTP {e.code} {e.read()[:300].decode(errors='replace')}")
         except urllib.error.URLError as e:
             raise RuntimeError(f"{spec.get('provider') or base}: {e.reason}")
-        text = (d.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        text = _content(d)
+        if text is None:   # not a completion: what the provider said instead, after the other request shapes
+            last = RuntimeError(f"{spec.get('provider') or base}: not a chat completion: {str((d.get('error') or d.get('detail') or d) if isinstance(d, dict) else d)[:300]}")
+            if i + 1 < len(shapes):
+                i += 1
+                continue
+            raise last
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
         m = re.search(r"\{.*\}", text, re.S)
         if not m and i + 1 < len(shapes) and r:   # an answer left in the reasoning, none in the reply: ask the plain way

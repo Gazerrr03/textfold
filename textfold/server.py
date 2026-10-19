@@ -203,6 +203,7 @@ class Jobs:
         else:
             job.update(status="error", error="no-model" if str(e).startswith("No model is available") else str(e))
             self._log(job)(traceback.format_exc()[-800:])
+            print(f"job {job['id']} {job['pid']} {job['lang']} failed:\n" + "\n".join(job["log"][-12:]), flush=True)
         job["finished"] = time.time()
         PAGES.pop(job["pid"], None)
 
