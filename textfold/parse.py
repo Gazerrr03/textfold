@@ -137,6 +137,16 @@ def atom(doc, toks, el, kind, alt="", text=""):
 
 LONG = 12  # a paragraph with more sentences than this is cut into parts of about PART sentences
 PART = 7
+CJK_TEXT = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+
+
+def cjk_heavy(toks):
+    """A CJK paragraph keeps all its sentences but is never cut into parts: cutting it would change the sentence
+    budget the Chinese ladder is written against, and — because a cut part takes the next free id — shift every
+    later unit's id, so the layer data (keyed on ids) would land on the wrong paragraphs."""
+    total = sum(len(tk.get("t") or "") for tk in toks)
+    cjk = sum(len(CJK_TEXT.findall(tk.get("t") or "")) for tk in toks)
+    return total > 0 and cjk / total > 0.2
 
 
 def add_units(doc, el, role, uid=None, split=True, **extra):
@@ -148,7 +158,7 @@ def add_units(doc, el, role, uid=None, split=True, **extra):
         return []
     sents = split_sentences(toks)
     parts = [(0, len(toks), sents)]
-    if split and len(sents) > LONG:
+    if split and len(sents) > LONG and not cjk_heavy(toks):
         k = -(-len(sents) // PART)
         size = -(-len(sents) // k)
         parts = []

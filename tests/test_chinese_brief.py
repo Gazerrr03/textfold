@@ -49,11 +49,13 @@ class ChineseBrief(unittest.TestCase):
         self.assertNotIn("这个结果支持结论。", brief)
         self.assertIn("这个结果支持结论。", fold.markdown(exported, "full"))
 
-    def test_long_chinese_paragraph_has_valid_sentence_ranges_in_each_part(self):
+    def test_long_chinese_paragraph_stays_one_unit_with_valid_sentence_ranges(self):
+        # a CJK paragraph is not cut into parts (parse.cjk_heavy): a paper read before sentences ended at 。 keeps
+        # its unit ids, so its stored levels stay on their paragraphs
         sentences = [f"这是第{i}句。" for i in range(15)]
         pid = local.import_text("# 中文测试\n\n" + "".join(sentences))
         doc = store.assemble(pid)
-        self.assertGreater(len(doc["units"]), 1)
+        self.assertEqual(len(doc["units"]), 1)
         actual = [s for uid in doc["units"] for s in fold.unit(doc, uid)["sentences"]]
         self.assertEqual(actual, sentences)
         for u in doc["units"].values():

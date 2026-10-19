@@ -13,14 +13,98 @@ Written words that also occur in the key sentences carry `m`, the index of
 that source token, so the morph can slide the word instead of swapping it.
 One model call per chunk (a heading and the units under it).
 """
+import bisect
+import difflib
 import re
 from concurrent.futures import ThreadPoolExecutor
 
 from . import kinds, llm
-from .tokens import lcs_pairs, norm, plain, tokenize_text, words
+from .tokens import is_cjk, lcs_pairs, norm, plain, tokenize_text, words
 
 ROLES = ["context", "gap", "claim", "method", "setup", "result", "analysis", "limitation"]
 BUDGET = {"takeaway": 14, "reason": 22, "topic": 3, "section": 16}
+# A CJK text's budgets. The English ones are word counts, and tokens.py counts a CJK character as a word, while a
+# Chinese sentence of the length an English one needs holds about three times the characters; a Chinese topic is
+# a phrase of a few characters, not three words.
+CJK_BUDGET = {"takeaway": 40, "reason": 60, "topic": 8, "section": 40}
+# A CJK local takeaway is cut at a clause or sentence edge inside its budget, not at a word count: the stock one
+# cut mid-clause and the reader showed it (a takeaway ending "…的含义2013"). The topic is the takeaway's first
+# noun-ish run: a leading discourse filler (随着 / 因此 / 首先 …), a list marker or an ordinal is not what a unit
+# is about. A section heading keeps its ordinal: "第二节" is not "第二……".
+CJK_EDGE = "。！？；"          # strong edges: a takeaway may end after one, punctuation kept
+CJK_SOFT = "，、："            # soft edges: end before one, it is dropped
+CJK_FILLER = ("随着", "根据", "由于", "因此", "但是", "而且", "并且", "不过", "然而", "所以", "如果", "虽然", "尽管",
+              "目前", "首先", "其次", "再次", "最后", "此外", "另外", "同时", "综上", "总之", "基于", "鉴于",
+              "针对", "对于", "关于", "近年来", "当前", "实践中", "从我国", "从中国")
+CJK_NUMERAL = "一二三四五六七八九十百千"
+CJK_ORDINAL_RE = re.compile(r"第[" + CJK_NUMERAL + r"]|其[一二三四]|一[二三是]")
+CJK_SECTION_TAIL = ("节", "章", "编", "条", "款", "项", "部分")   # "第二节" is a heading: its ordinal stays
+CJK_ORDINAL_TAIL = ("第一", "第二", "第三", "第四", "一是", "二是", "三是")   # a topic never ends inside an ordinal
+CJK_TOPIC_TAIL = "的地得了着与和及或"                                        # a topic never ends on a function word
+CJK_DANGLER = "主是支第被把将能可各每"     # characters that almost only start a word: a Han character after one means the topic was cut mid-word, so step back
+CJK_TOPIC_EDGE = CJK_EDGE + CJK_SOFT + ".,;:!?"                            # boundaries inside a topic span (a half-width stop in a quotation counts)
+_FILLER_SORTED = sorted(CJK_FILLER, key=len, reverse=True)
+CJK_MARKERS = "①②③④⑤⑥⑦⑧⑨⑩⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⒈⒉⒊⒋⒌⒍⒎⒏⒐⒑⁰¹²³⁴⁵⁶⁷⁸⁹†‡§¶"   # footnote and citation markers: never part of a topic
+CJK_LABEL_RE = re.compile(r"^(?:图|表|Figure|Fig\.?|Tab\.?|Table)\s*\d+(?:\s*[-–—]\s*\d+)?\s*")   # the "图 1—1 " label prefix
+CJK_TAIL_PUNCT = CJK_EDGE + CJK_SOFT + ".,;:!?)）】]」』”’\"'"               # a topic is a label: it does not end on punctuation
+# Apparatus: a contents line (dot leaders), a footnote (a leading ①-⑩ together with a citation shape), an English
+# footnote. These are the plumbing of a paper, not its argument: they fold to nothing and stay as they are at Full.
+TOC_LINE = re.compile(r"[.．…·]\s*[.．…·]\s*[.．…·]")                      # the dot leaders of a contents line ("第一章 …… 1")
+CITE_MARK = re.compile(r"\[[A-Za-z/]+\]|出版社|学报|：\s*第?\s*\d{1,4}\s*[-–—]\s*\d{1,4}|pp?\.\s*\d"
+                       r"|\bDOI\b|\bISSN\b|CN:\s*\d|[EMDJ]B/OL|https?://|www\.")
+FOOT_START = re.compile(r"^\s*[①②③④⑤⑥⑦⑧⑨⑩]\s*")
+FOOT_NOTE = re.compile(r"^\s*[①②③④⑤⑥⑦⑧⑨⑩]?\s*《[^》]{2,30}》\s*第\s*\d+\s*条")   # a statutory note at the head of a line
+
+
+def is_apparatus(u, atoms):
+    """True for a unit that is the paper's plumbing, not its argument: a contents line, a footnote
+    (citation, cross-reference, statutory note). Such a unit folds to nothing and stays at Full."""
+    t = plain(u["toks"], atoms).strip()
+    if not t:
+        return True
+    if len(t) < 120 and TOC_LINE.search(t):
+        return True
+    if FOOT_START.match(t):
+        if CITE_MARK.search(t):
+            return True
+        if FOOT_NOTE.match(t) or "参见" in t or "前引" in t or "同前注" in t:
+            return True
+        ascii_ratio = sum(c.isascii() and c.isalpha() for c in t) / max(1, sum(c.isalpha() for c in t))
+        if ascii_ratio > 0.6 and len(t) < 300:      # an English footnote ("① Ronald J. Mann, …")
+            return True
+    return False
+
+
+def suppressed():
+    """A ladder that renders nothing below Full: no brief, no takeaway, no topic, no evidence."""
+    return {"role": "context", "ev": [], "brief": [], "tn": 0, "topic": [], "model": "local"}
+
+
+# A CJK unit often opens with a lead-in ("以……教授为主要代表人物的……论") or a conditional ("而如果不……的话");
+# the real claim comes after it. local() therefore takes the sentence that reads most like a claim, not the first.
+CJK_CLAIM = ("认为", "主张", "应当", "应该", "需要", "必须", "旨在", "在于", "而是", "可见", "因此",
+             "所以", "证明", "表明", "说明", "标志", "意味着", "构成", "属于", "界定", "确立", "即：")
+CJK_COND_LEAD = ("而如果", "如果", "若", "倘若", "假如", "尽管", "虽然", "由于", "随着", "鉴于", "但是")
+
+
+def _claim_sentence(u, atoms):
+    """The sentence that states the point, not necessarily the first: an introduction or a conditional
+    set-up opens many Chinese units, and the claim comes a sentence or two later."""
+    best, best_score = 0, -99.0
+    for i, (s, e) in enumerate(u["sents"][:4]):
+        t = plain(u["toks"][s:e], atoms)
+        if len(t) < 10:
+            continue
+        score = 0.4 - 0.6 * i
+        if any(m in t for m in CJK_CLAIM):
+            score += 3
+        if "：" in t or ":" in t:
+            score += 1.5
+        if any(t.startswith(m) for m in CJK_COND_LEAD):
+            score -= 2.5
+        if score > best_score:
+            best, best_score = i, score
+    return u["sents"][best] if u["sents"] else None
 
 SCHEMA = {
     "type": "object",
@@ -37,6 +121,25 @@ SCHEMA = {
 }
 
 KIND = {"para": "paragraph", "item": "list item", "abstract": "abstract", "caption": "caption"}
+
+
+def _cjk_share(text):
+    """CJK share among word characters: dot leaders and punctuation must not make a Chinese heading look
+    English ("三、立法位阶低且滞后.........." is 18% CJK over all characters but all of its word characters)."""
+    w = [c for c in text if c.isalnum() or is_cjk(c)]
+    return (sum(is_cjk(c) for c in w) / len(w)) if w else 0.0
+
+
+def budgets_of(u):
+    """The budgets for one unit's own text (no document at hand): a CJK unit's are in characters."""
+    text = "".join(tk.get("t") or "" for tk in u["toks"])
+    return CJK_BUDGET if _cjk_share(text) > 0.2 else BUDGET
+
+
+def budgets_for(doc):
+    """The budgets for a whole document, from its text: its units carry the CJK share."""
+    text = "".join(tk.get("t") or "" for u in doc["units"].values() for tk in u["toks"])[:4000]
+    return CJK_BUDGET if _cjk_share(text) > 0.2 else BUDGET
 
 
 def outline(doc, here):
@@ -68,6 +171,11 @@ def tables_of(doc, chunk, limit=1500, most=3):
 
 def prompt_for(doc, chunk):
     U, A = doc["units"], doc["atoms"]
+    b = budgets_for(doc)
+    cjk = b is CJK_BUDGET
+    one = "ONE sentence" if cjk else "ONE English sentence"
+    more = "ONE more sentence" if cjk else "ONE more English sentence"
+    count = "characters" if cjk else "words"
     abstract = " ".join(plain(U[u]["toks"], A) for u in doc["chunks"][0]["units"]) if doc["chunks"] and doc["chunks"][0]["id"] == "abstract" else ""
     blocks = []
     for n, uid in enumerate(chunk["units"]):
@@ -83,7 +191,7 @@ def prompt_for(doc, chunk):
     head = f"{chunk['num']} {chunk['title']}".strip()
     tables = tables_of(doc, chunk)
     context = ("\n\nTables in this section, for context (they are not units; a takeaway may use what they show):\n\n" + "\n\n".join(tables)) if tables else ""
-    return kinds.adapt(f"""Paper: {doc['meta']['title']}
+    prompt = kinds.adapt(f"""Paper: {doc['meta']['title']}
 
 Paper abstract, for context:
 {abstract}
@@ -101,16 +209,28 @@ A reader zooms out of this paper level by level: full text, then key sentences, 
 
 For each unit:
 - role: the unit's job in the paper's argument, one of: context (background, prior work), gap (what prior work lacks or gets wrong), claim (a thesis or hypothesis the paper puts forward), method (what the authors built or how it works), setup (data, parameters, protocol), result (a measured finding), analysis (an interpretation, mechanism or theory), limitation (a caveat or future work).
-- takeaway: ONE English sentence of at most {BUDGET['takeaway']} words stating what this unit establishes: the claim, design choice, number or finding itself, conclusion first, packed like a headline. Name the thing itself, not the activity ("this paragraph describes", "the authors discuss", "details of"). Keep the paper's own terms. Someone reading only the takeaways of the whole paper in order should be able to follow its argument.
-- topic: the unit's subject as a bare noun phrase of at most {BUDGET['topic']} words, copied VERBATIM from inside the takeaway.
-- reason: ONE more English sentence of at most {BUDGET['reason']} words that reads on from the takeaway and gives its main reason, mechanism, condition or consequence; do not restate the takeaway. Use "" when the unit is a single short sentence.
+- takeaway: {one} of at most {b['takeaway']} {count} stating what this unit establishes: the claim, design choice, number or finding itself, conclusion first, packed like a headline. Name the thing itself, not the activity ("this paragraph describes", "the authors discuss", "details of"). Keep the paper's own terms. Someone reading only the takeaways of the whole paper in order should be able to follow its argument.
+- topic: the unit's subject as a bare noun phrase of at most {b['topic']} {count}, copied VERBATIM from inside the takeaway.
+- reason: {more} of at most {b['reason']} {count} that reads on from the takeaway and gives its main reason, mechanism, condition or consequence; do not restate the takeaway. Use "" when the unit is a single short sentence.
 - evidence: the numbers of the 1 or 2 sentences (3 only when the unit has 7 or more) whose verbatim text best backs the takeaway, ascending; prefer sentences that state a result, a definition or a decision over sentences that only set up or list.
 
-For the section: takeaway, ONE sentence of at most {BUDGET['section']} words stating what this section establishes in the paper; topic, at most {BUDGET['topic']} words copied verbatim from that takeaway.
+Each line is read on its own, out of order, by someone deciding whether to zoom back in:
+- Never supply a fact the unit does not contain: no name, standard, system, number or date of your own. When it writes "the cross-border payment system", write that, not the name of one particular system.
+- The line must stand alone: do not open it with 该, 此, 其, 上述, this, these or it. Name the thing again.
+- A term a non-specialist would not know is glossed in eight characters or fewer where it first appears.
+- Keep every number the point depends on, each with its anchor: what it counts, in which year, for whom.
+- A process is who acts, through which channel, to whom. A bare sequence of steps is not a takeaway.
+- The reason sentence gives the mechanism or the consequence, not where the claim comes from: not "supported by X", not "as Y shows", unless the source itself is the finding.
+
+For the section: takeaway, {one} of at most {b['section']} {count} stating what this section establishes in the paper and what it does there (fixes the terms, surveys the rules, measures the gap, compares a foreign regime, proposes a remedy); a line that only says what the section covers is not a summary. topic, at most {b['topic']} {count} copied verbatim from that takeaway.
 
 Style: no em or en dashes as punctuation, use commas or colons (hyphenated terms such as "zero-shot" are fine). Units show math as $...$; when a symbol is essential to a takeaway or reason, copy its $...$ exactly as it appears in the unit, otherwise avoid math. No citations; no figure or table numbers except in a caption's own lines.
 
 Return JSON: {{"section": {{"takeaway": "...", "topic": "..."}}, "units": [{{"id": "U0", "role": "...", "takeaway": "...", "topic": "...", "reason": "...", "evidence": [0]}}, ...]}} with exactly one entry per unit, in order.""", doc["meta"])
+    if cjk:   # the style rules above are written for English punctuation
+        prompt = prompt.replace("no em or en dashes as punctuation, use commas or colons",
+                                "use the punctuation of the text's own language")
+    return prompt
 
 
 def clean(s):
@@ -182,17 +302,20 @@ def head_words(toks, n):
 
 
 def assemble(u, o, atoms, model):
+    if is_apparatus(u, atoms):   # an apparatus unit does not fold, even when the model wrote one for it
+        return {"role": "context", "ev": [], "brief": [], "tn": 0, "topic": [], "model": model}
     ns = len(u["sents"])
     ev = sorted({int(x) for x in (o.get("evidence") or []) if isinstance(x, int) and 0 <= x < ns})[:3] or [0]
     take_text, reason_text = clean(o.get("takeaway")), clean(o.get("reason"))
     if not take_text:
         return local(u, atoms)
     take = written(take_text, u, atoms, ev)
+    dot = "。" if _cjk_share(take_text + reason_text) > 0.2 else "."
     brief = [dict(tk) for tk in take]
     if reason_text:
-        brief.append({"t": ".", "s": 1})
+        brief.append({"t": dot} if dot == "。" else {"t": dot, "s": 1})
         brief += written(reason_text, u, atoms, ev)
-    brief.append({"t": "."})
+    brief.append({"t": dot})
     if take:
         take[-1].pop("s", None)
     tn = len(take)
@@ -209,20 +332,362 @@ def align(u, brief, ev, atoms, toks=None, sents=None):
         brief[bi]["m"] = key[kj]
 
 
+def _skip_marker(text, i):
+    """Skip a list marker like "1.", "2、" or "三、" at i; a date ("2019年") or a version ("3.5") is kept."""
+    j = i
+    while j < len(text) and (text[j].isdigit() or text[j] in CJK_NUMERAL):
+        j += 1
+    if j > i and j < len(text) and text[j] in ".,、)）;；:：":
+        return j + 1
+    return i
+
+
+def _skip_ordinal(text, i):
+    """Skip an ordinal like "第一，" or "一是" at i; a section heading ("第二节"), a "第十二条", a plain
+    "第三方" or a "第一次" (an ordinal run followed straight by a content character) keeps it."""
+    m = CJK_ORDINAL_RE.match(text, i)
+    if m is None or text.startswith(CJK_SECTION_TAIL, m.end()):
+        return i
+    if text.startswith("第", i) and m.end() < len(text) and text[m.end()] not in CJK_SOFT + CJK_EDGE + " ":
+        return i
+    return m.end()
+
+
+def _skip_filler(text, i):
+    """Skip punctuation, one discourse filler and the punctuation after it ("第一，为了…" → "为了…")."""
+    while i < len(text) and text[i] in CJK_SOFT + CJK_EDGE + " ":
+        i += 1
+    hit = next((f for f in _FILLER_SORTED if text.startswith(f, i)), None)
+    if hit is None:
+        return i
+    i += len(hit)
+    while i < len(text) and text[i] in CJK_SOFT + CJK_EDGE + " ":
+        i += 1
+    return i
+
+
+def cjk_topic_span(text, n):
+    """A CJK topic's char span in `text` (in the text's own coordinates): footnote markers (①②…) are dropped
+    wherever they sit ("第③方支付" → "第三方支付"), a figure/table label, list markers, ordinals and leading
+    fillers are skipped, the span is cut at a clause edge (a natural phrase may run a few characters past the
+    budget) or at the budget, and it never ends on punctuation: a topic is a label, not a sentence."""
+    clean, back = "", []                      # the text without markers, and where each clean char sat in the original
+    for k, ch in enumerate(text):
+        if ch not in CJK_MARKERS:
+            clean += ch
+            back.append(k)
+    if not clean:
+        return None
+    i = 0
+    while i < len(clean) and not is_cjk(clean[i]) and not (clean[i].isascii() and clean[i].isalnum()):
+        i += 1                               # "①", punctuation, spaces
+    i = _skip_marker(clean, i)                # "1.", "2、", "三、" (a date or a version number stays)
+    i = _skip_ordinal(clean, i)               # "第一，"/"一是" ("第二节" stays)
+    m = CJK_LABEL_RE.match(clean, i)          # the label prefix of "图 1—1 …", "表 2 …"
+    if m:
+        i = m.end()
+    i = _skip_filler(clean, i)                # a filler, and the punctuation after it
+    for p in range(i, min(i + 5, len(clean) - 1)):    # a second filler inside the first few characters ("我国对于…")
+        nxt = _skip_filler(clean, p)
+        if nxt != p:
+            i = nxt
+            break
+    if i >= len(clean):
+        return None
+    j, edge = i, None
+    while j < min(len(clean), i + n + 5):
+        if clean[j] in CJK_TOPIC_EDGE:
+            edge = j
+            break
+        j += 1
+    if edge is not None:
+        end = edge + 1 if clean[edge] in CJK_EDGE else edge
+    else:
+        end = min(len(clean), i + n)
+        while end < len(clean) and (clean[end].isdigit() or clean[end - 1].isdigit()):
+            end += 1                           # never cut a run of digits in half ("…4月29日国家…")
+    while end > i + 1 and clean[end - 1] in CJK_TOPIC_TAIL:
+        end -= 1
+    while end - i >= 4 and clean[end - 2:end] in CJK_ORDINAL_TAIL:
+        end -= 2                               # never end inside an ordinal ("…认为第三")
+    if (i + 2 < end < len(clean) and clean[end - 1] in CJK_DANGLER
+            and is_cjk(clean[end]) and clean[end] not in CJK_TOPIC_EDGE):
+        end -= 1                               # never end on a word-initial character ("…的创新之处主" → "…的创新之处")
+    while end > i + 1 and clean[end - 1] in CJK_TAIL_PUNCT:
+        end -= 1                               # drop the closing punctuation ("…备考属性。" → "…备考属性")
+    if end - i < 2:
+        return None
+    return (back[i], back[end - 1] + 1)        # back to the coordinates of the original text
+
+
+def cjk_takeaway(brief, n):
+    """Indices of a CJK takeaway: the first n words, but ending at the last clause edge inside them. An edge in
+    the first two tokens is a fragment marker (a line-break shard like "构，"), not a clause, so edges start at
+    token 2; the head's end counts one token past its last word (head_words drops trailing punctuation, and a
+    sentence-final "。" right there is still an edge); with no edge inside the budget, the first edge within 50%
+    past it is used before falling back."""
+    head = head_words(brief, n)
+    if not head:
+        return head
+    limit = head[-1] + 1
+    far = min(len(brief), limit + 1 + n // 2)
+    edges = [k for k in range(2, far)
+             if any(c in CJK_EDGE + CJK_SOFT + "," for c in (brief[k].get("t") or ""))]
+    inside = [k for k in edges if k <= limit]
+    edge = inside[-1] if inside else (edges[0] if edges else None)
+    if edge is None:
+        return head
+    strong = any(c in CJK_EDGE for c in (brief[edge].get("t") or ""))
+    return list(range(edge + 1)) if strong else list(range(edge))
+
+
+def cjk_topic(brief, tn, n):
+    """Indices of a CJK topic inside brief[:tn] (cjk_topic_span over its text, mapped back to tokens)."""
+    text, starts = "", []
+    for i in range(tn):
+        starts.append(len(text))
+        text += brief[i].get("t") or ""
+    span = cjk_topic_span(text, n)
+    if span is None:
+        return head_words(brief[:tn], n)
+    lo = bisect.bisect_left(starts, span[0])
+    hi = bisect.bisect_left(starts, span[1])
+    rng = list(range(lo, max(hi, lo + 1)))
+    kept = [k for k in rng if (brief[k].get("t") or "").strip(CJK_MARKERS + " ")]
+    return kept or rng                      # a token that is only a footnote marker is not part of a topic
+
+
 def local(u, atoms):
-    """No model reply: the first sentence stands in for brief, its head for the shorter levels."""
-    s, e = u["sents"][0]
-    brief = [dict(tk, m=s + k) for k, tk in enumerate(u["toks"][s:e])]
-    head = head_words(brief, BUDGET["takeaway"])
+    """No model reply: the unit's claim sentence stands in for brief, its head for the shorter levels.
+    Apparatus (a contents line, a footnote) folds to nothing: it stays at Full and hides below it."""
+    if is_apparatus(u, atoms):
+        return suppressed()
+    span = _claim_sentence(u, atoms)
+    if span is None:
+        return suppressed()
+    s, e = span
+    brief = [dict(tk, m=s + k) for k, tk in enumerate(u["toks"][s:e])
+             if not ((tk.get("t") or "").strip(CJK_MARKERS + " ") == "" and "a" not in tk and "x" not in tk)]
+    if not brief:
+        return suppressed()
+    b = budgets_of(u)
+    cjk = _cjk_share("".join(tk.get("t") or "" for tk in brief)) > 0.2
+    head = cjk_takeaway(brief, b["takeaway"]) if cjk else head_words(brief, b["takeaway"])
+    if cjk and head and any(("".join(brief[i].get("t") or "" for i in head)).startswith(m) for m in CJK_COND_LEAD):
+        strong = [k for k in range(head[-1] + 1, min(len(brief), head[-1] + 1 + b["takeaway"]))
+                  if any(c in CJK_EDGE for c in (brief[k].get("t") or ""))]
+        head = list(range(strong[0] + 1)) if strong else list(range(len(brief)))   # a half conditional says nothing: run on to the next stop
     tn = (head[-1] + 1) if head else len(brief)
-    topic = [{**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i} for i in head_words(brief[:tn], 3)]
+    tix = cjk_topic(brief, tn, b["topic"]) if cjk else head_words(brief[:tn], b["topic"])
+    topic = []
+    for i in tix:
+        tk = {**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i}
+        t = re.sub("[" + re.escape(CJK_MARKERS) + "]", "", tk.get("t") or "")
+        if not t and "a" not in tk and "x" not in tk:
+            continue                      # a token that is only a footnote marker is not part of a topic
+        tk["t"] = t
+        topic.append(tk)
+    if not topic:                          # everything was stripped: fall back to the head words
+        topic = [{**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i}
+                 for i in head_words(brief[:tn], b["topic"])]
     return {"role": "context", "ev": [0], "brief": brief, "tn": tn, "topic": topic, "model": "local"}
+
+
+BACKGROUND = {"context", "setup"}     # a unit that states no point of its own: it sets the scene or the data
+CAP = 2                               # how many background lines in a row one section may show at Takeaway
+CJK_ISSUE = re.compile(r"^\s*(《[^》]{2,40}》|(19|20)\d{2}\s*年)")   # a line whose subject is the document it came from
+SAME = 0.8                            # how close a unit's takeaway has to be to its section's line to be a repeat
+
+
+def _flat(text):
+    return re.sub(r"[\s，。、：；！？,.:;!?“”‘’\"'（）()《》]", "", text or "")
+
+
+def _take(lad):
+    return "".join(tk.get("t") or "" for tk in lad["brief"][:lad["tn"]])
+
+
+def repeats_section(lad, section, same=None, prefix=False):
+    """True when the unit's takeaway is the section's own one-line summary again, word for word or close to it.
+    Both come from one reply, so this is common, and at Takeaway a section then says the same sentence twice:
+    the summary under the heading, and a bullet. The summary keeps it, the bullet steps down."""
+    if not section:
+        return False
+    a = _flat(_take(lad) or "".join(tk.get("t") or "" for tk in lad["brief"]))   # a line that stepped down has no takeaway left
+    b = _flat("".join(tk.get("t") or "" for tk in section.get("take") or []))
+    if len(a) < 8 or len(b) < 8:
+        return False
+    # 一方是另一方的前缀：条目就是摘要把那句话又说了一遍，只是后面多带了理由。相似度算不出来
+    # （0.73，差一点点），但这种重复在读的时候一眼就看得出。
+    if prefix and (a.startswith(b) or b.startswith(a)) and min(len(a), len(b)) >= 12:
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= (same or SAME)
+
+
+def citation_first(lad):
+    """A background line that opens with 《…》 or with a year answers "where was this written", not "what does the
+    paper establish". It steps down to Brief, where the reader who wants the document still finds it. A line with
+    a colon states a specification or a list, so it stays; a unit that is not mostly Chinese is never one."""
+    take = _take(lad).strip()
+    if _cjk_share(take) <= 0.2 or "：" in take or ":" in take:
+        return False
+    if any(m in take for m in CJK_CLAIM):
+        return False
+    return bool(CJK_ISSUE.match(take))
+
+
+def fold_background(chunk, doc):
+    """What a section shows at Takeaway: its points, not its reading list.
+
+    A Chinese thesis section often runs three or four background units in a row (this document in this year,
+    the next one in the next year). At Takeaway each of them becomes a line, and a page of such lines reads as
+    a table of contents: the reader who zoomed out that far is looking for the argument, not for where each
+    fact came from. So a section keeps at most CAP background lines in a row, a line that opens with its own
+    source yields its place to the section's one-line summary, and a line that repeats that summary yields to it
+    as well. Nothing is lost: Brief and the levels below still carry every line in full.
+    """
+    U, section = doc["units"], chunk.get("lad")
+    lads = [(uid, U[uid].get("lad") or {}) for uid in chunk["units"]]
+    text = "".join(tk.get("t") or "" for _, l in lads for tk in l["brief"][:l.get("tn") or 0])
+    if _cjk_share(text) <= 0.2:
+        return      # an English paper folds exactly as it did before: these thresholds were set on Chinese theses
+    first = next((i for i, (_, l) in enumerate(lads) if l.get("brief") and l.get("tn")), None)
+    if first is None:     # nothing in this section folds: leave it alone
+        return
+    run = 0
+    for i, (uid, l) in enumerate(lads):
+        if not l.get("brief") or not l.get("tn"):
+            run = 0
+            continue
+        if repeats_section(l, section):
+            l["tn"] = 0
+            continue
+        if i == first or l.get("role") not in BACKGROUND:
+            run = 0       # the section's opening line always stands: a heading with nothing under it says less
+            continue
+        run += 1
+        if run > CAP or citation_first(l):
+            l["tn"] = 0   # the line steps down to Brief: same words, one level out
+
+
+NOTE = re.compile(r"^\s*[①-⑳]")        # a footnote the PDF left as a block of its own, marker and all
+LISTY = re.compile(r"^\s*(?:其?[一二三四五六七八九十]+是|（[一二三四五六七八九十]+）|[（(]?\d+[.、）)]|第[一二三四五六七八九十百零]+[条章节])")
+WHOLE = set("。！？.!?：:；;”’」』）)")    # a sentence that ends here needs nothing from the one before
+GLUE = 40                               # characters of a cut-off tail the next unit carries in at Brief
+
+
+def _is_note(u, atoms):
+    """A block that is not prose: a footnote marker the PDF left on its own, or a figure's caption."""
+    return u.get("role") == "caption" or bool(NOTE.match(plain(u["toks"], atoms)))
+
+
+def _listy(u, atoms):
+    """A unit that opens with an item number ("四是…", "(3)…", "第十二条…"): the rest of a list whose first half
+    is in the unit before. Shown alone it is a fragment, however whole its own sentence is."""
+    sents = u.get("sents") or []
+    if not sents:
+        return False
+    a, b = sents[0]
+    return bool(LISTY.match(plain(u["toks"][a:b], atoms).strip()))
+
+
+def _tail(u, atoms):
+    """The sentence a page break cut in half, as far back as it has to go to stand on its own.
+
+    Empty when the unit ends whole. Otherwise the last clause, joined with the one before it while the run is
+    short: "而该条例的法律位阶为行政" needs "过去…都是部门规章" in front of it, and "至少需要五名…" needs
+    "…提出最低要求". A whole sentence is not wanted either — the reader gets the contrast, not the paragraph.
+    """
+    t = plain(u["toks"], atoms).strip()
+    t = re.sub(r"[①-⑳]+$", "", t).rstrip()   # a footnote marker follows the stop, it does not end the sentence
+    if not t or t[-1] in WHOLE:
+        return ""
+    cut = 0
+    for m in re.finditer(r"[。！？!?]", t):
+        cut = m.end()            # 前面那句是完整的，上一单元已经显示过：再带一遍就是重复
+    sent = t[cut:] if len(t[cut:]) >= 4 else t
+    tail = sent
+    for m in reversed(list(re.finditer(r"[，,；;：:]", sent))):
+        tail = sent[m.end():]
+        if len(tail) >= 20:     # enough of a run to carry a subject and a contrast
+            break
+    if len(tail) < 20 and tail != sent:
+        tail = sent             # the last clause is too short to stand on its own: carry the whole sentence
+    out = tail[-GLUE:]
+    if len(tail) > GLUE:        # cut at a clause mark near the cut, never through a word
+        m = re.search(r"[，,；;：:。]", out[:10])
+        if m:
+            out = out[m.end():]
+    return out.lstrip("。！？.!?，,；;：:”’\"）)")
+
+
+def _widen(u, lad, atoms, most=6):
+    """glue restores the front of the sentence, which leaves this unit's first sentence as a bare tail
+    ("要求。"). Key shows that one sentence and the reader sees a line that stops as soon as it has said
+    anything. The sentence after it comes in too, and the line means something."""
+    sents = u.get("sents") or []
+    if len(sents) < 2:
+        return
+    a, b = sents[0]
+    if len(plain(u["toks"][a:b], atoms).strip()) > most:
+        return
+    lad["ev"] = sorted(set(lad.get("ev") or []) | {0, 1})[:3]
+
+
+def dress(chunk, doc):
+    """Two things a section needs before it can be read as prose.
+
+    * A paragraph split across a page break arrives as two units: the first ends mid-word ("…的法律位阶为行政",
+      "…熟悉外汇业务的工作人"), the second opens with the rest ("法规，加强对…", "员，并且在…"). Brief shows one
+      sentence per unit, so the reader meets the second half alone and the sentence has no subject. The tail of
+      the first is carried into the second as `glue`, and the sentence arrives whole. A footnote between the two
+      halves is stepped over, not quoted.
+    * A unit whose takeaway stepped down is the background its section already summarises. At Brief it would
+      still show, one sentence at a time, and a page of "this document in this year" is a reading list again. So
+      it stays out of Brief — unless it is everything the section has, which would leave a heading over nothing.
+    """
+    U, A = doc["units"], doc["atoms"]
+    lads = [(uid, U[uid].get("lad") or {}) for uid in chunk["units"]]
+    for i, (uid, l) in enumerate(lads):
+        if not l.get("brief") or _is_note(U[uid], A):
+            continue
+        j = i - 1
+        while j >= 0 and _is_note(U[lads[j][0]], A):
+            j -= 1                        # the footnote sits between the halves; the paragraph is still cut
+        if j < 0:
+            continue
+        tail = _tail(U[lads[j][0]], A)
+        if tail:
+            l["glue"] = tail
+            _widen(U[uid], l, A)
+    live = [(uid, l) for uid, l in lads if l.get("brief")]
+    if any(l.get("tn") for _, l in live):   # the section still says something at Brief
+        for _, l in live:
+            if not l.get("tn"):
+                l["l3"] = False
+    # last sieve at Brief: a sentence that does not stand on its own, or says again what the section's line just
+    # said, does not need to stand beside that line. The line under the heading carries the section either way.
+    vis = []
+    for uid, l in live:
+        if l.get("l3") is not False and _listy(U[uid], A):
+            l["l3"] = False
+        if l.get("l3") is not False:
+            vis.append((uid, l))
+    if vis and all(repeats_section(l, chunk.get("lad"), prefix=True) for _, l in vis):
+        for _, l in vis:
+            l["l3"] = False
+        vis = []
+    if len(vis) == 1 and repeats_section(vis[0][1], chunk.get("lad"), 0.6, prefix=True):
+        vis[0][1]["l3"] = False     # one paragraph under a line that already says the same: the line is enough
+        vis = []
+    if not vis and live and not (chunk.get("lad") or {}).get("take"):
+        live[0][1].pop("l3", None)          # nothing to carry the section: a heading over nothing says less
 
 
 def topic_tokens(text, brief, tn, u, atoms, ev, budget=None, toks=None, sents=None):
     """Topic tokens; `k` is the takeaway token a topic word slides from. A phrase the model wrote that is not in the
     takeaway verbatim is kept when short (ThoughtDAG does the same): it read better than a cut of the takeaway's head."""
-    budget = budget or BUDGET["topic"]
+    budget = budget or budgets_of(u)["topic"]
     loc = locate(text, brief[:tn])
     if loc:
         return [{**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i} for i in loc]
@@ -248,13 +713,16 @@ def section_ladder(o, topic_budget=3, doc=None, chunk=None):
         take = written(take_text, {"toks": pool, "sents": []}, doc["atoms"], [])
     else:
         take = tokenize_text(take_text)
-    return {"take": take, "topic": locate(clean(o.get("topic")), take) or head_words(take, topic_budget)}
+    tb = budgets_for(doc)["topic"] if doc else topic_budget
+    return {"take": take, "topic": locate(clean(o.get("topic")), take) or head_words(take, tb)}
 
 
 def build(doc, cfg, cache_dir, jobs=4, log=print, progress=None, force=False, stop=None):
     chunks = [c for c in doc["chunks"] if c["units"]]
     cost, warnings, errors = 0.0, [], []
     model = llm.label(cfg)
+    b = budgets_for(doc)
+    cjk = b is CJK_BUDGET
 
     def run(c):
         if stop is not None and stop.is_set():   # stopped: the chunks not yet sent are skipped
@@ -287,9 +755,11 @@ def build(doc, cfg, cache_dir, jobs=4, log=print, progress=None, force=False, st
                     u["lad"] = assemble(u, o, doc["atoms"], model) if o else local(u, doc["atoms"])
                     if not o:
                         warnings.append(f"{uid}: missing from reply")
-                    elif words(u["lad"]["brief"][:u["lad"]["tn"]]) > BUDGET["takeaway"] + 4:
-                        warnings.append(f"{uid}: long takeaway ({words(u['lad']['brief'][:u['lad']['tn']])} words)")
+                    elif words(u["lad"]["brief"][:u["lad"]["tn"]]) > b["takeaway"] + (4 if not cjk else 15):
+                        warnings.append(f"{uid}: long takeaway ({words(u['lad']['brief'][:u['lad']['tn']])} {'characters' if cjk else 'words'})")
                 c["lad"] = section_ladder(out.get("section"), 3, doc, c)
+                fold_background(c, doc)   # what the section shows at Takeaway, once its units are folded
+                dress(c, doc)             # the sentence a page break cut in half; the background Brief leaves out
             except Exception as e:   # a reply of a shape not foreseen: this chunk's units fall back, as for a failed call
                 errors.append(RuntimeError(f"{model}: a reply TextFold could not read ({type(e).__name__}: {e})"))
                 log(f"  ! {c['id']}: {errors[-1]}")
