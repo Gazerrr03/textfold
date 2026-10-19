@@ -111,11 +111,12 @@ class JsonLines(unittest.TestCase):
         self.assertIn("no default model", str(e.exception))
 
     def test_a_reply_that_is_not_ascii_is_read_as_utf8(self):
+        # (the script's own text is ASCII, escapes for the Chinese: it is written in the system's encoding)
         s = self.script("""
             import json, sys
             sys.stdout.reconfigure(encoding="utf-8")
             for line in sys.stdin:
-                print(json.dumps({"id": json.loads(line)["id"], "name": "GPT-5.5（中转）"}, ensure_ascii=False), flush=True)
+                print(json.dumps({"id": json.loads(line)["id"], "name": "GPT-5.5\\uff08\\u4e2d\\u8f6c\\uff09"}, ensure_ascii=False), flush=True)
             """)
         got = agents._rpc([sys.executable, str(s)], [{"id": "1"}], timeout=20)
         self.assertEqual(got["1"]["name"], "GPT-5.5（中转）")
