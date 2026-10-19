@@ -244,6 +244,14 @@ STATE = {"scanned_at": None, "scanning": False, "agents": []}
 _lock = threading.Lock()
 
 
+def wait_scanned(timeout):
+    """Wait up to timeout seconds for a scan under way to end; whether none is under way now."""
+    end = time.time() + timeout
+    while STATE["scanning"] and time.time() < end:
+        time.sleep(0.05)
+    return not STATE["scanning"]
+
+
 def scan(log=None):
     """Find every registered agent, ask the runnable ones for their models. Safe to call from any thread."""
     global _login_path

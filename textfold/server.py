@@ -468,6 +468,9 @@ def listed():
 
 
 def landing_page(jobs):
+    # The agents on this computer are looked for as the server starts, in a second or two: the first page waits that
+    # long for them, so it names the model in use rather than asking for one to be connected
+    agents.wait_scanned(2)
     data = models_payload()
     boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": data["selectedName"] or "",
             "askName": data["askName"], "modelData": data,

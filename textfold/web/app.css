@@ -270,6 +270,8 @@ dialog.settings::backdrop { background: rgba(30, 25, 15, .28); }
 /* landing: no model yet, the ways to connect one */
 .connect { margin-top: 18px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 14px; background: var(--accent-soft); }
 .connect[hidden] { display: none; }
+.connect.cn-wait { background: none; border-color: transparent; padding: 6px 2px; }
+.cn-looking { margin: 0 !important; font-size: 13.5px; color: var(--ink-2); }
 .connect .cn-t { font: 650 16px var(--sans); color: var(--ink); }
 .connect p { margin: 4px 0 12px; font-size: 13.5px; color: var(--ink-2); }
 .cn-ways { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }

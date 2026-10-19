@@ -69,6 +69,7 @@
   const folded = new Set((store.get(FOLDED) || '').split(' ').filter(Boolean));
   let jobs = BOOT.jobs || [];
   let modelName = BOOT.model || '';       // the model generations use, as the settings name it
+  let modelsLooking = !modelName;         // the agents and local services still being looked for (the landing's first refresh)
   let askName = BOOT.askName || '';       // the one questions are answered with, when it is another
   const t = () => I18N.t(uiLang);
   // an item picked in the Zotero library: on the landing it is read there; from a paper's page it goes there to be (?zotero=)
@@ -791,7 +792,12 @@
     const box = document.getElementById('connect');
     if (!box) return;
     box.hidden = !!modelName;
+    box.classList.toggle('cn-wait', !modelName && modelsLooking);
     if (box.hidden) return;
+    if (modelsLooking) {   // no call to connect a model before the ones on this computer are known
+      box.innerHTML = `<p class="cn-looking">${esc(t().cn_looking)}</p>`;
+      return;
+    }
     const T = t(), br = BOOT.bridge || {};
     box.innerHTML = `<div class="cn-t">${esc(T.cn_title)}</div><p>${esc(T.cn_sub)}</p><div class="cn-ways">` +
       `<button type="button" class="primary cn-or">${esc(T.cn_or)}</button>` +
@@ -1382,9 +1388,9 @@
 
   renderSidebar();
   if (landing) refreshModels().then((d) => {
-    modelName = d.selectedName || ''; askName = d.askName || ''; BOOT.bridge = d.bridge;
+    modelName = d.selectedName || ''; askName = d.askName || ''; BOOT.bridge = d.bridge; modelsLooking = false;
     renderSidebar(); renderLanding();
-  }).catch(() => {});
+  }).catch(() => { modelsLooking = false; renderLanding(); });
   // back from OpenRouter's consent page (#or-minted, or #or-failed=why)
   if (location.hash.startsWith('#or-')) {
     const hash = location.hash;
