@@ -23,6 +23,7 @@ import queue
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -30,17 +31,90 @@ from pathlib import Path
 
 HOME = Path.home()
 WIN = os.name == "nt"
-# WorkBuddy's own copy of CodeBuddy, inside the app (its Electron runs it): found before a codebuddy on PATH
-WORKBUDDY_CLI = ([os.path.join(os.environ.get("LOCALAPPDATA") or "~/AppData/Local", "Programs", "WorkBuddy", "resources", "app.asar.unpacked", "cli", "bin"),
-                  os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "WorkBuddy", "resources", "app.asar.unpacked", "cli", "bin")]
-                 if WIN else ["/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin",
-                              "~/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin"])
-# runtime, label, binary, extra directories, can it run a generation here
+MAC = sys.platform == "darwin"
+WORKBUDDY_ID = "com.workbuddy.workbuddy"   # (its bundle id on a Mac)
+WORKBUDDY_MAC = ["/Applications/WorkBuddy.app", "~/Applications/WorkBuddy.app"]
+
+
+def _spotlight(bundle_id):
+    """The apps of that bundle id wherever they are on this Mac (one dragged to Downloads, say), as Spotlight knows."""
+    try:
+        r = subprocess.run(["mdfind", f'kMDItemCFBundleIdentifier == "{bundle_id}"'], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=3, stdin=subprocess.DEVNULL)
+        return [x for x in r.stdout.splitlines() if x.endswith(".app")]
+    except Exception:
+        return []
+
+
+def _installed(name):
+    """Where Windows' installed programs whose name starts with `name` are, as their installers recorded it (the
+    reader may have chosen any folder, D:\\ as well): InstallLocation, else the folder of DisplayIcon or of the
+    uninstaller."""
+    try:
+        import winreg
+    except ImportError:
+        return []
+    out = []
+    for hive, key in ((winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+                      (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+                      (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")):
+        try:
+            root = winreg.OpenKey(hive, key)
+        except OSError:
+            continue
+        for i in range(winreg.QueryInfoKey(root)[0]):
+            try:
+                app = winreg.OpenKey(root, winreg.EnumKey(root, i))
+                values = {}
+                for v in ("DisplayName", "InstallLocation", "DisplayIcon", "UninstallString"):
+                    try:
+                        values[v] = str(winreg.QueryValueEx(app, v)[0] or "")
+                    except OSError:
+                        values[v] = ""
+            except OSError:
+                continue
+            if not values["DisplayName"].lower().startswith(name.lower()):
+                continue
+            place = values["InstallLocation"].strip().strip('"') or next(
+                (d for d in (_folder_of(values["DisplayIcon"]), _folder_of(values["UninstallString"])) if d), "")
+            if place:
+                out.append(place)
+    return out
+
+
+def _folder_of(command):
+    """The folder of the program a registry value names: '"D:\\Apps\\WorkBuddy\\WorkBuddy.exe",0' (an icon),
+    '"D:\\Apps\\WorkBuddy\\Uninstall WorkBuddy.exe" /currentuser' (an uninstaller and its arguments)."""
+    import ntpath
+    s = (command or "").strip()
+    if s.startswith('"'):
+        s = s[1:].split('"', 1)[0]
+    else:
+        m = re.match(r"(?i)(.+?\.exe)\b", s)
+        s = m.group(1) if m else s.split(",")[0]
+    return ntpath.dirname(s.strip())
+
+
+def workbuddy_cli():
+    """The folders WorkBuddy's own copy of CodeBuddy may be in (…/app.asar.unpacked/cli/bin inside the app): the usual
+    places it is installed, then those Windows' installer records or Spotlight knows."""
+    if WIN:
+        roots = [os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "WorkBuddy"),
+                 os.path.join(os.environ.get("ProgramFiles(x86)") or "C:/Program Files (x86)", "WorkBuddy"),
+                 os.path.join(os.environ.get("LOCALAPPDATA") or "~/AppData/Local", "Programs", "WorkBuddy")] + _installed("WorkBuddy")
+        return [os.path.join(r, "resources", "app.asar.unpacked", "cli", "bin") for r in roots]
+    if MAC:
+        apps = WORKBUDDY_MAC + _spotlight(WORKBUDDY_ID)
+        return [os.path.join(a, "Contents", "Resources", "app.asar.unpacked", "cli", "bin") for a in apps]
+    return []
+
+
+# runtime, label, binary, extra directories (or what finds them, at each scan), can it run a generation here
 REGISTRY = [
     ("claude-code", "Claude Code", "claude", ["~/.claude/local"], True),
     ("codex", "Codex", "codex", ["~/.codex/bin"], True),
     ("pi", "Pi", "pi", ["~/.pi/bin"], True),
-    ("codebuddy", "CodeBuddy", "codebuddy", WORKBUDDY_CLI, True),
+    ("codebuddy", "CodeBuddy", "codebuddy", workbuddy_cli, True),
     ("gemini", "Gemini CLI", "gemini", [], False),
     ("qwen", "Qwen Code", "qwen", [], False),
     ("opencode", "opencode", "opencode", ["~/.opencode/bin"], False),
@@ -118,6 +192,7 @@ def child_env():
 
 
 def locate(binary, extra=()):
+    extra = extra() if callable(extra) else extra
     for d in [os.path.expanduser(x) for x in extra] + search_dirs():
         for ext in EXTS:
             f = os.path.join(d, binary + ext)
@@ -136,8 +211,21 @@ def workbuddy_runner(path):
     if p.name != "codebuddy" or len(p.parents) < 5 or [p.parents[i].name for i in range(3)] != ["bin", "cli", "app.asar.unpacked"]:
         return None
     resources = p.parents[3]
-    exe = resources.parent / "WorkBuddy.exe" if WIN else resources.parent / "MacOS" / "Electron"
-    return str(exe) if exe.is_file() else None
+    if WIN:   # (the app's own name, else Electron's, else the one program beside them that is not its uninstaller)
+        root = resources.parent
+        named = [root / "WorkBuddy.exe", root / "Electron.exe"]
+        others = sorted(x for x in root.glob("*.exe") if not re.match(r"(?i)un|update|crash|elevate", x.name))
+        exe = next((x for x in named if x.is_file()), others[0] if len(others) == 1 else None)
+    else:     # <app>/Contents/MacOS/<its CFBundleExecutable>: Electron, for WorkBuddy 5.3
+        contents = resources.parent
+        try:
+            import plistlib
+            with open(contents / "Info.plist", "rb") as fp:
+                name = plistlib.load(fp).get("CFBundleExecutable") or "Electron"
+        except Exception:
+            name = "Electron"
+        exe = contents / "MacOS" / name
+    return str(exe) if exe and exe.is_file() else None
 
 
 # CodeBuddy as WorkBuddy runs it: no memory, no reminders, no suggestions, no repository scan (also ~400 tokens a call

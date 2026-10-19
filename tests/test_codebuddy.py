@@ -9,7 +9,9 @@ Run from the repo root:
 """
 import json
 import os
+import plistlib
 import sys
+import types
 import tempfile
 import textwrap
 import unittest
@@ -147,6 +149,103 @@ class CodeBuddy(unittest.TestCase):
             with self.assertRaises(RuntimeError) as e:
                 agents.run_codebuddy("auto", "Fold this.", {"type": "object"}, "s", None, 30)
         self.assertIn("WorkBuddy is not signed in", str(e.exception))
+
+
+class FakeRegistry(types.ModuleType):
+    """winreg with the uninstall entries given: {hive: {key name: {value: data}}}."""
+    HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE = "HKCU", "HKLM"
+
+    def __init__(self, entries):
+        super().__init__("winreg")
+        self.entries = entries
+
+    def OpenKey(self, parent, sub):
+        if isinstance(parent, str):   # a hive: its Uninstall key (WOW6432Node's is empty)
+            if "WOW6432Node" in sub or parent not in self.entries:
+                raise OSError
+            return ("root", parent)
+        return ("app", parent[1], sub)
+
+    def QueryInfoKey(self, key):
+        return (len(self.entries[key[1]]),)
+
+    def EnumKey(self, key, i):
+        return list(self.entries[key[1]])[i]
+
+    def QueryValueEx(self, key, name):
+        values = self.entries[key[1]][key[2]]
+        if name not in values:
+            raise OSError
+        return values[name], 1
+
+
+class Places(unittest.TestCase):
+    """Where WorkBuddy is: on Windows its usual folders and wherever its installer recorded it (the reader may choose any,
+    on D: as well), the app's own program beside it; on a Mac /Applications, ~/Applications, and wherever Spotlight
+    finds it, the program its Info.plist names."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+    def windows_app(self, root, *exes):
+        cli = root / "resources" / "app.asar.unpacked" / "cli" / "bin" / "codebuddy"
+        cli.parent.mkdir(parents=True)
+        cli.write_text("// CodeBuddy\n", encoding="utf-8")
+        for name in exes:
+            (root / name).write_bytes(b"MZ")
+        return cli
+
+    def test_folders_of_registry_values(self):
+        self.assertEqual(agents._folder_of('"D:\\Apps\\WorkBuddy\\WorkBuddy.exe",0'), "D:\\Apps\\WorkBuddy")
+        self.assertEqual(agents._folder_of("D:\\Apps\\WorkBuddy\\WorkBuddy.exe,0"), "D:\\Apps\\WorkBuddy")
+        self.assertEqual(agents._folder_of('"C:\\Program Files\\WorkBuddy\\Uninstall WorkBuddy.exe" /currentuser'), "C:\\Program Files\\WorkBuddy")
+        self.assertEqual(agents._folder_of(""), "")
+
+    def test_windows_wherever_it_was_installed(self):
+        reg = FakeRegistry({"HKCU": {"{abc}": {"DisplayName": "WorkBuddy 5.3.14", "DisplayIcon": '"D:\\Apps\\WorkBuddy\\WorkBuddy.exe",0'},
+                                     "{def}": {"DisplayName": "Another app", "InstallLocation": "E:\\Other"}},
+                            "HKLM": {"WorkBuddy": {"DisplayName": "WorkBuddy", "InstallLocation": '"C:\\Program Files\\WorkBuddy"'}}})
+        with mock.patch.dict(sys.modules, {"winreg": reg}):
+            self.assertEqual(agents._installed("WorkBuddy"), ["D:\\Apps\\WorkBuddy", "C:\\Program Files\\WorkBuddy"])
+        env = {"ProgramFiles": str(self.tmp / "PF"), "ProgramFiles(x86)": str(self.tmp / "PF86"), "LOCALAPPDATA": str(self.tmp / "LAD")}
+        with mock.patch.object(agents, "WIN", True), mock.patch.object(agents, "MAC", False), mock.patch.dict(os.environ, env), \
+                mock.patch.object(agents, "_installed", return_value=[str(self.tmp / "D" / "Apps" / "WorkBuddy")]):
+            dirs = agents.workbuddy_cli()
+        tail = os.path.join("resources", "app.asar.unpacked", "cli", "bin")
+        self.assertEqual(dirs, [os.path.join(str(self.tmp / x), tail) for x in ("PF/WorkBuddy", "PF86/WorkBuddy", "LAD/Programs/WorkBuddy", "D/Apps/WorkBuddy")])
+
+    def test_windows_the_program_that_runs_it(self):
+        with mock.patch.object(agents, "WIN", True):
+            for exes, want in ((["WorkBuddy.exe", "Uninstall WorkBuddy.exe"], "WorkBuddy.exe"), (["Electron.exe"], "Electron.exe"),
+                               (["WorkBuddyApp.exe", "Uninstall WorkBuddy.exe", "Update.exe"], "WorkBuddyApp.exe"),
+                               (["One.exe", "Two.exe"], None), ([], None)):
+                root = self.tmp / f"wb{len(list(self.tmp.iterdir()))}"
+                cli = self.windows_app(root, *exes)
+                self.assertEqual(agents.workbuddy_runner(str(cli)), str(root / want) if want else None, exes)
+            # a script with no .cmd beside it is found where the app's program runs it
+            cli = self.windows_app(self.tmp / "D" / "WorkBuddy", "WorkBuddy.exe")
+            with mock.patch.object(agents, "EXTS", (".exe", ".cmd", ".bat")), mock.patch.object(agents, "search_dirs", return_value=[]):
+                self.assertEqual(agents.locate("codebuddy", lambda: [str(cli.parent)]), str(cli))
+                self.assertIsNone(agents.locate("codebuddy", lambda: [str(self.tmp / "nowhere")]))
+
+    def test_a_mac_app_wherever_spotlight_finds_it(self):
+        app = self.tmp / "Downloads" / "WorkBuddy.app"
+        cli = app / "Contents" / "Resources" / "app.asar.unpacked" / "cli" / "bin" / "codebuddy"
+        cli.parent.mkdir(parents=True)
+        cli.write_text("// CodeBuddy\n", encoding="utf-8")
+        cli.chmod(0o755)
+        (app / "Contents" / "MacOS").mkdir(parents=True)
+        (app / "Contents" / "MacOS" / "WorkBuddy").write_bytes(b"")
+        with open(app / "Contents" / "Info.plist", "wb") as fp:
+            plistlib.dump({"CFBundleExecutable": "WorkBuddy", "CFBundleIdentifier": agents.WORKBUDDY_ID}, fp)
+        with mock.patch.object(agents, "WIN", False), mock.patch.object(agents, "MAC", True), \
+                mock.patch.object(agents, "_spotlight", return_value=[str(app)]), mock.patch.object(agents, "search_dirs", return_value=[]), \
+                mock.patch.object(agents, "EXTS", ("",)), mock.patch.object(agents, "WORKBUDDY_MAC", []):
+            found = agents.locate("codebuddy", agents.workbuddy_cli)
+            self.assertEqual(found, str(cli))
+            self.assertEqual(agents.workbuddy_runner(found), str(app / "Contents" / "MacOS" / "WorkBuddy"))
 
 
 class Ids(unittest.TestCase):
