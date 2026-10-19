@@ -95,18 +95,81 @@ def _folder_of(command):
     return ntpath.dirname(s.strip())
 
 
-def workbuddy_cli():
-    """The folders WorkBuddy's own copy of CodeBuddy may be in (…/app.asar.unpacked/cli/bin inside the app): the usual
-    places it is installed, then those Windows' installer records or Spotlight knows."""
+def _running_workbuddy():
+    """The WorkBuddy apps running now (a Mac's .app, Windows' install folder), as the system lists their programs: open,
+    WorkBuddy says itself where it is, whatever folder it was put in."""
     if WIN:
-        roots = [os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "WorkBuddy"),
-                 os.path.join(os.environ.get("ProgramFiles(x86)") or "C:/Program Files (x86)", "WorkBuddy"),
-                 os.path.join(os.environ.get("LOCALAPPDATA") or "~/AppData/Local", "Programs", "WorkBuddy")] + _installed("WorkBuddy")
-        return [os.path.join(r, "resources", "app.asar.unpacked", "cli", "bin") for r in roots]
-    if MAC:
-        apps = WORKBUDDY_MAC + _spotlight(WORKBUDDY_ID)
-        return [os.path.join(a, "Contents", "Resources", "app.asar.unpacked", "cli", "bin") for a in apps]
-    return []
+        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+               "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like '*WorkBuddy*' } | ForEach-Object { $_.ExecutablePath }"]
+    else:
+        cmd = ["ps", "-axo", "comm="]   # (each process's program, its whole path: spaces in it stay)
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=6, stdin=subprocess.DEVNULL)
+    except Exception:
+        return []
+    return _apps_in(r.stdout)
+
+
+def _apps_in(listing):
+    """The WorkBuddy apps a list of program paths names, one a line: on a Mac the outermost .app of each ("/Applications/
+    WorkBuddy.app/Contents/Frameworks/WorkBuddy Helper (GPU).app/…" is WorkBuddy.app) when it is WorkBuddy's, on
+    Windows the folder of each program."""
+    import ntpath
+    out = []
+    for line in listing.splitlines():
+        line = line.strip().strip('"')
+        if "workbuddy" not in line.lower():
+            continue
+        if WIN:
+            out.append(ntpath.dirname(line))
+        else:
+            i = line.find(".app/")
+            app = line[:i + 4] if i > 0 else ""
+            if "workbuddy" in Path(app).name.lower():
+                out.append(app)
+    return list(dict.fromkeys(x for x in out if x))
+
+
+def workbuddy_roots():
+    """Where WorkBuddy may be: the one running, its usual places, then those Windows' installer recorded (the reader may
+    choose any folder, D:\\ as well) or Spotlight knows (an app dragged to Downloads, say)."""
+    if WIN:
+        places = [os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "WorkBuddy"),
+                  os.path.join(os.environ.get("ProgramFiles(x86)") or "C:/Program Files (x86)", "WorkBuddy"),
+                  os.path.join(os.environ.get("LOCALAPPDATA") or "~/AppData/Local", "Programs", "WorkBuddy")] + _installed("WorkBuddy")
+    elif MAC:
+        places = WORKBUDDY_MAC + _spotlight(WORKBUDDY_ID)
+    else:
+        places = []
+    out = []
+    for r in _running_workbuddy() + places:
+        r = os.path.expanduser(r)
+        if r not in out and os.path.isdir(r):
+            out.append(r)
+    return out
+
+
+CLI_AT = ("Contents/Resources/app.asar.unpacked/cli/bin/codebuddy", "resources/app.asar.unpacked/cli/bin/codebuddy")
+SKIP = {"node_modules", ".git", "locales", "Frameworks", "_CodeSignature", "vendor", "wasm"}
+
+
+def find_cli(root):
+    """CodeBuddy inside a WorkBuddy app: where WorkBuddy 5.3 keeps it (CLI_AT), else wherever a codebuddy sits in a bin
+    folder of the app's resources, should a later version move it (node_modules and the like not looked through)."""
+    root = Path(root)
+    for rel in CLI_AT:
+        if (root / rel).is_file():
+            return [str(root / rel)]
+    found = []
+    for base in (root / "Contents" / "Resources", root / "resources"):
+        if not base.is_dir():
+            continue
+        for d, dirs, files in os.walk(base):
+            deep = len(Path(d).relative_to(base).parts)
+            dirs[:] = [x for x in dirs if x not in SKIP and not x.endswith((".lproj", ".app", ".framework"))] if deep < 6 else []
+            if Path(d).name == "bin":
+                found += [os.path.join(d, n) for n in sorted(files) if n in ("codebuddy", "codebuddy.js", "codebuddy.exe")]
+    return sorted(found, key=lambda p: ("cli" not in Path(p).parts, len(p)))
 
 
 # runtime, label, binary, extra directories (or what finds them, at each scan), can it run a generation here
@@ -114,7 +177,7 @@ REGISTRY = [
     ("claude-code", "Claude Code", "claude", ["~/.claude/local"], True),
     ("codex", "Codex", "codex", ["~/.codex/bin"], True),
     ("pi", "Pi", "pi", ["~/.pi/bin"], True),
-    ("codebuddy", "CodeBuddy", "codebuddy", workbuddy_cli, True),
+    ("codebuddy", "CodeBuddy", "codebuddy", [], True),   # (WorkBuddy's copy first: locate_codebuddy)
     ("gemini", "Gemini CLI", "gemini", [], False),
     ("qwen", "Qwen Code", "qwen", [], False),
     ("opencode", "opencode", "opencode", ["~/.opencode/bin"], False),
@@ -192,40 +255,51 @@ def child_env():
 
 
 def locate(binary, extra=()):
-    extra = extra() if callable(extra) else extra
     for d in [os.path.expanduser(x) for x in extra] + search_dirs():
         for ext in EXTS:
             f = os.path.join(d, binary + ext)
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 return f
-        f = os.path.join(d, binary)
-        if WIN and os.path.isfile(f) and workbuddy_runner(f):   # (a script there, no .cmd beside it: the app's Electron runs it)
-            return f
     return None
 
 
+def workbuddy_app(path):
+    """The WorkBuddy app a CodeBuddy found at `path` is part of, and the app's own program: (folder, program), or None
+    for a codebuddy installed on its own. A Mac's: the .app it is in, the program its Info.plist names (Electron, for
+    WorkBuddy 5.3); Windows': the folder of resources/ it is in, WorkBuddy.exe or Electron.exe there, else the one
+    program there that is not an uninstaller or an updater."""
+    for a in Path(path).parents:
+        if not WIN and a.suffix == ".app":
+            try:
+                import plistlib
+                with open(a / "Contents" / "Info.plist", "rb") as fp:
+                    info = plistlib.load(fp)
+            except Exception:
+                info = {}
+            exe = a / "Contents" / "MacOS" / (info.get("CFBundleExecutable") or "Electron")
+            ours = info.get("CFBundleIdentifier") == WORKBUDDY_ID or "workbuddy" in a.name.lower()
+            return (str(a), str(exe)) if ours and exe.is_file() else None
+        if WIN and (a / "resources").is_dir():
+            named = [a / "WorkBuddy.exe", a / "Electron.exe"]
+            others = sorted(x for x in a.glob("*.exe") if not re.match(r"(?i)un|update|crash|elevate", x.name))
+            exe = next((x for x in named if x.is_file()), others[0] if len(others) == 1 else None)
+            ours = (a / "WorkBuddy.exe").is_file() or "workbuddy" in str(a).lower()
+            return (str(a), str(exe)) if ours and exe else None
+    return None
+
+
+_BY_NODE = {}   # WorkBuddy copies its app's program would not run (a later version, say), run by node instead
+
+
 def workbuddy_runner(path):
-    """The Electron that runs WorkBuddy's own copy of CodeBuddy found at `path` (<app>/…/app.asar.unpacked/cli/bin/
-    codebuddy), or None: a codebuddy installed on its own runs as it is."""
-    p = Path(path)
-    if p.name != "codebuddy" or len(p.parents) < 5 or [p.parents[i].name for i in range(3)] != ["bin", "cli", "app.asar.unpacked"]:
+    """What runs WorkBuddy's copy of CodeBuddy found at `path`: the app's program as node (as WorkBuddy runs it), node
+    where that did not; None for a codebuddy that runs itself (one installed on its own, a native one)."""
+    if Path(path).name not in ("codebuddy", "codebuddy.js"):
         return None
-    resources = p.parents[3]
-    if WIN:   # (the app's own name, else Electron's, else the one program beside them that is not its uninstaller)
-        root = resources.parent
-        named = [root / "WorkBuddy.exe", root / "Electron.exe"]
-        others = sorted(x for x in root.glob("*.exe") if not re.match(r"(?i)un|update|crash|elevate", x.name))
-        exe = next((x for x in named if x.is_file()), others[0] if len(others) == 1 else None)
-    else:     # <app>/Contents/MacOS/<its CFBundleExecutable>: Electron, for WorkBuddy 5.3
-        contents = resources.parent
-        try:
-            import plistlib
-            with open(contents / "Info.plist", "rb") as fp:
-                name = plistlib.load(fp).get("CFBundleExecutable") or "Electron"
-        except Exception:
-            name = "Electron"
-        exe = contents / "MacOS" / name
-    return str(exe) if exe and exe.is_file() else None
+    if path in _BY_NODE:
+        return _BY_NODE[path]
+    app = workbuddy_app(path)
+    return app[1] if app else None
 
 
 # CodeBuddy as WorkBuddy runs it: no memory, no reminders, no suggestions, no repository scan (also ~400 tokens a call
@@ -243,8 +317,8 @@ def env_for(path):
     env = child_env()
     if path and Path(path).name.split(".")[0] == "codebuddy":
         env.update(CODEBUDDY_QUIET)
-        if workbuddy_runner(path):
-            env["ELECTRON_RUN_AS_NODE"] = "1"
+        if workbuddy_app(path):
+            env["ELECTRON_RUN_AS_NODE"] = "1"   # (Electron's own switch; node does not mind it)
             conf = Path(os.environ.get("WORKBUDDY_CONFIG_DIR") or HOME / ".workbuddy")
             if conf.is_dir():
                 env["CODEBUDDY_CONFIG_DIR"] = str(conf)
@@ -289,6 +363,36 @@ def _help_levels(path, flag, pattern):
         return []
     m = re.search(pattern, text, re.S)
     return [x.strip() for x in m.group(1).split(",") if x.strip()] if m else []
+
+
+def codebuddy_candidates():
+    """WorkBuddy's copies of CodeBuddy, wherever WorkBuddy is, then one installed on its own (npm's)."""
+    out = [c for r in workbuddy_roots() for c in find_cli(r)] + [locate("codebuddy")]
+    return list(dict.fromkeys(c for c in out if c))
+
+
+def _runs(path):
+    """Does the CodeBuddy at `path` answer --version? WorkBuddy's copy on the app's program first, else on node."""
+    def ok(args):
+        try:
+            r = _run(args, 10, env_for(path))
+            return r.returncode == 0 and bool(re.search(r"\d+\.\d+", r.stdout))
+        except Exception:
+            return False
+    if ok([*argv(path), "--version"]):
+        return True
+    node = shutil.which("node", path=os.pathsep.join(search_dirs()))
+    if node and workbuddy_app(path) and path not in _BY_NODE:
+        _BY_NODE[path] = node
+        if ok([node, path, "--version"]):
+            return True
+        _BY_NODE.pop(path, None)
+    return False
+
+
+def locate_codebuddy():
+    """The first CodeBuddy that runs: WorkBuddy's own, else one installed on its own; None when none does."""
+    return next((c for c in codebuddy_candidates() if _runs(c)), None)
 
 
 # ── catalogs ──────────────────────────────────────────────────────────
@@ -389,7 +493,7 @@ def _codebuddy_models(path):
     names = [x.strip() for x in m.group(1).split(",") if x.strip()] if m else ["auto"]
     e = re.search(r"--effort <level>.*?\(([^)]*)\)", text, re.S)
     efforts = [x.strip() for x in e.group(1).split(",") if x.strip()] if e else []
-    who = "WorkBuddy" if workbuddy_runner(path) else "CodeBuddy"
+    who = "WorkBuddy" if workbuddy_app(path) else "CodeBuddy"
     return [{"id": f"codebuddy/codebuddy/{n}", "name": f"{who} · {'Auto' if n == 'auto' else n}", "runtime": "codebuddy",
              "model": n, "efforts": efforts, "defaultEffort": None} for n in names]
 
@@ -418,7 +522,8 @@ def scan(log=None):
         found, seen = [], {}
         for runtime, label, binary, extra, runnable in REGISTRY:
             # TEXTFOLD_NO_MODELS=1: none looked for (a test server, a CI run: nothing calls a model by accident)
-            path = None if os.environ.get("TEXTFOLD_NO_MODELS") else locate(binary, extra)
+            path = None if os.environ.get("TEXTFOLD_NO_MODELS") else (
+                locate_codebuddy() if runtime == "codebuddy" else locate(binary, extra))
             row = {"runtime": runtime, "label": label, "binary": binary, "path": path, "runnable": runnable,
                    "version": None, "models": [], "error": None}
             if path:
@@ -427,7 +532,7 @@ def scan(log=None):
                     row.update(path=None, error=f"same program as {seen[real]}")
                 else:
                     seen[real] = label
-                    if runtime == "codebuddy" and workbuddy_runner(path):
+                    if runtime == "codebuddy" and workbuddy_app(path):
                         row["label"] = "WorkBuddy"   # (its copy of CodeBuddy, on the WorkBuddy sign-in)
                     try:
                         out = _run([*argv(path), "--version"], 8, env_for(path))
@@ -460,6 +565,8 @@ def path_of(runtime):
     a = next((a for a in STATE["agents"] if a["runtime"] == runtime and a["path"]), None)
     if a:
         return a["path"]
+    if runtime == "codebuddy":
+        return locate_codebuddy()
     binary, extra = next((r[2], r[3]) for r in REGISTRY if r[0] == runtime)
     return locate(binary, extra)
 
@@ -546,13 +653,18 @@ def run_codebuddy(model, prompt, schema, system, effort, timeout):
             "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
     if effort:
         args += ["--effort", "minimal" if effort == "off" else effort]   # (no level off: the least)
+    env = env_for(path)
+    signed_out = lambda r: "Authentication required" in r.stdout + r.stderr   # (it says so at once, exit 0, and does not wait)
     with tempfile.TemporaryDirectory() as tmp:   # a scratch cwd: no project, nothing to read
         r = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                           timeout=timeout, env=env_for(path), cwd=tmp)
+                           timeout=timeout, env=env, cwd=tmp)
+        if signed_out(r) and env.pop("CODEBUDDY_CONFIG_DIR", None):   # not in WorkBuddy's settings: CodeBuddy's own sign-in
+            r = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=timeout, env=env, cwd=tmp)
     said = (r.stderr or r.stdout)[-800:]
-    if "Authentication required" in r.stdout + r.stderr:   # (it says so at once, exit 0, and does not wait)
+    if signed_out(r):
         raise RuntimeError("WorkBuddy is not signed in: open WorkBuddy and sign in (WorkBuddy 没有登录：打开 WorkBuddy 登录)"
-                           if workbuddy_runner(path) else "CodeBuddy is not signed in: run codebuddy once and use /login")
+                           if workbuddy_app(path) else "CodeBuddy is not signed in: run codebuddy once and use /login")
     try:
         got = json.loads(r.stdout)
     except ValueError:

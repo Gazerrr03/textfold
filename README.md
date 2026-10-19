@@ -134,7 +134,7 @@ TextFold uses a model you already have, and there is no account to create. It lo
 
 | You have | What to do |
 |---|---|
-| Claude Code, Codex, Pi or WorkBuddy | Nothing. TextFold finds it and uses it (WorkBuddy's models, on your WorkBuddy sign-in). |
+| Claude Code, Codex, Pi or WorkBuddy | Nothing. TextFold finds it and uses it. WorkBuddy (experimental) brings its models, on your WorkBuddy sign-in; CodeBuddy's own CLI works too. |
 | A ChatGPT plan | Click **Use my ChatGPT plan**. A small bridge starts on your computer and signs in with your account (needs Node.js). |
 | Nothing yet | Click **OpenRouter in one click**. Authorize once, and free models are ready. |
 | An API key | **Settings › Add provider**: Anthropic, OpenAI, DeepSeek, Qwen, Zhipu GLM, Kimi, MiniMax, Google, Ollama, or any OpenAI-compatible endpoint. |

@@ -80,7 +80,11 @@ Models (⚙ Model & API), ported from ThoughtDAG's model access:
   to sign in). CodeBuddy is called the same way, but with its user settings (without them it has no sign-in and
   waits), `--tools StructuredOutput` (the one tool its structured output needs) and WorkBuddy's quiet switches (no
   memory, no reminders: ~400 tokens of its own a call); WorkBuddy's copy runs on the app's Electron as node, with
-  WorkBuddy's settings folder, as WorkBuddy runs it (`agents.env_for`).
+  WorkBuddy's settings folder, as WorkBuddy runs it (`agents.env_for`). WorkBuddy's copy is not a documented way in,
+  so it is looked for widely and checked (`agents.locate_codebuddy`): WorkBuddy where it runs (the process list), its
+  usual places, where Windows' installer recorded it or a Mac's Spotlight knows it; CodeBuddy inside it by name; the
+  first copy that answers `--version` (on the app's program, else on node), else a codebuddy installed on its own;
+  CodeBuddy's own sign-in when WorkBuddy's settings have none.
 - **Two easy ways in** (`textfold/bridges.py`, as in ThoughtDAG):
   - **ChatGPT plan, local bridge**: openai-oauth (npm) serves the plan as an OpenAI-compatible endpoint on
     127.0.0.1:10531, signed in with Codex's login (or a browser sign-in). Running, it joins the providers on its own
