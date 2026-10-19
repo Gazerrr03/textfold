@@ -277,6 +277,7 @@ Commits, one logical change each, all gates green per commit:
 | `8dd3221` | P6 README contracts | every documented key/grep checked against the code |
 | `07dbbfb` | P5-fix install-smoke cwd + foldable prompt (fix-forward) | base/digits/resume install smoke exit 0 on plain pi |
 | `1b73c78` | taught keys: `/fold calibrate` + `/fold keys` + `keys.ts` (any keyboard, no layout table) | 63 tests · tsc clean · live teach probe exit 0 (real pi TTY: overlay → AZERTY-style `ESC+& 2 ESC+' 4 ESC+(` → saved file + `Saved` notify → learned keys fold same-session after reload → fresh process folds from the file alone); S1–S6 battery PASS |
+| (this commit) | first-run welcome + taught hints: one `session_start` notice naming the terminal-eats-Alt check and `/fold calibrate` (marker file, once ever; skipped when keys are taught or the branch folds); row/panel hints name the taught glyphs | 71 tests · tsc clean |
 
 Acceptance: § 9.1–7 all hold — 54 tests ≥ 46 floor, harness self-sufficient
 (installed pi + Node 22 coded in), the checkpoint path **proven** by an injected

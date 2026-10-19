@@ -24,7 +24,7 @@ Hold Alt and type the digit, or type `/fold` and a level: `/fold 3`, `/fold poin
 
 **Why Alt.** Pi hands every key to its extensions before the prompt sees it, so a bare digit would never reach what you type.
 
-**Any keyboard.** On most non-US layouts Alt+1…5 arrives as Alt plus a glyph (Alt+&, Alt+é, …), so the table above would bind nothing. `/fold calibrate` teaches the extension your own five keys — what you press is what it binds, on any layout Pi can name a key for. The teaching is kept in `~/.pi/agent/textfold-keys.json` and takes effect at once; `/fold keys` shows what is bound.
+**Any keyboard.** On most non-US layouts Alt+1…5 arrives as Alt plus a glyph (Alt+&, Alt+é, …), so the table above would bind nothing. `/fold calibrate` teaches the extension your own five keys — what you press is what it binds, on any layout Pi can name a key for. The teaching is kept in `~/.pi/agent/textfold-keys.json` and takes effect at once; `/fold keys` shows what is bound, and the row and panel name the taught keys once they exist. On your first session Pi also says this once: if Alt+3 folds nothing, your terminal is likely eating Alt+numbers (in GNOME Terminal: Preferences → Shortcuts, disable Switch to Tab) — then teach your keys.
 
 ## Why you can trust a fold
 
