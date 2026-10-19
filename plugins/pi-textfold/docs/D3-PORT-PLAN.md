@@ -1,0 +1,255 @@
+# TextFold for Pi — D3 port: detailed implementation plan
+
+**Status: PLAN ONLY — no implementation starts from this file until it is approved.**
+Revised after a critical audit of the first draft (corrections listed in § 10).
+
+Ports C1 (level persistence + restore), C2 (`--textfold-digits` digit-guard) and the fold-preview
+panel onto **origin/main's refactored** plugin (the maintainer's level-row design). The goal is
+"best of all worlds": keep upstream's UI and file organization, add only the behaviors upstream
+lacks. Every pi-API assumption was verified live on pi 1.3.0 before this plan was written
+(§ 3 — including one hypothesis the first draft wrongly claimed as verified, see VH6).
+
+- Working repo: `/tmp/textfold` (branch `pi-textfold`, base is 23 commits behind `origin/main`)
+- Upstream: `origin/main` = `https://github.com/chenxiachan/textfold.git`
+- Installed pi: 1.3.0 at `~/.npm-global/.../pi-coding-agent/dist/bundle/cli.js`, Node 22
+  (`export PATH="$HOME/.local/node22/bin:$PATH"` required by every gate)
+- Durations in § 5 measured 2026-10-19 on this machine
+
+---
+
+## 1. Current state (the two sides being merged)
+
+| | origin/main `plugins/pi-textfold` | branch `pi-textfold` (5 commits) |
+|---|---|---|
+| UI | `extension/level.ts`: mod-style **row above the prompt**; themed factory widget, `placement:"aboveEditor"`; `screen.invalidate()` + `requestRender(true)` redraws the whole screen on a level change | `extension/panel.ts`: self-rendered `TextFold · N` panel widget (default placement) |
+| Persistence (C1) | **none** — a restart starts at Full | `extension/persist.ts`: `appendEntry("textfold-level", {level})` on change; `sessionManager.getBranch()` scan on `session_start`, last valid wins, corrupt entries skipped |
+| Digit-guard (C2) | **none** | `extension/guard.ts` pure decision + registration deferred to `session_start` (persistent `digitKeysRegistered` guard) |
+| Fold marker wording | `Points · 40 of 240 words · Alt+1 unfolds` | `(folded: 40 of 240 words · Alt+1 unfolds)` |
+| `fold.ts` | identical (blob-equal) | identical |
+| Tests | few | 46 unit tests (vitest), tui_smoke S1–S6, s6_probe, pi_install_smoke |
+
+Branch commits ahead of old base: `c632389` (extension), `2ee6aab` (plan+preflight),
+`e6dc8f1` (C1), `d53e26a` (restore panel), `a31d0bd` (C2). Working tree clean except untracked
+`pull-request.md` (out of scope here).
+
+## 2. Target design (D3)
+
+On a fresh branch **`d3-port` created at a recorded `origin/main` sha** (§ 8) the file set is
+exactly upstream's plus three modules brought over:
+
+```
+plugins/pi-textfold/
+  extension/index.ts        rewritten: upstream's structure + 4 wiring additions (§ 2.1)
+  extension/fold.ts         untouched (blob-identical already)
+  extension/level.ts        untouched (the row, /fold parser, Level type)
+  extension/persist.ts      added from branch as-is (C1)
+  extension/guard.ts        added from branch as-is (C2)
+  extension/panel.ts        adapted: same foldPanelLines/wrap logic; imports Level from ./level;
+                            typed against the 1.3.0 ExtensionContext ui surface
+  package.json / tsconfig.json / tests/  upstream base + our test files (§ 2.2)
+  tests/*.test.ts           wiring/persist/guard/panel tests, retargeted to the new index
+  tests/tui_smoke.py        upstream base + S6 digits stage + checkpointing (§ 6)
+  tests/s6_probe.py         added (single-stage digits probe)
+  tests/pi_install_smoke.py added (README-flow probe)
+  scripts/check-pi-api.py   added (S0b preflight)
+  docs/                     this plan, updated IMPLEMENTATION-PLAN
+```
+
+### 2.1 Wiring additions to (otherwise upstream-shaped) `index.ts`
+
+1. **`session_start` does three things in order:** install the row (upstream's job, keep), scan
+   `getBranch()` for the restored level and set it **before** `install()` renders the row
+   closure reads `level` at render time, so order is safe, but restore-then-install keeps the
+   first paint correct), and — once, guarded by a module-level flag — register digit shortcuts
+   when `pi.getFlag("textfold-digits") === true` (C2). Restore never writes an entry.
+2. **`apply()` gains `appendEntry` (try/catch, debug-tapped on failure)** between setting
+   `level` and the redraw. Nothing else changes; dedupe on equal level stays.
+3. **`apply()` gains a notify** `Fold: ${levelName(next)}` (same position as the branch's) and
+   **restore gains one** `TextFold level restored: ${levelName(restored)}, so level changes are
+   human-evident even though the row already marks the level (no notify exists upstream).
+4. **The panel** installs as a second widget under key `textfold-preview` (default placement),
+   refreshed from `message_end` and from `apply()`, rendered with **upstream's marker wording**
+   (`Points · 40 of 240 words · Alt+1 unfolds`) so row and fold speak the same dialect.
+
+### 2.2 Documented behavior changes the port carries (test expectations change with them)
+
+- Transformer/panel marker wording switches from `(folded: N of M words · Alt+1 unfolds)` to
+  upstream's `· N of M words · Alt+1 unfolds` format. All tests asserting the old string are
+  updated in the same commit that introduces the new one — no assertion is deleted silently.
+- Upstream's footer word order and panel content are unified; the panel's pre-reply state
+  (fold of an empty string) still renders header + `…`.
+
+**Decision log** (why alternatives lost):
+- *D1 upstream-without-panel* — viable (all row-side hypotheses verified) but drops the
+  before-any-reply fold preview, which our S3/S5 evidence shows is the durable restore
+  indicator. Kept as the fallback if the maintainer rejects the second widget.
+- *Rebase the old branch* — rejected: `index.ts`/`level.ts`/`panel.ts` were restructured
+  upstream; cherry-picks would tear apart cleanly separable behaviors. A fresh branch with
+  re-typed modules produces the cleanest atomic history.
+- *Upstream's no-notify minimalism* — rejected for level changes: silent level switching, with
+  feedback only in a themed row, hides state from a new reader; a notify costs nothing and
+  matches both our C1 tests and the mod's UX. Errors keep upstream's `notify(..., "warning")`.
+
+## 3. Verified-evidence matrix (nothing rests on an unverified API)
+
+| # | Hypothesis | Verified how (2026-10-19, pi 1.3.0) |
+|---|---|---|
+| VH1 | upstream plugin loads & row renders clean | live pty, `HOME=/tmp/fakehome --no-extensions -e` (clean startup, row text present) |
+| VH2 | `invalidate()+requestRender(true)` re-folds earlier replies, no model call | live pty: one reply, level changes → `Points · 40 of 240` then `Outline · 14 of 240` in one session |
+| VH3 | C1 needs only `appendEntry` + `getBranch` | live twice: battery S5 + `pi --session <dashed-prefix>` resume on the **installed package** |
+| VH4 | digit-guard needs registration at `session_start` (flag commits after factory) | live twice (branch + installed); root cause debugged in the pi debug tap |
+| VH5 | `aboveEditor` factory widget + default-placement string widget compose | live pty, throwaway `/tmp/verify-comp/comp.ts` |
+| **VH6** | **`message_end` still fires on 1.3.0 and our panel's content actually refreshes from the reply** | **not yet verified — the batteries only ever asserted the panel's header presence, never content from a reply. First-class hypothesis, verified in P3's gate before P3 commits (§ 5).** |
+| VH7 | session lookup matches the **session-file name prefix, dashes significant** | recorded finding: dashed prefix `01a152f8-928` resumed fine in the same battery run; a same-digits dashless prefix failed `No session found`. Full uuid is therefore still the safe form used everywhere (§ 7). |
+
+## 4. Atomic commit plan (each commit: compiles, tests green, tsc clean, no dead code)
+
+Commit messages follow the repo's sentence style (`Pi: …`), author identity `JL <josephxlam@gmail.com>`.
+
+Every commit's gate uses `set -o pipefail` and captures exit codes; a failing gate means
+fix-forward in the same commit or split the commit.
+
+| # | Commit (one logical change) | Contents | Gate commands (must pass in-commit) | Budget |
+|---|---|---|---|---|
+| P0 | `Pi: the D3 port plan` | this file (docs only) | none (doc-only) | — |
+| P0b | branch scaffolding, **no code**: `git fetch origin; BASE=$(git rev-parse origin/main)` recorded in the plan log; `git checkout -b d3-port "$BASE"; npm ci` inside the plugin; run `scripts/check-pi-api.py` (S0b) | no repo change to pi behavior; scaffolding recorded | S0b exit 0 on the **features the port needs** (`registerFlag`, `appendEntry`, `getEditorText/setEditorText`, `setWidget` placement option) — rerun **before P1**, not assumed from the old branch | 1–2 min |
+| P1 | `Pi: the fold level survives a restart (C1 level-row port)` | `persist.ts` + `persist.test.ts` + `session_start` (install + restore) wiring + restore assertions added to `wiring.test.ts`; no guard, no panel yet | unit (`npx vitest run` + `npx tsc --noEmit`, ≤ 3 s); live C1 probe **with real HOME and `--no-extensions -e`** because restore needs a materialized session, and a session only materializes after a real user turn (§ 5, V-restore) | unit+scaffold ≤ 5 s; live ≈ 60 s (one short model turn) |
+| P2 | `Pi: plain digits fold an empty prompt and are reinserted while typing (C2 level-row port)` | `guard.ts` + `guard.test.ts` + `registerFlag` + lazy registration + wiring tests | unit; live S6 probe (`python3 tests/s6_probe.py`, exit 0) | unit ≤ 3 s; S6 ≈ 40 s |
+| P3 | `Pi: the preview panel shows the fold before any reply` | `panel.ts` adapted + `panel.test.ts` + `message_end`/`apply` wiring + **VH6 verification**: a probe with one real reply asserting the panel's *content* (not only its header) changes | unit; live panel probe ≈ 60 s (model turn + level change + assertion on panel content and both widgets coexisting) | unit ≤ 3 s; live ≈ 60 s |
+| P4 | `Pi: the smoke battery runs every stage with checkpoint and resume` | `tui_smoke.py` rebased onto upstream wording + S6 stage + § 6 checkpoint/resume + `tests/ansiclean.py` (OS-level shared test infra, no product behavior) | full battery, `TEXTFOLD_SMOKE_STAGES` default all + **one injected mid-run kill → resume** proves the checkpoint path (acceptance § 9.3) | ≈ 70–95 s + one resume ≈ 50 s |
+| P5 | `Pi: probes and the API preflight are part of the harness` | `tests/s6_probe.py`, `tests/pi_install_smoke.py`, `scripts/check-pi-api.py` as committed artifacts of the verification story | scripts syntax-check (`python3 -m py_compile`), S0b rerun | ≤ 5 s each |
+| P6 | `Pi: the README contracts exactly the keys the harness proves` | plugin README table (Alt keys, `/fold`, `--textfold-digits`, pre-reply panel), IMPLEMENTATION-PLAN updated/strike-through; docs-name-only-verified-behaviors check | docs-only; grep that every documented string/key exists in code or tests | < 5 s |
+| P7 | no commit: install stage — `pi remove` the current path source, then `pi install <abs path to d3-port worktree>/plugins/pi-textfold`; recorded in the plan log only (user-config churn happens once, last) | config only | `python3 tests/pi_install_smoke.py` exit 0 + `pi list` | ≈ 60 s |
+
+Rules: no commit mixes product modules; a behavior lands **with its tests**; wording changes
+land with the tests' wording updates (§ 2.2); fix-forward or split, never skip.
+
+## 5. Verification matrix (what "done" requires beyond unit tests)
+
+| Check | Interface exercised | Pass condition | Measured |
+|---|---|---|---|
+| V-restore | `pi --session <uuid>` (VH7: dash-consistent prefix; **full uuid everywhere**) | under real HOME: row marks restored level; notify present; no entry appended on restore | 3.3 s stage + model turn to materialize the session |
+| V-folds | one live model reply (S2) | ≥ 4 fold renders with upstream `· N of M words` markers | 13–26 s |
+| V-digits | `pi --textfold-digits` (installed or `-e`) | `ab 4` reinserts; ctrl+c then `3` → row marks Points; alt keys unaffected | 18.5 s stage |
+| V-composition | both widgets one session | row **and** panel visible simultaneously; both update on one keypress | probe ≈ 45 s |
+| **V-panel-content (VH6)** | one live reply then a level change | panel content switches from `…` to the folded text (asserts `message_end` refresh) | probe ≈ 60 s |
+| V-install | README flow: `pi install` → plain `pi` | `[Extensions]` shows it; V-restore/V-digits pass | ≈ 60 s |
+
+Every live run: `timeout 240`, pid recorded, `finally`-kill, artifacts written per stage.
+
+## 6. Run-duration budget & checkpointing
+
+Measured this machine (2026-10-19; cold `jiti` unless noted):
+
+| Run | Duration | Notes |
+|---|---|---|
+| `npx vitest run` | 0.4–1.5 s | 46 tests |
+| `npx tsc --noEmit` | 1–2 s | |
+| `npm ci` (P0b, first on the plugin) | ~10–60 s (network) | runs once per base change |
+| pi cold start in a probe | first read ≈ 5.4 s + 2 s settle; **`rm -rf /tmp/jiti` coded into probes before any extension-identity change or stale caches lie** | |
+| one full S1–S6 battery | 60–95 s (S2 alone 13–26 s: model variance) | checkpointed per stage |
+| single-stage rerun (`TEXTFOLD_SMOKE_STAGES=S6`) | ≈ 25–30 s | |
+| composition/panel probes | 45–60 s each (one model turn) | |
+
+**Total plan wall-time estimate:** ≈ 25–40 min of runs + human time, dominated by the full
+battery ×2 (P4 gate + final acceptance) and the injected-kill resume proof.
+
+**Policy: any run whose wall budget exceeds 60 s must be resumable from its last completed
+stage, without re-running work whose inputs did not change.**
+
+### Checkpoint design for `tui_smoke.py` (P4)
+
+- Artifacts stay per `RUNID`: `/tmp/textfold-verify/<runid>/bin/<stage>.bin`, `state.json`.
+- New `checkpoint.json` written with `os.replace` (crash-safe) at every existing `stage()`
+  point: `{"completed": [...], "uuid": "...", "resumed": n}`.
+- `TEXTFOLD_SMOKE_RUNID=<id>` (or `--resume <id>`): load artifacts + checkpoint, replay only
+  pending stages. Dependencies: S1–S4 replay needs only the pi binary; S5 requires the
+  `uuid` in the checkpoint (assert loudly, else instruct a fresh S1–S5 run); S6 is fully
+  independent (fresh session). A stage's budget replaces the current unbounded `settle()`
+  loop: S2 ≤ 120 s, others ≤ 30 s, plus `timeout 240` on the whole script.
+- Exit code stays: 0 = all requested stages + report green; partial exit prints exactly one
+  line: `RESUME: TEXTFOLD_SMOKE_RUNID=<id> STAGES=<remaining>`.
+
+## 7. Debuggability requirements (highest priority; each exists to avoid a rerun)
+
+- **Debug tap everywhere:** `TEXTFOLD_PI_DEBUG=1` keeps the existing appendFileSync+stderr tap;
+  P4 parameterizes the path (`TEXTFOLD_PI_DEBUG_FILE`, default `/tmp/textfold-pi-debug.log`)
+  and `stage()` snapshots the tap into the artifacts dir so stages cannot overwrite each other's
+  logs. Every shortcut/apply/restore/digit decision logs, as today.
+- **Artifact contract per stage:** raw pty `bin/<stage>.bin` + cleaned text dump + extracted
+  evidence printed as `PASS/FAIL <name>: <value>` (never a silent boolean).
+- **ANSI handling centralized:** `tests/ansiclean.py` with one strip regex (private-mode CSI,
+  OSC-with-ST, charset/designate escapes) — three past false failures came from per-probe
+  regexes.
+- **Char-offset rule:** never slice a cleaned string with a byte offset (a real S6 bug);
+  offsets into cleaned output come from `len(clean(buf))`.
+- **Assert durable state, not banners:** a notify can be overdrawn by a redraw in the same
+  frame (S5 lesson); assert the row/panel/footer render, and treat the notify as secondary.
+- **Key-send hygiene:** `\x1b`-prefixed sends ≥ 2 s apart (esc-timeout merges are real; a real
+  false negative came from chained sends); the editor clear on 1.3.0 is **ctrl+c**
+  (ctrl+w only removed the last word, the digit then hit the reinsert branch).
+- **Containment defaults, chosen per question (corrected from the first draft):**
+  - *Startup/composition/wiring questions* → fake `$HOME` and/or `--no-extensions -e`
+    (otherwise the installed package joins the session, pi resolves
+    "Extension shortcut conflict" silently by file path, and typed `/`-commands leak into the
+    model when sent while it is busy — VH1's first run).
+  - *Persistence/restore/panel-content questions* → real HOME with `--no-extensions -e`:
+    a session only materializes after a real user turn and the provider/model config lives in
+    the real HOME; a fake `$HOME` session cannot be resumed (no model turn possible) — the
+    first draft's fakehome C1 probe was unworkable as written.
+- **Failure cookbook** (from bugs actually hit): `jiti` staleness → purge in probe code;
+  flag-commit timing → register digits at `session_start`; session lookup by filename prefix,
+  dashes significant → pass the full uuid; byte-vs-char offsets; banner overdraw → assert
+  durable renders; key-merge timing; editor clear key; LEVELS names — Gist is 5, not 3;
+  shortcut conflicts when two copies of the plugin load at once.
+
+## 8. Risks & fallbacks
+
+| Risk | Likelihood | Mitigation |
+|---|---|---|
+| Upstream moves mid-port | low | pin P0b to a recorded sha: `git fetch origin && BASE=$(git rev-parse origin/main)`; base sha logged in the plan |
+| Row and panel fight for space at narrow widths | medium | V-composition probe at widths 60/100/120 precedes P3's commit; if they collide, the panel becomes `--textfold-panel` opt-in (D1 fallback stands) |
+| Model latency variance eats S2's budget | high | S2 ≤ 120 s + checkpoint; S2 never feeds a later stage's inputs |
+| `message_end` semantics changed in 1.3.0 (VH6) | possible | P3's gate verifies panel **content** refresh on a real reply before committing; if `message_end` no longer carries `message` the same way, fall back to `assistant_message`/`message_update` events after an S0b-style read of the installed pi's types |
+| `jiti` cache lies after a module is rewritten | certain on change | purge coded into probes |
+| User-config churn from `pi remove`/`pi install` | expected | P7 runs once, last, after everything else is green |
+
+## 9. Acceptance criteria (checked in order, no skips)
+
+1. Branch `d3-port` exists at the recorded base sha; commits land one logical change each.
+2. Every commit's gate commands pass in full (exit 0 captured with pipefail).
+3. Full battery green on all six stages, **and** the checkpoint path proven by an injected
+   mid-run kill followed by `TEXTFOLD_SMOKE_RUNID=<that runid>` completing the remaining
+   stages (exercised once — implemented-but-never-run resume code does not count).
+4. `pi_install_smoke.py` (installed package, no `-e`): exit 0.
+5. `npx vitest run && npx tsc --noEmit` green on the final tree; test count ≥ 46.
+6. The V-matrix of § 5 is fully green, including V-panel-content (VH6 closed by evidence).
+7. Docs name exactly the behaviors the harness proves; no documented-but-unverified claim.
+
+## 10. Critical corrections applied to the first draft
+
+1. **`--session` matching is by session-file-name prefix with dashes significant** (VH7) — the
+   first "needs the full uuid" claim was evidence-overreach; the dashless-prefix failure and the
+   dashed-prefix success were both recorded. Full uuid is still mandated everywhere as the safe
+   form, now for the right reason.
+2. **The fakehome C1 gate was unworkable**: a session materializes only after a real user turn,
+   and no provider/model config exists under a fake `$HOME` — restore cannot be probed there.
+   Persistence/restore/panel-content probes now use the real HOME with `--no-extensions -e`.
+3. **VH6 surfaced and was demoted from assumed-verified to a gated hypothesis**: no recorded
+   evidence ever asserted panel *content* coming from `message_end` on pi 1.3.0; P3 now blocks
+   on it.
+4. **P4 was overstuffed** (smoke rework + probes + preflight in one commit) for "atomic";
+   split into P4 (battery+checkpoint) and P5 (probes+preflight).
+5. **Missing precondition added as P0b**: `npm ci` against upstream's pins and an S0b API
+   re-check on the **features the port needs** before any ported code lands.
+6. **Decision added**: level-change/restore notifies (§ 2.1.3) — upstream has none; silently
+   relying on a themed row hides state, and our C1 tests assert notify behavior.
+7. **Wording migration made explicit** (§ 2.2) so upstream's `· N of M words` marker replaces
+   our `(folded: …)` string with the test updates riding the same commit.
+8. **P6→P7 install step corrected** to a worktree path (`<abs>/plugins/pi-textfold`), not a
+   branch name, and flagged config-only.
+9. **Budget wording fixed** (P1/P3 rows) and the concrete fragile `origin/main@{now}` syntax
+   replaced by an explicitly recorded `git rev-parse` base sha.
+10. **Total wall-time estimate added** (§ 6): ≈ 25–40 min of machine time excluding human review.
+
+**No implementation begins until this plan is approved.**
