@@ -260,9 +260,9 @@ stage, without re-running work whose inputs did not change.**
 
 ## 11. Execution log (2026-10-19)
 
-Base sha: `2cd77e0` (origin/main at checkout); rebased clean (15/15, no conflicts)
-onto `3983059` (origin/main at PR prep — 12 commits ahead, none touching
-`plugins/pi-textfold/`). Branch: `d3-port`.
+Base sha: `2cd77e0` (origin/main at checkout); rebased clean twice, now 21/21
+with no conflicts onto `cd0fe85` (origin/main at PR prep — none of its new
+commits touch `plugins/pi-textfold/`). Branch: `d3-port`.
 
 Commits, one logical change each, all gates green per commit:
 
@@ -292,9 +292,9 @@ exist at Full); S5 asserts durable evidence, the notify is reported not asserted
 
 ---
 
-## 12. Difference vs the remote main (`origin/main` = `3983059` at PR prep; cut at `2cd77e0`, rebased 15/15 clean)
+## 12. Difference vs the remote main (`origin/main` = `cd0fe85` at PR prep; cut at `2cd77e0`, rebased 21/21 clean)
 
-`d3-port` is 15 commits ahead of `origin/main`; the remote has nothing the branch lacks.
+`d3-port` is 21 commits ahead of `origin/main`; the remote has nothing the branch lacks.
 **No upstream file was touched beyond the two meant to change:** `extension/fold.ts`,
 `extension/level.ts`, `package.json`, `package-lock.json`,
 `tsconfig.json`, `tests/fold.test.ts`, `tests/level.test.ts` are blob-identical to main —
