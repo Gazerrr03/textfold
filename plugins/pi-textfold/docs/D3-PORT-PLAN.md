@@ -253,3 +253,32 @@ stage, without re-running work whose inputs did not change.**
 10. **Total wall-time estimate added** (§ 6): ≈ 25–40 min of machine time excluding human review.
 
 **No implementation begins until this plan is approved.**
+
+---
+
+## 11. Execution log (2026-10-19)
+
+Base sha: `2cd77e0` (origin/main at checkout). Branch: `d3-port`.
+
+Commits, one logical change each, all gates green per commit:
+
+| Commit | Change | Gate evidence |
+|---|---|---|
+| `a576d4a` | P0 the plan | docs only |
+| `f6ac69d` | P1 C1 persistence port | 35 tests · tsc clean · live V-restore (full-uuid resume: row / panel / re-fold; entry count unchanged) |
+| `3b4225d` | P2 C2 digit-guard port | 44 tests · tsc clean · S6 live (ab 4 reinsert, empty-prompt digit folds, Alt unaffected) |
+| `43291c8` | P3 preview panel port | 54 tests · tsc clean · VH6 live (message_end on 1.3.0 delivers; panel body becomes the fold; header follows the level; row coexists) |
+| `de17af5` | P4 battery + checkpoint/resume | full S1–S6 PASS, exit 0 |
+| `3c2edec` | P5 probes + preflight | py_compile green · S0b all 7 APIs OK |
+| `8dd3221` | P6 README contracts | every documented key/grep checked against the code |
+| `07dbbfb` | P5-fix install-smoke cwd + foldable prompt (fix-forward) | base/digits/resume install smoke exit 0 on plain pi |
+
+Acceptance: § 9.1–7 all hold — 54 tests ≥ 46 floor, harness self-sufficient
+(installed pi + Node 22 coded in), the checkpoint path **proven** by an injected
+`timeout -s TERM 14` kill after S1 followed by `TEXTFOLD_SMOKE_RUNID=killtest`
+replaying S2–S6 to a green exit, README contracts only its proven behaviors.
+
+Corrections vs the plan itself, found in execution: the final wording of the
+README landed as `07dbbfb` amends `9c94074`→`8dd3221` split (probe fix moved
+after docs); S2's assertion now requires the reply + panel refresh (folds do not
+exist at Full); S5 asserts durable evidence, the notify is reported not asserted.
