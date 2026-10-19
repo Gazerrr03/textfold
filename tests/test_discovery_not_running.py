@@ -5,6 +5,7 @@ way as a generation's does, so the page names the model the next generation uses
 Run from the repo root:
     python3 -m unittest discover tests
 """
+import os
 import time
 import unittest
 import urllib.error
@@ -25,13 +26,18 @@ class NotRunning(unittest.TestCase):
         bridges._SEEN.update(at=0.0, status=None)
 
     def refresh(self):
+        # (a test run may set TEXTFOLD_NO_MODELS, which skips the probes; these tests are about the probes)
+        env = mock.patch.dict("os.environ")
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("TEXTFOLD_NO_MODELS", None)
         server.refresh_models()
         end = time.monotonic() + 5
         while server.DISCOVERY["refreshing"] and time.monotonic() < end:
             time.sleep(.01)
 
     def test_nothing_running_is_nothing_found_not_a_failure(self):
-        with mock.patch.dict("os.environ", {}, clear=False), mock.patch("urllib.request.urlopen", side_effect=refused):
+        with mock.patch("urllib.request.urlopen", side_effect=refused):
             self.refresh()
         self.assertEqual(server.DISCOVERY["error"], "")
         self.assertTrue(server.DISCOVERY["ready"])
