@@ -73,11 +73,14 @@ takes the gallery from there. The repository's own Pages keeps its old address, 
 Models (⚙ Model & API), ported from ThoughtDAG's model access:
 
 - **Agents on this computer**, found at startup (and on Rescan) on PATH, the login shell's PATH, the usual install
-  directories and the node version managers. Claude Code, Codex and Pi run generations, each listing its own models
-  (Pi brings whatever providers it is configured with); Gemini CLI, Qwen Code, opencode, Cursor Agent, Kimi CLI, Amp,
+  directories and the node version managers. Claude Code, Codex, Pi and CodeBuddy run generations, each listing its own models
+  (Pi brings whatever providers it is configured with; CodeBuddy, WorkBuddy's copy of it first, the account's); Gemini CLI, Qwen Code, opencode, Cursor Agent, Kimi CLI, Amp,
   Goose, Crush, Droid, Copilot CLI, iFlow and Aider are reported when present. Claude Code is called without the
   user's settings and CLAUDE.md (`--setting-sources project,local` in a scratch folder; again with them if that fails
-  to sign in).
+  to sign in). CodeBuddy is called the same way, but with its user settings (without them it has no sign-in and
+  waits), `--tools StructuredOutput` (the one tool its structured output needs) and WorkBuddy's quiet switches (no
+  memory, no reminders: ~400 tokens of its own a call); WorkBuddy's copy runs on the app's Electron as node, with
+  WorkBuddy's settings folder, as WorkBuddy runs it (`agents.env_for`).
 - **Two easy ways in** (`textfold/bridges.py`, as in ThoughtDAG):
   - **ChatGPT plan, local bridge**: openai-oauth (npm) serves the plan as an OpenAI-compatible endpoint on
     127.0.0.1:10531, signed in with Codex's login (or a browser sign-in). Running, it joins the providers on its own

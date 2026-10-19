@@ -134,7 +134,7 @@ TextFold 用你已有的模型，不需要注册账号。启动时它会自己�
 
 | 你有 | 怎么做 |
 |---|---|
-| Claude Code、Codex 或 Pi | 什么都不用做，TextFold 会自动找到并使用。 |
+| Claude Code、Codex、Pi 或 WorkBuddy | 什么都不用做，TextFold 会自动找到并使用（WorkBuddy 用你登录的账号和它的模型）。 |
 | ChatGPT 订阅 | 点 **使用我的 ChatGPT 订阅**。电脑上会启动一个小的本地桥，用你的账号登录（需要 Node.js）。 |
 | 什么都还没有 | 点 **OpenRouter 一键授权**。授权一次，免费模型马上可用。 |
 | 一个 API key | **设置 › 添加供应商**：Anthropic、OpenAI、DeepSeek、通义千问、智谱 GLM、Kimi、MiniMax、Google、Ollama，或任何 OpenAI 兼容接口。 |

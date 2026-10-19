@@ -116,14 +116,14 @@ def resolve(model_id=None, s=None):
     if not model_id:
         model_id = default_model(s)
         if not model_id:
-            raise RuntimeError("No model is available: install Claude Code, Codex or Pi, or add an API provider in the settings")
+            raise RuntimeError("No model is available: install Claude Code, Codex, Pi or WorkBuddy, or add an API provider in the settings")
     if model_id in LEGACY_ALIASES:  # the command line's --model sonnet
         model_id = f"claude/claude-code/{model_id}"
     effort = None   # set per task (for_task); the per-model efforts of v0.9 and before are no longer read
     rt = agents.runtime_of(model_id)
     if rt:
         rest = model_id[len(agents.PREFIX[rt]):]
-        model = rest.split("/", 1)[1] if rt in ("claude-code", "codex") else rest  # pi keeps provider/model
+        model = rest.split("/", 1)[1] if rt in ("claude-code", "codex", "codebuddy") else rest  # pi keeps provider/model
         return {"id": model_id, "kind": "agent", "runtime": rt, "model": model, "effort": effort}
     for p in provider_list(s):
         if any(m["id"] == model_id for m in p["models"]):

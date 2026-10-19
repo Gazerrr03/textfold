@@ -2,14 +2,18 @@
 
 The server scans for them at startup (and on demand): every mainstream agent CLI is looked for on PATH,
 on the login shell's PATH, in the usual install directories and under the node version managers, as
-ThoughtDAG's where.cjs does. Three can run a generation, the three ThoughtDAG drives:
+ThoughtDAG's where.cjs does. Four can run a generation, the three ThoughtDAG drives and CodeBuddy:
 
   claude-code  claude -p, structured output by --json-schema        models: fable, opus, sonnet, haiku
   codex        codex exec, structured output by --output-schema      models: `codex app-server` model/list
   pi           pi -p --mode json, JSON asked for in the prompt       models: `pi --mode rpc` get_available_models
+  codebuddy    codebuddy -p, structured output by --json-schema      models: the account's, as its --help lists them
+
+CodeBuddy is Tencent's CLI, and WorkBuddy carries a copy of it (cli/bin/codebuddy in the app), which runs on the app's
+own Electron and the WorkBuddy sign-in, as WorkBuddy runs it: no node needed, the reader's WorkBuddy models.
 
 The others are reported when found, but not driven yet. A model id is ThoughtDAG's:
-`claude/claude-code/opus`, `codex/codex/<model>`, `pi/<provider>/<model>`.
+`claude/claude-code/opus`, `codex/codex/<model>`, `pi/<provider>/<model>`; CodeBuddy's `codebuddy/codebuddy/<model>`.
 Agents run here only as one-shot text generators: no tools, no session, a scratch working directory.
 """
 import glob
@@ -25,11 +29,18 @@ import time
 from pathlib import Path
 
 HOME = Path.home()
+WIN = os.name == "nt"
+# WorkBuddy's own copy of CodeBuddy, inside the app (its Electron runs it): found before a codebuddy on PATH
+WORKBUDDY_CLI = ([os.path.join(os.environ.get("LOCALAPPDATA") or "~/AppData/Local", "Programs", "WorkBuddy", "resources", "app.asar.unpacked", "cli", "bin"),
+                  os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "WorkBuddy", "resources", "app.asar.unpacked", "cli", "bin")]
+                 if WIN else ["/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin",
+                              "~/Applications/WorkBuddy.app/Contents/Resources/app.asar.unpacked/cli/bin"])
 # runtime, label, binary, extra directories, can it run a generation here
 REGISTRY = [
     ("claude-code", "Claude Code", "claude", ["~/.claude/local"], True),
     ("codex", "Codex", "codex", ["~/.codex/bin"], True),
     ("pi", "Pi", "pi", ["~/.pi/bin"], True),
+    ("codebuddy", "CodeBuddy", "codebuddy", WORKBUDDY_CLI, True),
     ("gemini", "Gemini CLI", "gemini", [], False),
     ("qwen", "Qwen Code", "qwen", [], False),
     ("opencode", "opencode", "opencode", ["~/.opencode/bin"], False),
@@ -43,9 +54,8 @@ REGISTRY = [
     ("iflow", "iFlow CLI", "iflow", [], False),
     ("aider", "Aider", "aider", [], False),
 ]
-PREFIX = {"claude-code": "claude/", "codex": "codex/", "pi": "pi/"}
+PREFIX = {"claude-code": "claude/", "codex": "codex/", "pi": "pi/", "codebuddy": "codebuddy/"}
 COMMON = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "~/.bun/bin", "~/.npm-global/bin", "~/.local/bin"]
-WIN = os.name == "nt"
 if WIN:   # npm's global folder, Claude Code's own installer (~/.local/bin, above), Scoop, Node itself
     COMMON = [os.path.join(os.environ.get("APPDATA") or "~/AppData/Roaming", "npm"), "~/.local/bin", "~/.bun/bin", "~/scoop/shims",
               os.path.join(os.environ.get("ProgramFiles") or "C:/Program Files", "nodejs")]
@@ -113,7 +123,43 @@ def locate(binary, extra=()):
             f = os.path.join(d, binary + ext)
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 return f
+        f = os.path.join(d, binary)
+        if WIN and os.path.isfile(f) and workbuddy_runner(f):   # (a script there, no .cmd beside it: the app's Electron runs it)
+            return f
     return None
+
+
+def workbuddy_runner(path):
+    """The Electron that runs WorkBuddy's own copy of CodeBuddy found at `path` (<app>/…/app.asar.unpacked/cli/bin/
+    codebuddy), or None: a codebuddy installed on its own runs as it is."""
+    p = Path(path)
+    if p.name != "codebuddy" or len(p.parents) < 5 or [p.parents[i].name for i in range(3)] != ["bin", "cli", "app.asar.unpacked"]:
+        return None
+    resources = p.parents[3]
+    exe = resources.parent / "WorkBuddy.exe" if WIN else resources.parent / "MacOS" / "Electron"
+    return str(exe) if exe.is_file() else None
+
+
+# CodeBuddy as WorkBuddy runs it: no memory, no reminders, no suggestions, no repository scan (also ~400 tokens a call
+# rather than ~15,000)
+CODEBUDDY_QUIET = {k: "1" for k in ("CODEBUDDY_DISABLE_AUTO_MEMORY", "CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD",
+                                     "CODEBUDDY_CODE_DISABLE_SESSION_SUMMARY", "CODEBUDDY_PROMPT_SUGGESTION_DISABLED",
+                                     "CODEBUDDY_GIT_REPO_SCAN_DISABLED", "CODEBUDDY_DISABLE_CRON", "CODEBUDDY_DISABLE_IDE")}
+
+
+def env_for(path):
+    """The environment an agent found at `path` runs in: child_env(), and for CodeBuddy its quiet switches; WorkBuddy's
+    copy on the app's Electron as node (without it the app itself would open) and with WorkBuddy's own settings, where
+    its sign-in is."""
+    env = child_env()
+    if path and Path(path).name.split(".")[0] == "codebuddy":
+        env.update(CODEBUDDY_QUIET)
+        if workbuddy_runner(path):
+            env["ELECTRON_RUN_AS_NODE"] = "1"
+            conf = Path(os.environ.get("WORKBUDDY_CONFIG_DIR") or HOME / ".workbuddy")
+            if conf.is_dir():
+                env["CODEBUDDY_CONFIG_DIR"] = str(conf)
+    return env
 
 
 _SHIM = re.compile(r'"%~?dp0%?\\([^"]+\.[cm]?js)"\s+%\*')
@@ -122,7 +168,11 @@ _SHIM = re.compile(r'"%~?dp0%?\\([^"]+\.[cm]?js)"\s+%\*')
 def argv(path):
     """The command that runs an agent found at `path`. On Windows npm's shim (claude.cmd) would hand its arguments to
     cmd.exe, which ends a multi-line system prompt at its first line break and reads its quotes and carets: the
-    script the shim names is run by node instead."""
+    script the shim names is run by node instead. WorkBuddy's copy of CodeBuddy is run by the app's Electron (as node:
+    env_for)."""
+    runner = workbuddy_runner(path)
+    if runner:
+        return [runner, path]
     if not (WIN and path.lower().endswith(".cmd")):
         return [path]
     try:
@@ -137,15 +187,15 @@ def argv(path):
     return [node, str(script)] if node else [path]
 
 
-def _run(args, timeout, **kw):
+def _run(args, timeout, env=None, **kw):
     return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=timeout, env=child_env(), stdin=subprocess.DEVNULL, **kw)
+                          timeout=timeout, env=env or child_env(), stdin=subprocess.DEVNULL, **kw)
 
 
 def _help_levels(path, flag, pattern):
     """Effort or thinking levels as the CLI's own --help lists them."""
     try:
-        text = _run([*argv(path), "--help"], 8).stdout
+        text = _run([*argv(path), "--help"], 8, env_for(path)).stdout
     except Exception:
         return []
     m = re.search(pattern, text, re.S)
@@ -237,7 +287,20 @@ def _pi_models(path):
              "vision": "image" in (r.get("input") or [])} for r in rows if r.get("provider") and r.get("id")]
 
 
-CATALOG = {"claude-code": _claude_models, "codex": _codex_models, "pi": _pi_models}
+def _codebuddy_models(path):
+    """The models the account may use, as --help lists them once signed in ("Currently supported: (auto, glm-5.1, …)"),
+    the efforts too."""
+    text = _run([*argv(path), "--help"], 30, env_for(path)).stdout
+    m = re.search(r"Currently supported:\s*\(([^)]*)\)", text)
+    names = [x.strip() for x in m.group(1).split(",") if x.strip()] if m else ["auto"]
+    e = re.search(r"--effort <level>.*?\(([^)]*)\)", text, re.S)
+    efforts = [x.strip() for x in e.group(1).split(",") if x.strip()] if e else []
+    who = "WorkBuddy" if workbuddy_runner(path) else "CodeBuddy"
+    return [{"id": f"codebuddy/codebuddy/{n}", "name": f"{who} · {'Auto' if n == 'auto' else n}", "runtime": "codebuddy",
+             "model": n, "efforts": efforts, "defaultEffort": None} for n in names]
+
+
+CATALOG = {"claude-code": _claude_models, "codex": _codex_models, "pi": _pi_models, "codebuddy": _codebuddy_models}
 
 # ── the scan ──────────────────────────────────────────────────────────
 STATE = {"scanned_at": None, "scanning": False, "agents": []}
@@ -270,8 +333,10 @@ def scan(log=None):
                     row.update(path=None, error=f"same program as {seen[real]}")
                 else:
                     seen[real] = label
+                    if runtime == "codebuddy" and workbuddy_runner(path):
+                        row["label"] = "WorkBuddy"   # (its copy of CodeBuddy, on the WorkBuddy sign-in)
                     try:
-                        out = _run([*argv(path), "--version"], 8)
+                        out = _run([*argv(path), "--version"], 8, env_for(path))
                         row["version"] = ((out.stdout or out.stderr).strip().splitlines() or [""])[0][:80]
                     except Exception as e:
                         row["error"] = str(e)[:200]
@@ -374,6 +439,40 @@ def run_pi(model, prompt, schema, system, effort, timeout):
         except ValueError:
             if attempt == 2:
                 raise
+
+
+def run_codebuddy(model, prompt, schema, system, effort, timeout):
+    """claude -p's way, with CodeBuddy's differences: no --setting-sources (without the user's settings it has no
+    sign-in and waits), the one tool its structured output needs (with none it has no StructuredOutput to answer
+    with), and a list of messages for an output whose last is the result."""
+    path = path_of("codebuddy")
+    if not path:
+        raise RuntimeError("CodeBuddy (WorkBuddy) was not found on this computer")
+    args = [*argv(path), "-p", "--model", model, "--tools", "StructuredOutput", "--strict-mcp-config", "--no-session-persistence",
+            "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
+    if effort:
+        args += ["--effort", "minimal" if effort == "off" else effort]   # (no level off: the least)
+    with tempfile.TemporaryDirectory() as tmp:   # a scratch cwd: no project, nothing to read
+        r = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, env=env_for(path), cwd=tmp)
+    said = (r.stderr or r.stdout)[-800:]
+    if "Authentication required" in r.stdout + r.stderr:   # (it says so at once, exit 0, and does not wait)
+        raise RuntimeError("WorkBuddy is not signed in: open WorkBuddy and sign in (WorkBuddy 没有登录：打开 WorkBuddy 登录)"
+                           if workbuddy_runner(path) else "CodeBuddy is not signed in: run codebuddy once and use /login")
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        raise RuntimeError(f"codebuddy -p exited {r.returncode}: {said}")
+    rows = got if isinstance(got, list) else [got]
+    res = next((x for x in reversed(rows) if isinstance(x, dict) and x.get("type") == "result"), None)
+    if res is None:
+        raise RuntimeError(f"codebuddy -p exited {r.returncode} with no result: {said}")
+    if res.get("is_error"):
+        raise RuntimeError(f"codebuddy -p error: {str(res.get('result'))[:800]}")
+    out = res.get("structured_output")
+    if out is None:
+        out = parse_json(res.get("result") or "", schema)
+    return out, res.get("total_cost_usd")
 
 
 def _pi_once(args, body, schema, timeout):
