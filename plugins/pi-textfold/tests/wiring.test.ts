@@ -1,6 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-
+import { readFileSync, writeFileSync as fsWriteFileSync } from "node:fs";
 import { ENTRY_TYPE } from "../extension/persist";
+
+const writeFileSync = (p: string, s: string) => fsWriteFileSync(p, s);
+
+/** Shape of the calibration overlay component the factory hands back. */
+type TeachComponent = { render: (width: number) => string[]; handleInput: (data: string) => boolean };
+
+const readMaybe = (p: string): string | undefined => {
+	try {
+		return readFileSync(p, "utf8");
+	} catch {
+		return undefined;
+	}
+};
+
 
 beforeEach(() => {
 	vi.resetModules();
@@ -19,6 +33,8 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 	const entries: { type: string; payload: unknown }[] = [];
 	const notifications: string[] = [];
 	const widgets = new Map<string, { factory?: WidgetFactory; content?: string[]; opts?: unknown }>();
+	const customCaptures: ((tui: unknown, theme: unknown, kb: unknown, done: () => void) => unknown)[] = [];
+	let customDone: (() => void) | undefined;
 	const calls: string[] = [];
 	let editorText = opts.editorText ?? "";
 	const editorWrites: string[] = [];
@@ -61,10 +77,24 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 		},
 	};
 	const ctx = {
+		mode: "tui",
+		hasUI: true,
 		screen,
+		reloads: 0,
+		// Command contexts get reload(); the calibration uses it to make the taught
+		// keys dispatch in the SAME session (pi snapshots shortcuts at editor setup).
+		reload: async () => {
+			ctx.reloads++;
+		},
 		sessionManager: { getBranch: () => branch },
 		ui: {
 			notify: (message: string, _kind?: string) => notifications.push(message),
+			custom: (factory: (tui: unknown, theme: unknown, kb: unknown, done: () => void) => unknown) => {
+				customCaptures.push(factory);
+				return new Promise<void>((resolve) => {
+					customDone = resolve;
+				});
+			},
 			getEditorText: () => editorText,
 			setEditorText: (t: string) => {
 				editorText = t;
@@ -89,13 +119,15 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 
 	return {
 		pi: pi as never,
+		customCaptures,
+		closeCustom: () => customDone?.(),
 		handler: (name: string) => {
 			const h = handlers.get(name);
 			if (!h) throw new Error(`no ${name} handler registered`);
 			return h;
 		},
 		press: (key: string) => shortcuts.get(key)?.handler(ctx as never),
-		runCommand: (name: string, arg?: string) => commands.get(name)?.handler(arg, ctx as never),
+		runCommand: async (name: string, arg?: string) => commands.get(name)?.handler(arg, ctx as never),
 		widgets,
 		render,
 		notifications,
@@ -105,6 +137,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 		screen,
 		editorWrites,
 	};
+	// The factory-based capture path needs resolve on done: kept where the tests use it.
 }
 
 const custom = (level: number, id = "e1") =>
@@ -284,6 +317,101 @@ describe("the preview panel shows the fold before any reply and with it", () => 
 		expect(mk.widgets.has("textfold")).toBe(true);
 		expect(mk.widgets.has("textfold-preview")).toBe(true);
 		expect(mk.render("textfold").join(" ")).toContain("1 Full");
+	});
+});
+
+describe("keys you teach once, for any keyboard", () => {
+	const writeKeys = (map: Record<string, string>) => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-keys.json";
+		writeFileSync("/tmp/textfold-wiring-test-keys.json", JSON.stringify(map));
+	};
+
+	test("a fresh extension registers alt+1..5 and nothing else", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-unset.json";
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		for (const n of [1, 2, 3, 4, 5]) expect(mk.calls).toContain(`shortcut:alt+${n}`);
+		expect(mk.calls).not.toContain("shortcut:alt+&");
+	});
+
+	test("learned keys register alongside, from session start, for any keyboard", async () => {
+		writeKeys({ "1": "alt+&", "5": "alt+(" });
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		for (const id of ["shortcut:alt+&", "shortcut:alt+(", "shortcut:alt+1", "shortcut:alt+5"])
+			expect(mk.calls).toContain(id);
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("a learned key folds like its digit: alt+& is Full, alt+( is Gist", async () => {
+		writeKeys({ "1": "alt+&", "5": "alt+(" });
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.press("alt+&"); // Gist's neighbor... Full from the start: a no-op
+		expect(mk.entries).toEqual([]);
+		mk.press("alt+5");
+		mk.press("alt+&");
+		mk.press("alt+(");
+		expect(mk.entries).toEqual([
+			{ type: ENTRY_TYPE, payload: { level: 5 } },
+			{ type: ENTRY_TYPE, payload: { level: 1 } },
+			{ type: ENTRY_TYPE, payload: { level: 5 } },
+		]);
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("/fold calibrate teaches the keys from the user's own presses and saves them", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-cal.json";
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		const running = mk.runCommand("fold", "calibrate");
+		const factory = mk.customCaptures[0];
+		expect(factory).toBeDefined();
+		// pi-tui hands the factory its own done(); the fake's promise resolves through it.
+		const comp = factory({}, {}, {}, () => mk.closeCustom()) as unknown as TeachComponent;
+		// The five presses in order: teach, then defaults where the user cannot produce
+		// one (a plain digit = keep the default).
+		comp.handleInput("\x1b&");
+		comp.handleInput("2"); // skip: default stays
+		comp.handleInput("\x1b'");
+		comp.handleInput("\x1b4");
+		comp.handleInput("\x1b(");
+		await running;
+		expect((mk.ctx as unknown as { reloads: number }).reloads).toBe(1); // teaching must be live in this same session too
+		expect(mk.notifications.join(" ")).toContain("Saved");
+		const map = JSON.parse(readFileSync("/tmp/textfold-wiring-test-cal.json", "utf8"));
+		expect(map).toEqual({ "1": "alt+&", "2": "alt+2", "3": "alt+'", "4": "alt+4", "5": "alt+(" });
+		expect(mk.calls).toContain("shortcut:alt+&"); // re-registered right after teaching
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("/fold calibrate on escape teaches nothing and saves nothing", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-cancel.json";
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		const running = mk.runCommand("fold", "calibrate");
+		const comp = mk.customCaptures[0]({}, {}, {}, () => mk.closeCustom()) as unknown as TeachComponent;
+		comp.handleInput("\x1b&");
+		comp.handleInput("\x1b"); // escape
+		await running;
+		expect(readMaybe("/tmp/textfold-wiring-test-cancel.json")).toBeUndefined();
+		expect((mk.ctx as unknown as { reloads?: number }).reloads ?? 0).toBe(0); // quitting teaches nothing live
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("/fold keys says what is bound", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-keys.json"; // written above
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		await mk.runCommand("fold", "keys");
+		expect(mk.notifications.join(" ")).toContain("alt+&");
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
 	});
 });
 
