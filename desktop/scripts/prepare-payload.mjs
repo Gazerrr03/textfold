@@ -1,6 +1,6 @@
 // The runtime the app ships, in desktop/payload:
 //   python/   a standalone CPython (python-build-standalone, the "install_only_stripped" build for the app's system:
-//             Apple silicon, an Intel Mac, 64-bit Windows) with TextFold's packages (requirements.txt) installed into it
+//             Apple silicon, an Intel Mac, 64-bit Windows) with TextFold's packages (requirements.txt, and the Anthropic SDK) installed into it
 //   app/      the code: textfold/ (its web/ inside)
 // On a Mac electron-builder copies it into the app's Resources and signs every Mach-O file in it with the app (hardened
 // runtime, build/entitlements.mac.plist), which notarization requires. Parts of CPython the server never uses
@@ -56,9 +56,13 @@ const py = WIN ? path.join(payload, 'python', 'python.exe') : path.join(payload,
 const run = (args, opts) => execFileSync(platform === 'darwin' && arch !== process.arch ? 'arch' : py,
   platform === 'darwin' && arch !== process.arch ? [arch === 'x64' ? '-x86_64' : '-arm64', py, ...args] : args, opts);
 
+// The Anthropic API's SDK too: pip leaves it to those who want it (requirements.txt), but a person who picks the
+// Anthropic API in the app's Settings has no pip to install it with (#14)
+const APP_ONLY = ['anthropic>=1.15,<2'];
+
 console.log('installing TextFold\'s packages…');
 run(['-m', 'pip', 'install', '--no-cache-dir', '--disable-pip-version-check', '--no-warn-script-location',
-  '-r', path.join(root, 'requirements.txt')], { stdio: 'inherit', env: { ...process.env, PYTHONNOUSERSITE: '1' } });
+  '-r', path.join(root, 'requirements.txt'), ...APP_ONLY], { stdio: 'inherit', env: { ...process.env, PYTHONNOUSERSITE: '1' } });
 
 // what the server never uses
 const stdlib = WIN ? path.join(payload, 'python', 'Lib')
