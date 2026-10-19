@@ -104,7 +104,8 @@ plugins/pi-textfold/
 
 ## 4. Atomic commit plan (each commit: compiles, tests green, tsc clean, no dead code)
 
-Commit messages follow the repo's sentence style (`Pi: …`), author identity `JL <josephxlam@gmail.com>`.
+Commit messages follow the repo's sentence style (`Pi: …`), with the contributor's
+own git identity — name and address stay in commit metadata, not in documentation.
 
 Every commit's gate uses `set -o pipefail` and captures exit codes; a failing gate means
 fix-forward in the same commit or split the commit.

@@ -49,8 +49,9 @@ _node22 = os.path.expanduser("~/.local/node22/bin")
 NODE_PREFIX = os.environ.get(
     "TEXTFOLD_PI_NODE", f"PATH={_node22}:$PATH " if os.path.isdir(_node22) else "")
 cli = find_cli()
-cwd = os.path.expanduser("~/freebuff-connector") if os.path.isdir(
-    os.path.expanduser("~/freebuff-connector")) else os.getcwd()
+# Any directory works: the battery spawns its own sessions. The default is simply
+# the invoking one.
+cwd = os.getcwd()
 
 base_args = ["--no-extensions", "--extension", EXT]
 if PROVIDER: base_args += ["--extension", PROVIDER]
