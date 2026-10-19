@@ -8,7 +8,6 @@ again: its source stays the one its layers were made from.
 import base64
 import hashlib
 import json
-import locale
 import re
 import shutil
 import urllib.parse
@@ -142,8 +141,7 @@ def store_doc(pid, html, meta, raw_name, raw, resolver, sizes=False):
 def _codepage():
     """The system's own encoding for a text file saved in its locale: a Chinese Windows's GBK, a German one's
     Windows-1252, UTF-8 on a Mac. Python 3.11's getencoding() is not swayed by UTF-8 mode, which the app runs in."""
-    get = getattr(locale, "getencoding", None)
-    return (get() if get else locale.getpreferredencoding(False)) or "utf-8"
+    return store.codepage()
 
 
 def _read(p):

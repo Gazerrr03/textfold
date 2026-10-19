@@ -89,7 +89,8 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
     cache_dir.mkdir(parents=True, exist_ok=True)
     f = cache_dir / f"{key}.json"
     if f.exists() and not force:
-        return {**json.loads(f.read_text(encoding="utf-8")), "file": str(f)}, True
+        from .store import read_text   # (store imports ladder, which imports this)
+        return {**json.loads(read_text(f)), "file": str(f)}, True
     note = None
     try:
         out, cost = _once(prompt, schema, spec, timeout, system)

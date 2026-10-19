@@ -11,7 +11,7 @@ import os
 import shutil
 
 from . import agents, bridges, providers
-from .store import HOME, OLD_HOMES
+from .store import HOME, OLD_HOMES, read_text
 
 SETTINGS = HOME / "settings.json"
 # How much the model may think, per task, in levels every caller maps onto its own (llm.py). Not a setting: a reader is
@@ -35,7 +35,7 @@ def load_settings():
         shutil.copy2(old_home / "settings.json", SETTINGS)
         os.chmod(SETTINGS, 0o600)
     if SETTINGS.exists():
-        old = json.loads(SETTINGS.read_text(encoding="utf-8"))
+        old = json.loads(read_text(SETTINGS))
         s.update({k: v for k, v in old.items() if k in s})
         if not s["model"] and old.get("backend") == "claude-cli":  # the settings of v0.4
             s["model"] = f"claude/claude-code/{old.get('cli_model') or 'sonnet'}"

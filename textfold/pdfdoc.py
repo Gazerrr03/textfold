@@ -474,7 +474,7 @@ def place(pid):
     f = store.pdir(pid) / "layout.json"
     if not f.exists():
         return {}
-    blocks = json.loads(f.read_text(encoding="utf-8"))
+    blocks = json.loads(store.read_text(f))
     words = lambda s: set(re.findall(r"\w+", s.lower()))  # noqa: E731
     bw = [words(b["t"]) for b in blocks]
     doc = store.parsed(pid)
@@ -502,7 +502,7 @@ def relayout(pid):
     import tempfile
     from . import engine
     d = store.pdir(pid)
-    meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+    meta = json.loads(store.read_text(d / "meta.json"))
     if (d / "layout.json").exists():
         return True
     if (meta.get("source") or {}).get("tier") != "fast":   # the accurate tier takes minutes: not on a page's request
@@ -517,4 +517,4 @@ def relayout(pid):
 
 def read_output(folder):
     """MinerU's structured content from an output folder (its zip unpacked)."""
-    return json.loads((Path(folder) / "structured_content.json").read_text(encoding="utf-8"))
+    return json.loads(store.read_text(Path(folder) / "structured_content.json"))

@@ -158,7 +158,7 @@ class Jobs:
         self.pending = {}  # files that wait for the engine to be installed: pid -> (file, name, lang)
         for side in (store.DATA / "uploads").glob("*.json"):   # (kept beside each, so a restart forgets none)
             try:
-                w = json.loads(side.read_text(encoding="utf-8"))
+                w = json.loads(store.read_text(side))
                 f = side.parent / Path(w.get("file") or side.stem + ".pdf").name
                 if f.exists() and not (store.pdir(f.stem) / "meta.json").exists():
                     self.pending[f.stem] = (str(f), w["name"], w["lang"])
@@ -225,7 +225,7 @@ class Jobs:
             if job["kind"] == "generate" and stage not in ("queued", "fetch") and (store.pdir(job["pid"]) / "meta.json").exists():
                 if not job.get("title"):   # a new paper's title, once it is parsed
                     try:
-                        job["title"] = json.loads((store.pdir(job["pid"]) / "meta.json").read_text(encoding="utf-8"))["title"]
+                        job["title"] = json.loads(store.read_text(store.pdir(job["pid"]) / "meta.json"))["title"]
                     except (OSError, ValueError, KeyError):
                         pass
                 if job.get("attach") and not job.get("attached"):   # the reader's own copy of an online paper's PDF
@@ -292,7 +292,7 @@ class Jobs:
             PAGES.pop(job["pid"], None)
 
     def _pdf_link(self, job, url=None):
-        url = url or (store.pdir(job["pid"]) / "url.txt").read_text(encoding="utf-8").strip()
+        url = url or store.read_text(store.pdir(job["pid"]) / "url.txt").strip()
         with urllib.request.urlopen(urllib.request.Request(url, headers=fetch.UA), timeout=90) as r:
             data = r.read(pdf.LIMIT + 1)
         if data[:5] != b"%PDF-" or len(data) > pdf.LIMIT:
@@ -660,7 +660,7 @@ def make_handler(jobs):
                         return self.json({"error": "no such PDF"}, 404)
                     if not engine.where():
                         return self.json({"error": "needs-engine"}, 409)
-                    name = json.loads((store.pdir(pid) / "meta.json").read_text(encoding="utf-8")).get("source", {}).get("name") or "document.pdf"
+                    name = json.loads(store.read_text(store.pdir(pid) / "meta.json")).get("source", {}).get("name") or "document.pdf"
                     return self.json(jobs.convert(pid, src, name, body.get("lang") or "en", tier, replace=True))
                 if u.path == "/api/jobs/stop":
                     job = jobs.stop(body.get("id", ""))
@@ -673,7 +673,7 @@ def make_handler(jobs):
                         pid = local.import_text(text, name)
                     except ValueError:
                         return self.json({"error": "not-markdown"}, 400)
-                    return self.json({"paper": pid, "title": json.loads((store.pdir(pid) / "meta.json").read_text(encoding="utf-8"))["title"]})
+                    return self.json({"paper": pid, "title": json.loads(store.read_text(store.pdir(pid) / "meta.json"))["title"]})
                 if u.path == "/api/export":   # the paper as one file, saved by the reader for themself
                     pid, lang = str(body.get("paper") or ""), str(body.get("lang") or "en")
                     if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():

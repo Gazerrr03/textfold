@@ -254,7 +254,7 @@ def _links_file():
 
 def links():
     try:
-        return {k: v["paper"] for k, v in json.loads(_links_file().read_text(encoding="utf-8")).items()}
+        return {k: v["paper"] for k, v in json.loads(store.read_text(_links_file())).items()}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
 
@@ -263,7 +263,7 @@ def link(lib, key, pid, title, record=None):
     f = _links_file()
     with _lock:
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
+            data = json.loads(store.read_text(f))
         except (OSError, ValueError):
             data = {}
         data[f"{lib}/{key}"] = {"paper": pid, "title": title, **({"record": record} if record else {})}
@@ -281,8 +281,8 @@ def apply(pid):
         return False
     mf = store.pdir(pid) / "meta.json"
     try:
-        data = json.loads(_links_file().read_text(encoding="utf-8"))
-        meta = json.loads(mf.read_text(encoding="utf-8"))
+        data = json.loads(store.read_text(_links_file()))
+        meta = json.loads(store.read_text(mf))
     except (OSError, ValueError):
         return False
     found = [(where, v) for where, v in data.items() if isinstance(v, dict) and v.get("paper") == pid and v.get("record")]
