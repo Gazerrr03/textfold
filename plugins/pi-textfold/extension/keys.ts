@@ -8,7 +8,7 @@
  *  The file lives in the agent dir next to the settings (a documented per-user
  *  place, no daemon, no account). Rows are validated on load: levels 1..5 only,
  *  values must look like pi key ids ("alt+..."), malformed rows are dropped. */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -31,6 +31,31 @@ export function sanitizeKeys(raw: unknown): KeysMap {
 		if (typeof value === "string" && /^alt\S+$/.test(value)) out[String(level)] = value;
 	}
 	return out;
+}
+
+/** The first-run pointer lives next to the keys file, so the test override
+ *  redirects it too and the suite never touches the user's home. */
+export function welcomeFile(file = keysFile()): string {
+	return join(dirname(file), "textfold-welcomed");
+}
+
+/** False when the marker is missing OR unreadable: doubt means "not welcomed". */
+export function hasBeenWelcomed(file = welcomeFile()): boolean {
+	try {
+		return existsSync(file);
+	} catch {
+		return false;
+	}
+}
+
+/** One silent write; an unwritable home must never break a session start. */
+export function markWelcomed(file = welcomeFile()): void {
+	try {
+		mkdirSync(dirname(file), { recursive: true });
+		writeFileSync(file, new Date().toISOString() + "\n");
+	} catch {
+		// a read-only home simply gets the pointer again next time
+	}
 }
 
 /** undefined means "no learned keys": a missing or unparseable file is not an error. */

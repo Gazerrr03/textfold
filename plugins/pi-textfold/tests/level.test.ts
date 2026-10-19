@@ -42,6 +42,16 @@ describe("levelRow", () => {
     expect(levelRow(4, 20, mark)).toBe("fold [4 Outline]");
     for (const width of [20, 40, 55, 70, 120]) expect(levelRow(5, width, { ...mark, current: (s) => s }).length).toBeLessThanOrEqual(width);
   });
+
+  test("taught keys show their own glyphs in the hint instead of lying about Alt+1…5", () => {
+    const taught = { "1": "alt+&", "2": "alt+2", "3": "alt+'", "4": "alt+4", "5": "alt+(" };
+    const row = levelRow(3, 200, mark, taught);
+    expect(row).toBe("fold  1 Full  2 Brief  [3 Points]  4 Outline  5 Gist  · Alt+&…(");
+  });
+
+  test("a partial teaching falls back to the default hint", () => {
+    expect(levelRow(3, 200, mark, { "1": "alt+&" })).toContain("· Alt+1…5");
+  });
 });
 
 describe("KEY", () => {

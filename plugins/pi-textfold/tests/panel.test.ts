@@ -50,6 +50,12 @@ describe("foldPanelLines", () => {
     const short = "Just one line.";
     expect(foldPanelLines(short, 3).join(" ")).toContain(short);
   });
+
+  test("taught keys name the panel's hint the way the row's does", () => {
+    const taught = { "1": "alt+&", "2": "alt+2", "3": "alt+'", "4": "alt+4", "5": "alt+(" };
+    expect(foldPanelLines("", 3, 78, taught)[0]).toBe("TextFold · Points (Alt+&..( / /fold N)");
+    expect(foldPanelLines(REPLY, 1, 78, taught)[0]).toBe("TextFold · Full (Alt+&..( / /fold N)");
+  });
 });
 
 describe("PANEL_KEY", () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { readFileSync, writeFileSync as fsWriteFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync as fsWriteFileSync } from "node:fs";
 import { ENTRY_TYPE } from "../extension/persist";
 
 const writeFileSync = (p: string, s: string) => fsWriteFileSync(p, s);
@@ -161,14 +161,57 @@ describe("a restart restores the level the branch ended on", () => {
 		expect(mk.render("textfold").join(" ")).toContain("4 Outline"); // the row marks the level read at
 	});
 
-	test("a fresh session starts at Full: no notify, no entry, no re-render", async () => {
+	// Per-process dir: the welcome marker persists on disk, so fixed paths would leak
+	// "already welcomed" from one run into the next.
+	const wt = (n: string) => `/tmp/textfold-wiring-${process.pid}/${n}/keys.json`;
+
+	test("a fresh session starts at Full: one welcome notice, no entry, no re-render", async () => {
+		// Behavior change, deliberate: a fresh session used to stay silent. Silence is
+		// what strands users whose terminal eats Alt+numbers, so the first session
+		// now says once how to check the keys and where to teach them.
+		process.env.TEXTFOLD_PI_KEYS_FILE = wt("fresh");
 		const textfold = await load();
 		const mk = makePi({ branch: [] });
 		textfold(mk.pi);
 		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
 		expect(mk.entries).toEqual([]);
-		expect(mk.notifications).toEqual([]);
+		expect(mk.notifications).toHaveLength(1);
+		expect(mk.notifications.join(" ")).toContain("/fold calibrate");
 		expect(mk.render("textfold").join(" ")).toContain("1 Full");
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("the welcome fires once: a second session_start stays silent", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = wt("once");
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		expect(mk.notifications).toHaveLength(1);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		mk.handler("session_start")({ reason: "resume" }, mk.ctx);
+		expect(mk.notifications).toHaveLength(1); // the marker, not the reason, decides
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("no welcome when keys are taught or the branch already folds", async () => {
+		// Taught keys: the user proved their keyboard works.
+		process.env.TEXTFOLD_PI_KEYS_FILE = wt("taught");
+		mkdirSync(`/tmp/textfold-wiring-${process.pid}/taught`, { recursive: true });
+		writeFileSync(wt("taught"), JSON.stringify({ "1": "alt+&" }));
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		expect(mk.notifications).toEqual([]);
+		// A branch that already folds: the user manages without the pointer.
+		process.env.TEXTFOLD_PI_KEYS_FILE = wt("folded");
+		const mk2 = makePi({ branch: [custom(3)] });
+		textfold(mk2.pi);
+		mk2.handler("session_start")({ reason: "startup" }, mk2.ctx);
+		expect(mk2.notifications.join(" ")).toContain("restored");
+		expect(mk2.notifications.join(" ")).not.toContain("calibrate");
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
 	});
 
 	test("a resume logs with any reason and restores just the same", async () => {

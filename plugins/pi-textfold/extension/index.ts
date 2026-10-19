@@ -16,7 +16,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { parseKey, type KeyId, type TUI } from "@earendil-works/pi-tui";
 import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
-import { keysFile, loadKeys, saveKeys, type KeysMap } from "./keys";
+import { hasBeenWelcomed, keysFile, loadKeys, markWelcomed, saveKeys, type KeysMap } from "./keys";
 import { guardDigit } from "./guard";
 import { foldPanelLines, PANEL_KEY } from "./panel";
 import { KEY, levelRow, parseLevelArg, type Level } from "./level";
@@ -92,7 +92,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 				screen = tui;
 				DEBUG?.("row installed");
 				const paint = { label: (s: string) => theme.fg("muted", s), current: (s: string) => theme.bold(theme.fg("accent", s)), other: (s: string) => theme.fg("dim", s) };
-				return { render: (width: number) => [` ${levelRow(level, width - 1, paint)}`], invalidate: () => {} };
+				return { render: (width: number) => [` ${levelRow(level, width - 1, paint, learnedKeys)}`], invalidate: () => {} };
 			},
 			{ placement: "aboveEditor" },
 		);
@@ -121,7 +121,17 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			ctx?.ui.notify(`TextFold level restored: ${levelName(restored)}`, "info");
 		}
 		install(ctx);
-		ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level));
+		ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level, 78, learnedKeys));
+		// First-run pointer: no taught keys and no level history means the reader
+		// never folded anything — exactly the user whose terminal may be eating
+		// Alt+numbers. One notice, once ever (marker file), naming the check and
+		// the fix; taught users and returning folders never see it.
+		if (ctx?.hasUI !== false && typeof ctx?.ui?.notify === "function"
+			&& !learnedKeys && !restored && !hasBeenWelcomed()) {
+			ctx.ui.notify("TextFold keys: try Alt+3 — if nothing folds, your terminal is eating Alt+numbers (in GNOME Terminal: Preferences → Shortcuts, disable Switch to Tab), or teach your own keys with /fold calibrate", "info");
+			markWelcomed();
+			DEBUG?.("welcomed");
+		}
 	});
 
 	// A new level folds every reply in place at once, the earlier ones too. Pi keeps each reply as it drew it
@@ -143,7 +153,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 		}
 		try {
 			ctx.ui.notify(`Fold: ${levelName(next)}`, "info");
-			const lines = foldPanelLines(lastAssistant, level);
+			const lines = foldPanelLines(lastAssistant, level, 78, learnedKeys);
 			ctx.ui.setWidget(PANEL_KEY, lines);
 			DEBUG?.(`panel set lines=${lines.length} head=${JSON.stringify((lines[0] ?? "").slice(0, 40))}`);
 			if (!screen) install(ctx);
@@ -163,7 +173,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 		const text = m.content.filter((b) => b?.type === "text" && b.text).map((b) => b.text).join("\n\n");
 		if (text) {
 			lastAssistant = text;
-			ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level));
+			ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level, 78, learnedKeys));
 		}
 	});
 
@@ -195,7 +205,8 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			}
 		}
 	};
-	registerLevelKeys(loadKeys());
+	let learnedKeys = loadKeys();
+	registerLevelKeys(learnedKeys);
 
 	// --textfold-digits's shortcuts: a digit changes the level when the prompt is
 	// empty and reinserts itself anywhere else, so the editor never swallows a pressed
@@ -235,8 +246,9 @@ export default function textfoldFold(pi: ExtensionAPI) {
 		await cmdCtx.ui.custom((tui, _theme, _kb, done) => {
 		const finish = (save: boolean): boolean => {
 			if (save) {
-				saveKeys(keysFile(), taught as KeysMap);
-				registerLevelKeys(loadKeys());
+			saveKeys(keysFile(), taught as KeysMap);
+				learnedKeys = loadKeys();
+				registerLevelKeys(learnedKeys);
 				const summary = levels
 					.map((n) => `${n}=${taught[String(n)] ?? `alt+${n}`}`)
 					.join("  ");

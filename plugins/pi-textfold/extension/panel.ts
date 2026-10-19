@@ -9,19 +9,20 @@
  * shows the reply's own fold, before any reply from a restart's restore onward.
  */
 import { fold, LEVELS, worthFolding } from "./fold";
-import type { Level } from "./level";
+import { hintForKeys, type Level } from "./level";
 
 export const PANEL_KEY = "textfold-preview";
 
 /** The lines of the preview panel for `markdown` folded to `level`: header, blank, folded
  *  text. An empty `markdown` still renders the header (with a placeholder), so a resumed
  *  session shows the restored level before any reply arrives. */
-export function foldPanelLines(markdown: string, level: number, width = 78): string[] {
+export function foldPanelLines(markdown: string, level: number, width = 78, keys?: Record<string, string>): string[] {
 	if (level < 1 || level > 5) return [];
-	if (!markdown) return [`TextFold · ${LEVELS[level - 1]} (Alt+1..5 / /fold N)`, "", "…"];
+	const hint = `(${hintForKeys(keys).replace("…", "..")} / /fold N)`;
+	if (!markdown) return [`TextFold · ${LEVELS[level - 1]} ${hint}`, "", "…"];
 	const f = fold(markdown, level);
 	const shown = worthFolding(markdown, f.text) ? f.text : markdown;
-	return [`TextFold · ${LEVELS[level - 1]} (Alt+1..5 / /fold N)`, "", ...wrapText(shown || "…", width)];
+	return [`TextFold · ${LEVELS[level - 1]} ${hint}`, "", ...wrapText(shown || "…", width)];
 }
 
 /** Word-wrap plain text (the fold writes no ANSI) to at most `width` columns,
