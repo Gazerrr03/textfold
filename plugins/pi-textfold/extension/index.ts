@@ -17,6 +17,7 @@ import type { KeyId, TUI } from "@earendil-works/pi-tui";
 import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
 import { guardDigit } from "./guard";
+import { foldPanelLines, PANEL_KEY } from "./panel";
 import { KEY, levelRow, parseLevelArg, type Level } from "./level";
 import { ENTRY_TYPE, levelEntryDraft, restoredLevel } from "./persist";
 
@@ -57,6 +58,10 @@ export default function textfoldFold(pi: ExtensionAPI) {
 	// restored from the session's branch so a resumed session continues where the reader
 	// left off (C1). Restore writes nothing: the level is already on disk.
 	let level: Level = 1;
+	// The latest settled assistant reply, for the preview panel: it shows the fold of
+	// this, at the level in force, re-rendered on every level change (the widget
+	// re-renders its content unconditionally, unlike the cached transcript).
+	let lastAssistant = "";
 
 	// The style section, appended as a structured prompt section so the session
 	// records a delta instead of a replaced prompt.
@@ -115,6 +120,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			ctx?.ui.notify(`TextFold level restored: ${levelName(restored)}`, "info");
 		}
 		install(ctx);
+		ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level));
 	});
 
 	// A new level folds every reply in place at once, the earlier ones too. Pi keeps each reply as it drew it
@@ -131,10 +137,23 @@ export default function textfoldFold(pi: ExtensionAPI) {
 			DEBUG?.(`append failed: ${(e as Error)?.message ?? String(e)}`);
 		}
 		ctx.ui.notify(`Fold: ${levelName(next)}`, "info");
+		ctx.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level));
 		if (!screen) install(ctx);
 		screen?.invalidate();
 		screen?.requestRender(true);
 	};
+
+	// The latest settled assistant reply feeds the preview panel.
+	pi.on("message_end", (event, ctx) => {
+		const m = event.message as { role?: string; content?: Array<{ type?: string; text?: string }> };
+		DEBUG?.(`message_end role=${m?.role} blocks=${Array.isArray(m?.content) ? m.content.length : -1}`);
+		if (m?.role !== "assistant" || !Array.isArray(m.content)) return;
+		const text = m.content.filter((b) => b?.type === "text" && b.text).map((b) => b.text).join("\n\n");
+		if (text) {
+			lastAssistant = text;
+			ctx?.ui.setWidget(PANEL_KEY, foldPanelLines(lastAssistant, level));
+		}
+	});
 
 	// Alt+1..Alt+5. Not plain digits: Pi dispatches extension shortcuts before the
 	// editor sees any input, so registered 1..5 would swallow typed digits.

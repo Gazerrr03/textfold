@@ -250,6 +250,43 @@ describe("--textfold-digits registers plain digits from session_start, not the f
 	});
 });
 
+describe("the preview panel shows the fold before any reply and with it", () => {
+	const reply = "## Head one\n\n" + "This is a longish paragraph whose point comes first when folded. ".repeat(4);
+
+	test("the panel is installed at session start: header for the level read at, and an ellipsis for no reply yet", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		const lines = mk.render("textfold-preview");
+		expect(lines[0]).toContain("TextFold · Full");
+		expect(lines.join(" ")).toContain("…");
+	});
+
+	test("an assistant reply refreshes the panel content: the fold, not just the header", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		mk.handler("message_end")({ message: { role: "assistant", content: [{ type: "text", text: reply }] } }, mk.ctx);
+		mk.press("alt+3");
+		const lines = mk.render("textfold-preview");
+		expect(lines[0]).toContain("TextFold · Points");
+		expect(lines.join(" ")).toContain("Head one"); // real fold content, not the ellipsis
+		expect(lines).not.toContain("…");
+	});
+
+	test("the row and the panel are distinct widgets, both present after a session start", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.handler("session_start")({ reason: "startup" }, mk.ctx);
+		expect(mk.widgets.has("textfold")).toBe(true);
+		expect(mk.widgets.has("textfold-preview")).toBe(true);
+		expect(mk.render("textfold").join(" ")).toContain("1 Full");
+	});
+});
+
 describe("what the extension registers", () => {
 	test("alt keys, the fold command, the transformer, and the two handlers", async () => {
 		const textfold = await load();
