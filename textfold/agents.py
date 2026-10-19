@@ -288,18 +288,66 @@ def workbuddy_app(path):
     return None
 
 
-_BY_NODE = {}   # WorkBuddy copies its app's program would not run (a later version, say), run by node instead
+FUSE_WIRE = b"dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX"   # Electron's fuses: this, a version byte, a count, a byte a fuse ('1' on)
+
+
+def _runs_as_node(exe):
+    """Will the app's Electron run a script as node (ELECTRON_RUN_AS_NODE)? Its RunAsNode fuse, the first, read from
+    the binary that carries the fuses (a Mac's Electron Framework, Windows' program itself) without running anything:
+    an app that turned it off would open its window instead. No fuses at all: an Electron that has none, which does."""
+    import mmap
+    exe = Path(exe)
+    if WIN:
+        files = [exe]
+    else:
+        frameworks = exe.parent.parent / "Frameworks" / "Electron Framework.framework"
+        files = [x for x in (frameworks / "Versions" / "A" / "Electron Framework", frameworks / "Electron Framework") if x.is_file()] or [exe]
+    for f in files:
+        try:
+            with open(f, "rb") as fp, mmap.mmap(fp.fileno(), 0, access=mmap.ACCESS_READ) as m:
+                i = m.find(FUSE_WIRE)
+                if i >= 0:
+                    j = i + len(FUSE_WIRE)
+                    return m[j + 1] > 0 and m[j + 2] == ord("1")
+        except (OSError, ValueError):
+            continue
+    return True
+
+
+def _workbuddy_node():
+    """The node WorkBuddy brings along (~/.workbuddy/binaries/node/versions/<v>/bin/node, node.exe on Windows), the
+    newest, or None."""
+    conf = Path(os.environ.get("WORKBUDDY_CONFIG_DIR") or HOME / ".workbuddy")
+    found = glob.glob(str(conf / "binaries" / "node" / "versions" / "*" / "bin" / "node")) + \
+        glob.glob(str(conf / "binaries" / "node" / "versions" / "*" / "node.exe"))
+    found = [x for x in found if os.path.isfile(x)]
+    return max(found, key=_version_key) if found else None
+
+
+def workbuddy_runners(path):
+    """What may run WorkBuddy's copy of CodeBuddy found at `path`, the safest first: the node WorkBuddy brings along,
+    node on this computer, the app's own program as node (as WorkBuddy runs it) when its fuse lets it; [] for a
+    codebuddy that runs itself (one installed on its own, a native one)."""
+    if Path(path).name not in ("codebuddy", "codebuddy.js"):
+        return []
+    app = workbuddy_app(path)
+    if not app:
+        return []
+    out = [_workbuddy_node(), shutil.which("node", path=os.pathsep.join(search_dirs()))]
+    if _runs_as_node(app[1]):
+        out.append(app[1])
+    return list(dict.fromkeys(x for x in out if x))
+
+
+_RUNNER = {}   # the runner that answered for each WorkBuddy copy (_runs)
 
 
 def workbuddy_runner(path):
-    """What runs WorkBuddy's copy of CodeBuddy found at `path`: the app's program as node (as WorkBuddy runs it), node
-    where that did not; None for a codebuddy that runs itself (one installed on its own, a native one)."""
-    if Path(path).name not in ("codebuddy", "codebuddy.js"):
-        return None
-    if path in _BY_NODE:
-        return _BY_NODE[path]
-    app = workbuddy_app(path)
-    return app[1] if app else None
+    """What runs WorkBuddy's copy of CodeBuddy found at `path`: the one that answered, else the safest there is."""
+    if path in _RUNNER:
+        return _RUNNER[path]
+    runners = workbuddy_runners(path)
+    return runners[0] if runners else None
 
 
 # CodeBuddy as WorkBuddy runs it: no memory, no reminders, no suggestions, no repository scan (also ~400 tokens a call
@@ -331,8 +379,8 @@ _SHIM = re.compile(r'"%~?dp0%?\\([^"]+\.[cm]?js)"\s+%\*')
 def argv(path):
     """The command that runs an agent found at `path`. On Windows npm's shim (claude.cmd) would hand its arguments to
     cmd.exe, which ends a multi-line system prompt at its first line break and reads its quotes and carets: the
-    script the shim names is run by node instead. WorkBuddy's copy of CodeBuddy is run by the app's Electron (as node:
-    env_for)."""
+    script the shim names is run by node instead. WorkBuddy's copy of CodeBuddy is run by node (WorkBuddy's own,
+    else this computer's) or by the app's Electron as node (workbuddy_runner, env_for)."""
     runner = workbuddy_runner(path)
     if runner:
         return [runner, path]
@@ -372,21 +420,20 @@ def codebuddy_candidates():
 
 
 def _runs(path):
-    """Does the CodeBuddy at `path` answer --version? WorkBuddy's copy on the app's program first, else on node."""
+    """Does the CodeBuddy at `path` answer --version? For WorkBuddy's copy each runner in turn (workbuddy_runners): the
+    first that answers is the one it runs on."""
     def ok(args):
         try:
             r = _run(args, 10, env_for(path))
             return r.returncode == 0 and bool(re.search(r"\d+\.\d+", r.stdout))
         except Exception:
             return False
-    if ok([*argv(path), "--version"]):
-        return True
-    node = shutil.which("node", path=os.pathsep.join(search_dirs()))
-    if node and workbuddy_app(path) and path not in _BY_NODE:
-        _BY_NODE[path] = node
-        if ok([node, path, "--version"]):
+    if not workbuddy_app(path):
+        return ok([*argv(path), "--version"])
+    for runner in workbuddy_runners(path):
+        if ok([runner, path, "--version"]):
+            _RUNNER[path] = runner
             return True
-        _BY_NODE.pop(path, None)
     return False
 
 

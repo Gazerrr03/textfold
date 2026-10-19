@@ -53,6 +53,8 @@ elif "-p" in args:
 # the app's Electron: as node only when asked to be (else it would open the app), it runs the script it is given
 ELECTRON = '''\
 import os, subprocess, sys
+if os.environ.get("FAKE_ELECTRON_MARK"):
+    open(os.environ["FAKE_ELECTRON_MARK"], "a").close()
 if os.environ.get("ELECTRON_RUN_AS_NODE") != "1" or os.environ.get("FAKE_ELECTRON_BROKEN"):
     sys.exit("the app would open")
 sys.exit(subprocess.run([sys.executable, *sys.argv[1:]]).returncode)
@@ -96,8 +98,15 @@ class CodeBuddy(unittest.TestCase):
         os.environ.pop("FAKE_SLOW_ONCE", None)
         os.environ.pop("FAKE_SIGNED_OUT_WB", None)
         os.environ.pop("FAKE_ELECTRON_BROKEN", None)
-        agents._BY_NODE.clear()
-        self.addCleanup(agents._BY_NODE.clear)
+        os.environ.pop("FAKE_ELECTRON_MARK", None)
+        agents._RUNNER.clear()
+        self.addCleanup(agents._RUNNER.clear)
+
+    def fuses(self, run_as_node):
+        """The app's Electron Framework with its fuse wire: RunAsNode on or off."""
+        fw = self.app / "Contents" / "Frameworks" / "Electron Framework.framework" / "Versions" / "A" / "Electron Framework"
+        fw.parent.mkdir(parents=True, exist_ok=True)
+        fw.write_bytes(b"\0" * 64 + agents.FUSE_WIRE + bytes([1, 8]) + (b"1" if run_as_node else b"0") + b"0110001" + b"\0" * 64)
 
     def calls(self):
         return [json.loads(x) for x in self.log.read_text(encoding="utf-8").splitlines()] if self.log.exists() else []
@@ -120,15 +129,39 @@ class CodeBuddy(unittest.TestCase):
         self.assertEqual(agents.find_cli(self.app), [str(moved)])   # (node_modules not looked through)
         self.assertEqual(agents.workbuddy_runner(str(moved)), str(self.electron))
 
-    def test_node_where_the_apps_program_does_not_run_it(self):
-        node = script(self.tmp / "npm" / "bin" / "node", NODE)
-        with mock.patch.dict(os.environ, {"FAKE_ELECTRON_BROKEN": "1"}), \
-                mock.patch.object(agents, "workbuddy_roots", return_value=[str(self.app)]):
+    def test_the_safest_runner_first(self):
+        roots = mock.patch.object(agents, "workbuddy_roots", return_value=[str(self.app)])
+        with roots:
+            own = script(self.home / ".workbuddy" / "binaries" / "node" / "versions" / "22.22.2" / "bin" / "node", NODE)
             self.assertEqual(agents.locate_codebuddy(), str(self.cli))
-            self.assertEqual(agents.argv(str(self.cli)), [str(node), str(self.cli)])
+            self.assertEqual(agents.argv(str(self.cli)), [str(own), str(self.cli)])   # the node WorkBuddy brings along
+            own.unlink()
+            agents._RUNNER.clear()
+            node = script(self.tmp / "npm" / "bin" / "node", NODE)
+            self.assertEqual(agents.locate_codebuddy(), str(self.cli))
+            self.assertEqual(agents.argv(str(self.cli)), [str(node), str(self.cli)])   # this computer's
             node.unlink()
-            agents._BY_NODE.clear()
-            self.assertEqual(agents.locate_codebuddy(), str(self.alone))   # neither runs it: the one installed on its own
+            agents._RUNNER.clear()
+            self.assertEqual(agents.locate_codebuddy(), str(self.cli))
+            self.assertEqual(agents.argv(str(self.cli)), [str(self.electron), str(self.cli)])   # the app's, as node
+
+    def test_the_apps_program_never_run_when_its_fuse_is_off(self):
+        mark = self.tmp / "electron-ran"
+        self.fuses(run_as_node=False)
+        with mock.patch.object(agents, "workbuddy_roots", return_value=[str(self.app)]), \
+                mock.patch.dict(os.environ, {"FAKE_ELECTRON_MARK": str(mark)}):
+            self.assertEqual(agents.workbuddy_runners(str(self.cli)), [])
+            self.assertEqual(agents.locate_codebuddy(), str(self.alone))   # the one installed on its own
+            self.assertFalse(mark.exists())   # (it would have opened the app's window)
+            self.fuses(run_as_node=True)
+            self.assertEqual(agents.workbuddy_runners(str(self.cli)), [str(self.electron)])
+            self.assertEqual(agents.locate_codebuddy(), str(self.cli))
+
+    def test_the_one_on_its_own_when_no_runner_answers(self):
+        self.fuses(run_as_node=True)
+        with mock.patch.object(agents, "workbuddy_roots", return_value=[str(self.app)]), \
+                mock.patch.dict(os.environ, {"FAKE_ELECTRON_BROKEN": "1"}):
+            self.assertEqual(agents.locate_codebuddy(), str(self.alone))
 
     def test_run_as_workbuddy_runs_it(self):
         path = str(self.cli)
@@ -289,7 +322,8 @@ class Places(unittest.TestCase):
                                               (["One.exe", "Two.exe"], None), ([], None))):
                 root = self.tmp / f"WorkBuddy-{n}"
                 cli = self.windows_app(root, *exes)
-                self.assertEqual(agents.workbuddy_runner(str(cli)), str(root / want) if want else None, exes)
+                app = agents.workbuddy_app(str(cli))
+                self.assertEqual(app and app[1], str(root / want) if want else None, exes)
             other = self.windows_app(self.tmp / "SomeApp", "SomeApp.exe")   # another Electron app's CodeBuddy: not WorkBuddy's
             self.assertIsNone(agents.workbuddy_app(str(other)))
 
