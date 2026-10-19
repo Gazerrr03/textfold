@@ -36,7 +36,7 @@ def spawn(args, cwd):
 mode_specs = {
     "base":   ({"bin": "base"}, os.path.expanduser("~")),
     "digits": ({"bin": "digits"}, os.path.expanduser("~")),
-    "resume": ({"bin": "resume"}, os.path.expanduser("~/freebuff-connector")),
+    "resume": ({"bin": "resume"}, os.path.expanduser("~")),  # same project as the base session, or pi offers to fork
 }
 ART_KEYS, cwd = mode_specs[mode]
 
@@ -76,8 +76,9 @@ if mode == "base":
     os.write(fd, b"/fold off\r"); read_for(3)
     t3 = clean(buf)
     checks.append(("/fold off -> Full", "Fold: Full" in t3))
-    # the real prompt: one model turn, then Alt+3 so the entry reaches disk
-    os.write(fd, b"Write one short sentence about structure.\r")
+    # the real prompt: a reply long enough to fold (short replies stay whole),
+    # then Alt+3 so the entry reaches disk
+    os.write(fd, b"Write two short paragraphs about why reading less but keeping structure is good.\r")
     end = time.time() + 120
     while time.time() < end:
         n = len(buf); read_for(2)
