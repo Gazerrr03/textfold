@@ -14,11 +14,14 @@ English-only sentence splitter, and each is held here so it cannot come back:
 Run from the repo root:
     python3 -m unittest discover tests
 """
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
-from textfold import ladder
+from textfold import ladder, local, store
 from textfold.parse import cjk_heavy
-from textfold.tokens import split_sentences, tokenize_text
+from textfold.tokens import plain, split_sentences, tokenize_text
 
 CJK_SENTENCES = "金融机构应当履行反洗钱义务。客户身份资料应当保存五年！是否合规？"
 EN_SENTENCES = "The first sentence. The second one! And a third?"
@@ -43,6 +46,11 @@ class TestSplitSentences(unittest.TestCase):
 
     def test_english_is_unchanged(self):
         self.assertEqual(len(spans(EN_SENTENCES)), 3)
+
+    def test_a_number_opening_a_heading_stays_with_it(self):
+        self.assertEqual(spans("1.研究背景与意义。本文讨论第三方支付。"), ["1.研究背景与意义。", "本文讨论第三方支付。"])
+        toks = tokenize_text("1. Introduction. We test it.")
+        self.assertEqual([plain(toks[a:b], {}) for a, b in split_sentences(toks)], ["1.", "Introduction.", "We test it."])   # (as before)
 
 
 class TestParagraphsStayWhole(unittest.TestCase):
@@ -83,7 +91,8 @@ class TestTakeawayDensity(unittest.TestCase):
     def doc_of(self, *units):
         doc = {"atoms": {}, "units": {}}
         for i, (role, take) in enumerate(units):
-            u = {"role": role, "ev": [0], "brief": [{"t": c} for c in take], "tn": len(take), "topic": []}
+            u = {"role": role, "ev": [0], "brief": [{"t": c} for c in take], "tn": len(take), "topic": [],
+                 "toks": [{"t": c} for c in take]}   # (the unit's own text: the document's script is read from it)
             u["lad"] = u
             doc["units"][f"u{i}"] = u
         return doc
@@ -136,7 +145,7 @@ class TestTakeawayDensity(unittest.TestCase):
 
 
 class TestDress(unittest.TestCase):
-    """dress(): the sentence a page break cut in half, and the background Brief leaves out."""
+    """dress(): the sentence a page break cut in half."""
 
     def unit(self, text, role="context", tn=1):
         toks = [{"t": c} for c in text]
@@ -174,12 +183,6 @@ class TestDress(unittest.TestCase):
                          self.unit("员，并且在提交材料时需核实。"))
         self.assertIn("工作人", doc["units"]["u2"]["lad"]["glue"])
 
-    def test_a_unit_that_opens_with_an_item_number_is_left_out_of_brief(self):
-        doc = self.dress(self.unit("以下是六项条件。"), self.unit("四是具有交易真实性审核能力。"),
-                         self.unit("五是具有一定数量的熟悉外汇业务人员。"))
-        self.assertFalse(doc["units"]["u1"]["lad"].get("l3", True))
-        self.assertFalse(doc["units"]["u2"]["lad"].get("l3", True))
-
     def test_a_short_tail_carries_the_sentence_it_belongs_to(self):
         """最后一个小句太短（「…财务状况的」），只带它读者看到半句：整句带过去，而且后面那句也一起显示。"""
         doc = self.dress(self.unit("在对资本要求的动态监管方面，还有对于第三方支付机构财务状况的"),
@@ -188,16 +191,60 @@ class TestDress(unittest.TestCase):
         self.assertTrue(lad["glue"].startswith("在对资本要求"))
         self.assertIn(1, lad["ev"])
 
-    def test_an_item_that_opens_with_the_section_takeaway_gives_way(self):
-        """条目就是本节摘要那句话再加个理由：摘要已经说过，简述级不再并排重复一遍。"""
-        u = self.unit("本节的主张就是这样，后面还有理由。", tn=0)
-        u["lad"]["brief"] = [{"t": c} for c in "本节的主张就是这样，后面还有理由。"]
-        doc = self.dress(u, stake="本节的主张就是这样")
-        self.assertFalse(doc["units"]["u0"]["lad"].get("l3", True))
 
-    def test_the_only_unit_a_section_has_stays_even_when_folded_down(self):
-        doc = self.dress(self.unit("这一节只有这一句。", tn=0))
-        self.assertNotEqual(doc["units"]["u0"]["lad"].get("l3"), False)
+class TestEnglishAsBefore(unittest.TestCase):
+    """The CJK rules are a CJK document's only: an English paper gets the prompt it got, the same no-model levels,
+    no apparatus, no glue and nothing new for the reader."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        data = mock.patch.object(store, "DATA", Path(tmp.name))
+        data.start()
+        self.addCleanup(data.stop)
+
+    def doc(self, text):
+        return store.assemble(local.import_text(text))
+
+    def test_the_english_prompt(self):
+        doc = self.doc("# A paper\n\nWe sum over i = 1, ..., N to get the loss. It holds.\n")
+        prompt = ladder.prompt_for(doc, next(c for c in doc["chunks"] if c["units"]))
+        self.assertIn("ONE English sentence of at most 14 words", prompt)
+        self.assertIn("ONE sentence of at most 16 words stating what this section establishes in the text; topic, at most 3 words", prompt)   # (a text, not a paper: kinds.adapt)
+        self.assertNotIn("Each line is read on its own", prompt)
+        self.assertIn("no em or en dashes", prompt)
+        self.assertNotIn("cjk", doc["meta"])
+
+    def test_the_chinese_prompt(self):
+        doc = self.doc("# 中文测试\n\n" + ARGUMENT + "这是第二句。\n")
+        prompt = ladder.prompt_for(doc, next(c for c in doc["chunks"] if c["units"]))
+        self.assertIn("Each line is read on its own", prompt)
+        self.assertIn("ONE sentence of at most 40 characters", prompt)
+        self.assertTrue(doc["meta"]["cjk"])
+
+    def test_an_english_unit_with_an_ellipsis_still_folds(self):
+        doc = self.doc("# A paper\n\nWe sum over i = 1, ..., N to get the loss.\n")
+        u = next(iter(doc["units"].values()))
+        self.assertTrue(apparatus(plain_text := "We sum over i = 1, ..., N to get the loss."), plain_text)   # (alone it reads as dot leaders)
+        self.assertTrue(ladder.local(u, doc["atoms"], False)["brief"])
+        o = {"takeaway": "The loss sums over all items", "topic": "loss", "reason": "", "evidence": [0]}
+        self.assertTrue(ladder.assemble(u, o, doc["atoms"], "m", False)["brief"])
+
+    def test_without_a_model_the_first_sentence(self):
+        doc = self.doc("# A paper\n\nA short first one. Then: a second sentence that has a colon in it.\n")
+        u = next(iter(doc["units"].values()))
+        lad = ladder.local(u, doc["atoms"], False)
+        s, e = u["sents"][0]
+        self.assertEqual([tk.get("m") for tk in lad["brief"]], list(range(s, e)))
+
+    def test_an_english_section_is_not_dressed(self):
+        doc = self.doc("# A paper\n\nWe define the loss as\n\nthe sum of the errors, which we minimise.\n")
+        for u in doc["units"].values():
+            u["lad"] = ladder.local(u, doc["atoms"], False)
+        chunk = next(c for c in doc["chunks"] if c["units"])
+        ladder.dress(chunk, doc)
+        for u in doc["units"].values():
+            self.assertNotIn("glue", u["lad"])
 
 
 if __name__ == "__main__":

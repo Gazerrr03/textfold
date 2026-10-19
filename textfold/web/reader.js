@@ -40,11 +40,14 @@
   let ui = I18N.uiFor(readerLang);
   const AVAIL = (D.meta.langs && D.meta.langs.length) ? D.meta.langs : ['en'];
   const STALE = new Set(D.meta.stale || []);
+  // a document in Chinese or Japanese (store.assemble): the CJK rules below are its only, an English paper reads as before
+  const CJK_DOC = !!D.meta.cjk;
   const trOf = (x) => (lang !== 'en' && x && x.tr && x.tr[lang]) || null;   // a unit's or chunk's translation, if any
 
   const perf = (name, t0) => { if (window.__drPerf) window.__drPerf.push([name, Math.round((performance.now() - t0) * 10) / 10]); };
   const docEl = document.getElementById('doc');
   docEl.classList.add('doc');   // the page's CSS speaks of .doc, which the keyframes' sandbox is too
+  if (CJK_DOC) docEl.classList.add('cjk');
   const ghostEl = document.getElementById('ghosts');
   let level = 4;
   let lang = 'en';
@@ -64,10 +67,9 @@
     const u = U[uid];
     const z = trOf(u);
     const l = z ? z.lad : u.lad;
-    // glue: the half of a sentence a page break left in the unit before this one; l3 === false: background the
-    // section already summarises, kept out of Brief so it does not read as a list of documents and years
-    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, l3: l.l3, p: `${lang}~` };
-    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, l3: l.l3, p: '' };
+    // glue: the half of a sentence a page break left in the unit before this one (ladder.dress)
+    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, p: `${lang}~` };
+    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, p: '' };
   }
 
   // ── pieces: what a unit shows at a level ─────────────────────────────
@@ -82,7 +84,6 @@
       out = [];
       v.sents.forEach(([a, b], s) => { for (let i = a; i < b; i++) out.push({ id: p + i, i, tok: v.toks[i], lead: ev.has(s) }); });
     } else if (L === 3) {
-      if (v.l3 === false) return [];   // background its section already summarises: Brief would only list documents
       const keep = new Set(v.brief.filter((t) => t.m !== undefined).map((t) => t.m));
       out = [];
       let prevEnd = null;
@@ -91,6 +92,7 @@
         const [a, b] = v.sents[s];
         if (prevEnd !== null && a !== prevEnd) out.push({ id: `${p}gap${s}`, gap: true });
         for (let i = a; i < b; i++) {
+          if (!CJK_DOC) { out.push({ id: p + i, i, tok: v.toks[i], lead: keep.has(i) }); continue; }
           const raw = v.toks[i], txt = raw && raw.t !== undefined ? raw.t : raw;
           // a CJK footnote marker (①-⑩, ⑴-⒑, ⒈-⒑) glued into a sentence: dropped for display; a token that is
           // nothing but markers is not rendered at all (Full keeps the text as written). † ‡ § ¶ are left alone:
@@ -118,7 +120,8 @@
         // topic words carry k, the takeaway word they slide from; a topic the model phrased itself may have none
         const inTopic = new Set(v.topic.map((t) => t.k).filter((k) => k !== undefined));
         out = brief.slice(0, v.tn).map((x, j) => ({ ...x, lead: inTopic.has(j) }));
-      } else out = v.topic.map((t, j) => ({ id: t.k !== undefined ? brief[t.k].id : `${p}t${j}`, i: t.k !== undefined ? brief[t.k].i : undefined, tok: t, lead: true }));
+      } else if (CJK_DOC && !v.tn) out = [];   // a takeaway that stepped down (ladder.fold_background): its topic with it
+      else out = v.topic.map((t, j) => ({ id: t.k !== undefined ? brief[t.k].id : `${p}t${j}`, i: t.k !== undefined ? brief[t.k].i : undefined, tok: t, lead: true }));
       if (mine && L > 0) {   // the reader's passages after the written line, in the author's words (same ids: they stay put)
         const used = new Set(out.map((x) => x.id));
         let prev = null;
@@ -189,15 +192,16 @@
   // the drawing itself, into the unit's element (or a copy of it: the keyframes' sandbox)
   function drawUnit(uid, L, el, map, hot) {
     el.dataset.l = L;
-    const pcs = pieces(uid, L);
-    if (!pcs.length && L < 4) { el.hidden = true; el._tx.replaceChildren(); return; }   // an apparatus unit (footnote, contents line): not shown at all when folded, as written at Full
-    el.hidden = false;
+    if (CJK_DOC) {   // an apparatus unit (footnote, contents line): not shown at all when folded, as written at Full
+      el.hidden = L < 4 && !pieces(uid, L).length;
+      if (el.hidden) { el._tx.replaceChildren(); return; }
+    }
     if (!hot) {
       el._tx.innerHTML = textHtml(uid, L);
       if (el._tx.querySelector('.texsrc')) texify(el._tx);
       return;
     }
-    const frag = document.createDocumentFragment();
+    const pcs = pieces(uid, L), frag = document.createDocumentFragment();
     let group = null;
     pcs.forEach((p, n) => {
       let s = map.get(p.id);
@@ -345,7 +349,7 @@
         // An empty section whose title is a reference itself ([EB/OL], a URL): the converter read a footnote as a
         // section heading. Full keeps it as written; every folded level drops the section, or Takeaway shows a
         // block of quoted text where a heading should be
-        const ref = !c.units.length && /\[[A-Za-z]+\/OL\]|https?:\/\//.test(c.title || '');
+        const ref = CJK_DOC && !c.units.length && /\[[A-Za-z]+\/OL\]|https?:\/\//.test(c.title || '');
         const cur = h('section', `chunk l${c.level}${c.units.length ? '' : ' empty'}${ref ? ' ref' : ''}`);
         cur.dataset.chunk = c.id; cur.id = c.id;
         const hd = h('h2', 'hd'); hd.dataset.id = `h:${c.id}`;
@@ -460,8 +464,11 @@
   function renderStake(c, st) {
     const lad = (trOf(c) && trOf(c).lad) || c.lad;
     st.replaceChildren();
-    if (!lad || !lad.take.length) { st.hidden = true; return; }   // no section stake: leave no empty row
-    st.hidden = false;
+    if (CJK_DOC) {   // no section stake: leave no empty row
+      st.hidden = !lad || !lad.take.length;
+      if (st.hidden) return;
+    }
+    if (!lad) return;
     const mk = stakeMarks(c.id);
     lad.take.forEach((tk, i) => {
       const s = tokEl(tk, `${lad.topic.includes(i) ? 'lead' : ''}${mk && mk.has(i) ? ' hl' : ''}`);
@@ -1163,7 +1170,7 @@
       for (const c of node.children) { const k = copy(c); if (k) { el.append(k); any = true; } }
       return any || node.tagName === 'SECTION' || cl.contains('chunks') ? el : null;
     }
-    const root = h('div', 'doc');
+    const root = h('div', CJK_DOC ? 'doc cjk' : 'doc');
     root.dataset.level = L;
     for (const c of docEl.children) { const k = copy(c); if (k) root.append(k); }
     return { root, units, heads };

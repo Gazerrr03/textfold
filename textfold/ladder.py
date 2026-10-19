@@ -142,6 +142,13 @@ def budgets_for(doc):
     return CJK_BUDGET if _cjk_share(text) > 0.2 else BUDGET
 
 
+def cjk_doc(doc):
+    """A document written in Chinese or Japanese. Only such a document takes the CJK rules (budgets in characters,
+    apparatus, the section's background, the half sentence a page break left): a paper in English folds as it did
+    before them, the same prompt and the same levels."""
+    return budgets_for(doc) is CJK_BUDGET
+
+
 def outline(doc, here):
     rows = []
     for c in doc["chunks"]:
@@ -176,6 +183,18 @@ def prompt_for(doc, chunk):
     one = "ONE sentence" if cjk else "ONE English sentence"
     more = "ONE more sentence" if cjk else "ONE more English sentence"
     count = "characters" if cjk else "words"
+    rules = """
+
+Each line is read on its own, out of order, by someone deciding whether to zoom back in:
+- Never supply a fact the unit does not contain: no name, standard, system, number or date of your own. When it writes "the cross-border payment system", write that, not the name of one particular system.
+- The line must stand alone: do not open it with 该, 此, 其, 上述, this, these or it. Name the thing again.
+- A term a non-specialist would not know is glossed in eight characters or fewer where it first appears.
+- Keep every number the point depends on, each with its anchor: what it counts, in which year, for whom.
+- A process is who acts, through which channel, to whom. A bare sequence of steps is not a takeaway.
+- The reason sentence gives the mechanism or the consequence, not where the claim comes from: not "supported by X", not "as Y shows", unless the source itself is the finding.""" if cjk else ""
+    job = ("stating what this section establishes in the paper and what it does there (fixes the terms, surveys the rules, "
+           "measures the gap, compares a foreign regime, proposes a remedy); a line that only says what the section covers "
+           "is not a summary.") if cjk else "stating what this section establishes in the paper;"
     abstract = " ".join(plain(U[u]["toks"], A) for u in doc["chunks"][0]["units"]) if doc["chunks"] and doc["chunks"][0]["id"] == "abstract" else ""
     blocks = []
     for n, uid in enumerate(chunk["units"]):
@@ -212,17 +231,9 @@ For each unit:
 - takeaway: {one} of at most {b['takeaway']} {count} stating what this unit establishes: the claim, design choice, number or finding itself, conclusion first, packed like a headline. Name the thing itself, not the activity ("this paragraph describes", "the authors discuss", "details of"). Keep the paper's own terms. Someone reading only the takeaways of the whole paper in order should be able to follow its argument.
 - topic: the unit's subject as a bare noun phrase of at most {b['topic']} {count}, copied VERBATIM from inside the takeaway.
 - reason: {more} of at most {b['reason']} {count} that reads on from the takeaway and gives its main reason, mechanism, condition or consequence; do not restate the takeaway. Use "" when the unit is a single short sentence.
-- evidence: the numbers of the 1 or 2 sentences (3 only when the unit has 7 or more) whose verbatim text best backs the takeaway, ascending; prefer sentences that state a result, a definition or a decision over sentences that only set up or list.
+- evidence: the numbers of the 1 or 2 sentences (3 only when the unit has 7 or more) whose verbatim text best backs the takeaway, ascending; prefer sentences that state a result, a definition or a decision over sentences that only set up or list.{rules}
 
-Each line is read on its own, out of order, by someone deciding whether to zoom back in:
-- Never supply a fact the unit does not contain: no name, standard, system, number or date of your own. When it writes "the cross-border payment system", write that, not the name of one particular system.
-- The line must stand alone: do not open it with 该, 此, 其, 上述, this, these or it. Name the thing again.
-- A term a non-specialist would not know is glossed in eight characters or fewer where it first appears.
-- Keep every number the point depends on, each with its anchor: what it counts, in which year, for whom.
-- A process is who acts, through which channel, to whom. A bare sequence of steps is not a takeaway.
-- The reason sentence gives the mechanism or the consequence, not where the claim comes from: not "supported by X", not "as Y shows", unless the source itself is the finding.
-
-For the section: takeaway, {one} of at most {b['section']} {count} stating what this section establishes in the paper and what it does there (fixes the terms, surveys the rules, measures the gap, compares a foreign regime, proposes a remedy); a line that only says what the section covers is not a summary. topic, at most {b['topic']} {count} copied verbatim from that takeaway.
+For the section: takeaway, ONE sentence of at most {b['section']} {count} {job} topic, at most {b['topic']} {count} copied verbatim from that takeaway.
 
 Style: no em or en dashes as punctuation, use commas or colons (hyphenated terms such as "zero-shot" are fine). Units show math as $...$; when a symbol is essential to a takeaway or reason, copy its $...$ exactly as it appears in the unit, otherwise avoid math. No citations; no figure or table numbers except in a caption's own lines.
 
@@ -301,16 +312,18 @@ def head_words(toks, n):
     return idx
 
 
-def assemble(u, o, atoms, model):
-    if is_apparatus(u, atoms):   # an apparatus unit does not fold, even when the model wrote one for it
+def assemble(u, o, atoms, model, cjk=None):
+    """cjk: the unit is of a CJK document (cjk_doc); None: judged from the unit's own text."""
+    cjk = budgets_of(u) is CJK_BUDGET if cjk is None else cjk
+    if cjk and is_apparatus(u, atoms):   # an apparatus unit does not fold, even when the model wrote one for it
         return {"role": "context", "ev": [], "brief": [], "tn": 0, "topic": [], "model": model}
     ns = len(u["sents"])
     ev = sorted({int(x) for x in (o.get("evidence") or []) if isinstance(x, int) and 0 <= x < ns})[:3] or [0]
     take_text, reason_text = clean(o.get("takeaway")), clean(o.get("reason"))
     if not take_text:
-        return local(u, atoms)
+        return local(u, atoms, cjk)
     take = written(take_text, u, atoms, ev)
-    dot = "。" if _cjk_share(take_text + reason_text) > 0.2 else "."
+    dot = "。" if cjk and _cjk_share(take_text + reason_text) > 0.2 else "."
     brief = [dict(tk) for tk in take]
     if reason_text:
         brief.append({"t": dot} if dot == "。" else {"t": dot, "s": 1})
@@ -320,7 +333,7 @@ def assemble(u, o, atoms, model):
         take[-1].pop("s", None)
     tn = len(take)
     align(u, brief, ev, atoms)
-    topic = topic_tokens(clean(o.get("topic")), brief, tn, u, atoms, ev)
+    topic = topic_tokens(clean(o.get("topic")), brief, tn, u, atoms, ev, (CJK_BUDGET if cjk else BUDGET)["topic"])
     return {"role": o.get("role") if o.get("role") in ROLES else "context", "ev": ev, "brief": brief, "tn": tn,
             "topic": topic, "model": model}
 
@@ -457,9 +470,17 @@ def cjk_topic(brief, tn, n):
     return kept or rng                      # a token that is only a footnote marker is not part of a topic
 
 
-def local(u, atoms):
-    """No model reply: the unit's claim sentence stands in for brief, its head for the shorter levels.
-    Apparatus (a contents line, a footnote) folds to nothing: it stays at Full and hides below it."""
+def local(u, atoms, cjk=None):
+    """No model reply: the first sentence stands in for brief, its head for the shorter levels. In a CJK document
+    (cjk; None: judged from the unit's own text) the unit's claim sentence stands in, and apparatus (a contents
+    line, a footnote) folds to nothing: it stays at Full and hides below it."""
+    if not (budgets_of(u) is CJK_BUDGET if cjk is None else cjk):
+        s, e = u["sents"][0]
+        brief = [dict(tk, m=s + k) for k, tk in enumerate(u["toks"][s:e])]
+        head = head_words(brief, BUDGET["takeaway"])
+        tn = (head[-1] + 1) if head else len(brief)
+        topic = [{**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i} for i in head_words(brief[:tn], 3)]
+        return {"role": "context", "ev": [0], "brief": brief, "tn": tn, "topic": topic, "model": "local"}
     if is_apparatus(u, atoms):
         return suppressed()
     span = _claim_sentence(u, atoms)
@@ -549,7 +570,7 @@ def fold_background(chunk, doc):
     U, section = doc["units"], chunk.get("lad")
     lads = [(uid, U[uid].get("lad") or {}) for uid in chunk["units"]]
     text = "".join(tk.get("t") or "" for _, l in lads for tk in l["brief"][:l.get("tn") or 0])
-    if _cjk_share(text) <= 0.2:
+    if not cjk_doc(doc) or _cjk_share(text) <= 0.2:
         return      # an English paper folds exactly as it did before: these thresholds were set on Chinese theses
     first = next((i for i, (_, l) in enumerate(lads) if l.get("brief") and l.get("tn")), None)
     if first is None:     # nothing in this section folds: leave it alone
@@ -571,7 +592,6 @@ def fold_background(chunk, doc):
 
 
 NOTE = re.compile(r"^\s*[①-⑳]")        # a footnote the PDF left as a block of its own, marker and all
-LISTY = re.compile(r"^\s*(?:其?[一二三四五六七八九十]+是|（[一二三四五六七八九十]+）|[（(]?\d+[.、）)]|第[一二三四五六七八九十百零]+[条章节])")
 WHOLE = set("。！？.!?：:；;”’」』）)")    # a sentence that ends here needs nothing from the one before
 GLUE = 40                               # characters of a cut-off tail the next unit carries in at Brief
 
@@ -579,16 +599,6 @@ GLUE = 40                               # characters of a cut-off tail the next 
 def _is_note(u, atoms):
     """A block that is not prose: a footnote marker the PDF left on its own, or a figure's caption."""
     return u.get("role") == "caption" or bool(NOTE.match(plain(u["toks"], atoms)))
-
-
-def _listy(u, atoms):
-    """A unit that opens with an item number ("四是…", "(3)…", "第十二条…"): the rest of a list whose first half
-    is in the unit before. Shown alone it is a fragment, however whole its own sentence is."""
-    sents = u.get("sents") or []
-    if not sents:
-        return False
-    a, b = sents[0]
-    return bool(LISTY.match(plain(u["toks"][a:b], atoms).strip()))
 
 
 def _tail(u, atoms):
@@ -635,17 +645,19 @@ def _widen(u, lad, atoms, most=6):
 
 
 def dress(chunk, doc):
-    """Two things a section needs before it can be read as prose.
+    """The sentence a page break cut in half. A paragraph split across a page break arrives as two units: the first
+    ends mid-word ("…的法律位阶为行政", "…熟悉外汇业务的工作人"), the second opens with the rest ("法规，加强对…",
+    "员，并且在…"). Brief shows one sentence per unit, so the reader meets the second half alone and the sentence has
+    no subject. The tail of the first is carried into the second as `glue`, and the sentence arrives whole. A
+    footnote between the two halves is stepped over, not quoted.
 
-    * A paragraph split across a page break arrives as two units: the first ends mid-word ("…的法律位阶为行政",
-      "…熟悉外汇业务的工作人"), the second opens with the rest ("法规，加强对…", "员，并且在…"). Brief shows one
-      sentence per unit, so the reader meets the second half alone and the sentence has no subject. The tail of
-      the first is carried into the second as `glue`, and the sentence arrives whole. A footnote between the two
-      halves is stepped over, not quoted.
-    * A unit whose takeaway stepped down is the background its section already summarises. At Brief it would
-      still show, one sentence at a time, and a page of "this document in this year" is a reading list again. So
-      it stays out of Brief — unless it is everything the section has, which would leave a heading over nothing.
+    Every unit stays at Brief, the background whose takeaway stepped down too: a unit read at one level is read at
+    every level in from it (the zoom only adds), and a line that steps down is still read one level in.
+
+    A CJK document's only: an English paper's units end where its sentences do, and Brief shows them as they were.
     """
+    if not cjk_doc(doc):
+        return
     U, A = doc["units"], doc["atoms"]
     lads = [(uid, U[uid].get("lad") or {}) for uid in chunk["units"]]
     for i, (uid, l) in enumerate(lads):
@@ -660,34 +672,12 @@ def dress(chunk, doc):
         if tail:
             l["glue"] = tail
             _widen(U[uid], l, A)
-    live = [(uid, l) for uid, l in lads if l.get("brief")]
-    if any(l.get("tn") for _, l in live):   # the section still says something at Brief
-        for _, l in live:
-            if not l.get("tn"):
-                l["l3"] = False
-    # last sieve at Brief: a sentence that does not stand on its own, or says again what the section's line just
-    # said, does not need to stand beside that line. The line under the heading carries the section either way.
-    vis = []
-    for uid, l in live:
-        if l.get("l3") is not False and _listy(U[uid], A):
-            l["l3"] = False
-        if l.get("l3") is not False:
-            vis.append((uid, l))
-    if vis and all(repeats_section(l, chunk.get("lad"), prefix=True) for _, l in vis):
-        for _, l in vis:
-            l["l3"] = False
-        vis = []
-    if len(vis) == 1 and repeats_section(vis[0][1], chunk.get("lad"), 0.6, prefix=True):
-        vis[0][1]["l3"] = False     # one paragraph under a line that already says the same: the line is enough
-        vis = []
-    if not vis and live and not (chunk.get("lad") or {}).get("take"):
-        live[0][1].pop("l3", None)          # nothing to carry the section: a heading over nothing says less
 
 
 def topic_tokens(text, brief, tn, u, atoms, ev, budget=None, toks=None, sents=None):
     """Topic tokens; `k` is the takeaway token a topic word slides from. A phrase the model wrote that is not in the
     takeaway verbatim is kept when short (ThoughtDAG does the same): it read better than a cut of the takeaway's head."""
-    budget = budget or budgets_of(u)["topic"]
+    budget = budget or BUDGET["topic"]
     loc = locate(text, brief[:tn])
     if loc:
         return [{**{x: brief[i][x] for x in ("t", "a", "x", "s", "f") if x in brief[i]}, "k": i} for i in loc]
@@ -752,7 +742,7 @@ def build(doc, cfg, cache_dir, jobs=4, log=print, progress=None, force=False, st
                 for n, uid in enumerate(c["units"]):
                     o = by_id.get(f"U{n}")
                     u = doc["units"][uid]
-                    u["lad"] = assemble(u, o, doc["atoms"], model) if o else local(u, doc["atoms"])
+                    u["lad"] = assemble(u, o, doc["atoms"], model, cjk) if o else local(u, doc["atoms"], cjk)
                     if not o:
                         warnings.append(f"{uid}: missing from reply")
                     elif words(u["lad"]["brief"][:u["lad"]["tn"]]) > b["takeaway"] + (4 if not cjk else 15):
@@ -771,7 +761,7 @@ def build(doc, cfg, cache_dir, jobs=4, log=print, progress=None, force=False, st
     if chunks and len(errors) == len(chunks):  # nothing came back: a backend problem, not a paper problem
         raise RuntimeError(str(errors[0]))
     for u in doc["units"].values():
-        u.setdefault("lad", local(u, doc["atoms"]))
+        u.setdefault("lad", local(u, doc["atoms"], cjk))
     for w in warnings:
         log(f"  ~ {w}")
     return cost

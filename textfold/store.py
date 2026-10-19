@@ -142,8 +142,9 @@ def save_tr(doc, lang, base, model):
 
 
 def apply_en(doc, en):
+    cjk = ladder.cjk_doc(doc)
     for uid, u in doc["units"].items():
-        u["lad"] = en["units"].get(uid) or ladder.local(u, doc["atoms"])
+        u["lad"] = en["units"].get(uid) or ladder.local(u, doc["atoms"], cjk)
     for c in doc["chunks"]:
         c["lad"] = en["chunks"].get(c["id"])
     have = {(e["f"], e["t"]) for e in en["edges"]}
@@ -179,13 +180,16 @@ def assemble(pid, only=None):
     en = read(pid, "en")
     meta = doc["meta"]
     meta["langs"], meta["stale"], meta["versions"] = [], [], {}
+    cjk = ladder.cjk_doc(doc)
+    if cjk:   # the reader's CJK rules (an English paper's page carries nothing new)
+        meta["cjk"] = True
     if en:
         apply_en(doc, en)
         meta["langs"].append("en")
         meta["versions"]["en"] = en["version"]
     else:
         for u in doc["units"].values():
-            u["lad"] = ladder.local(u, doc["atoms"])
+            u["lad"] = ladder.local(u, doc["atoms"], cjk)
     for lang in languages(pid):
         if only is not None and lang not in only:
             continue
