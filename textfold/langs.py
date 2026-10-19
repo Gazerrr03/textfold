@@ -18,6 +18,8 @@ LANGS = {
     "it": ("Italian", "Italiano", "latin"),
     "ru": ("Russian", "Русский", "cyrillic"),
     "hi": ("Hindi", "हिन्दी", "devanagari"),
+    "sv": ("Swedish", "Svenska", "latin"),
+    "da": ("Danish", "Dansk", "latin"),
 }
 
 _CHARS = {"takeaway": 28, "reason": 50, "topic": 6, "section": 32, "unit": "characters"}
