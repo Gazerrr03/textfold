@@ -101,6 +101,7 @@ plugins/pi-textfold/
 | VH5 | `aboveEditor` factory widget + default-placement string widget compose | live pty, throwaway `/tmp/verify-comp/comp.ts` |
 | **VH6** | **`message_end` still fires on 1.3.0 and our panel's content actually refreshes from the reply** | **not yet verified — the batteries only ever asserted the panel's header presence, never content from a reply. First-class hypothesis, verified in P3's gate before P3 commits (§ 5).** |
 | VH7 | session lookup matches the **session-file name prefix, dashes significant** | recorded finding: dashed prefix `01a152f8-928` resumed fine in the same battery run; a same-digits dashless prefix failed `No session found`. Full uuid is therefore still the safe form used everywhere (§ 7). |
+| VH8 | **taught keys dispatch in the session they are taught** | **`parseKey("\\x1b&")` → `"alt+&"` on pi 1.3.0's matcher, but `setupExtensionShortcuts` snapshots `getShortcuts()` once at editor setup, so re-registered ids stay dead until a snapshot rebuild. Live PTY probe: after teaching, `ctx.reload()` re-runs load → `setupExtensionShortcuts` with the taught ids; `shortcut fired level=N taught` in the debug tap in the same session, and persistence proven by a fresh process registering from the file alone. Level continuity survives the reload via C1 entries on disk.** |
 
 ## 4. Atomic commit plan (each commit: compiles, tests green, tsc clean, no dead code)
 
@@ -273,6 +274,7 @@ Commits, one logical change each, all gates green per commit:
 | `3c2edec` | P5 probes + preflight | py_compile green · S0b all 7 APIs OK |
 | `8dd3221` | P6 README contracts | every documented key/grep checked against the code |
 | `07dbbfb` | P5-fix install-smoke cwd + foldable prompt (fix-forward) | base/digits/resume install smoke exit 0 on plain pi |
+| `095a54e` | taught keys: `/fold calibrate` + `/fold keys` + `keys.ts` (any keyboard, no layout table) | 63 tests · tsc clean · live teach probe exit 0 (real pi TTY: overlay → AZERTY-style `ESC+& 2 ESC+' 4 ESC+(` → saved file + `Saved` notify → learned keys fold same-session after reload → fresh process folds from the file alone); S1–S6 battery PASS |
 
 Acceptance: § 9.1–7 all hold — 54 tests ≥ 46 floor, harness self-sufficient
 (installed pi + Node 22 coded in), the checkpoint path **proven** by an injected
