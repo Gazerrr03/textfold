@@ -6,9 +6,10 @@
   const bootEl = document.getElementById('boot');
   const BOOT = bootEl ? JSON.parse(bootEl.textContent) : {};
   const readerEl = document.getElementById('paper-data');
-  const PAPER = readerEl ? JSON.parse(readerEl.textContent).meta : null;   // the paper open in the reader, if any
+  const DATA = readerEl ? JSON.parse(readerEl.textContent) : null;
+  const PAPER = DATA ? DATA.meta : null;   // the paper open in the reader, if any
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
-  const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि', sv: 'SV', da: 'DA' };
+  const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि' };   // (any other: its code)
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const api = (path, body) => fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -43,13 +44,17 @@
     ? `<p class="st-note warn">${esc(T.bridge_failed.replace('{error}', st.error))}</p>`
     : st.login ? `<p class="st-note">${esc(T.bridge_login)} <a href="${esc(st.login)}" target="_blank" rel="noopener">${esc(T.bridge_login_open)}</a></p>` : '';
 
-  // the reader's language (settings; else the browser's): the interface speaks it, papers are read and made in it, and a
-  // switch of a paper's language is a switch of it (reader.js)
+  // the reader's language (settings; else the browser's): papers are read and made in it, the interface speaks it when it
+  // has the words (else English), and a switch of a paper's language is a switch of it (reader.js)
   const UI_KEY = 'pf-ui-lang';
-  let uiLang = [store.get(UI_KEY), I18N.guess()].find((l) => l && I18N.NATIVE[l]) || 'en';
-  function setUiLang(code) {
-    if (!I18N.NATIVE[code]) return;
-    uiLang = code;
+  const READ = BOOT.langs || (DATA && DATA.langs) || I18N.NATIVE;   // every language a text can be read in, by its own name
+  const nameOf = (code) => READ[code] || I18N.NATIVE[code] || code;
+  let readLang = [store.get(UI_KEY), I18N.guess(READ)].find((l) => l && READ[l]) || 'en';
+  let uiLang = I18N.uiFor(readLang);
+  function setReaderLang(code) {
+    if (!READ[code]) return;
+    readLang = code;
+    uiLang = I18N.uiFor(code);
     store.set(UI_KEY, code);
     renderSidebar();
     if (landing) renderLanding();
@@ -84,7 +89,7 @@
   const FOLDER_NEW = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5a1.5 1.5 0 0 1 1.5-1.5h3.6l1.8 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M10 8.5v5M7.5 11h5"/></svg>';
   const CHEV = '<svg class="sb-chev" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l4 4-4 4"/></svg>';
   // a paper opens in the reader's language, else the one last read in, else its first
-  const pick = (p) => [uiLang, store.get('dr-lang')].find((l) => l && p.langs.includes(l)) || p.langs[0] || 'en';
+  const pick = (p) => [readLang, store.get('dr-lang')].find((l) => l && p.langs.includes(l)) || p.langs[0] || 'en';
   const modelLabel = () => {   // and the one for questions, when it is another (its agent's name said once: Claude Code · Sonnet · answers: Opus)
     if (!askName) return modelName;
     const head = modelName.split(' · ')[0], short = askName.startsWith(`${head} · `) ? askName.slice(head.length + 3) : askName;
@@ -99,7 +104,7 @@
     return j.stopping ? T.stopping : `${T.stages[st] || (T.pstages || {})[st] || st}${j.total ? ` ${j.done}/${j.total}` : ''}`;
   };
   const stopBtn = (j, T) => `<button type="button" class="sb-stop" data-stop="${j.id}" title="${esc(T.stop)}" aria-label="${esc(T.stop)}"${j.stopping ? ' disabled' : ''}><i></i></button>`;
-  const progress = (j, T) => `<span class="sb-prog"><i style="width:${pct(j)}%"></i></span><span class="sb-stage">${esc(stageOf(j, T))}${j.lang ? ` · ${esc(I18N.NATIVE[j.lang])}` : ''}</span>`;
+  const progress = (j, T) => `<span class="sb-prog"><i style="width:${pct(j)}%"></i></span><span class="sb-stage">${esc(stageOf(j, T))}${j.lang ? ` · ${esc(nameOf(j.lang))}` : ''}</span>`;
   const jobName = (j, T) => (j.kind === 'install' ? T.engine : j.title || j.pid);
   let lastSidebar = '';
   function renderSidebar() {
@@ -109,8 +114,8 @@
     const pending = jobs.filter((j) => !listed.has(j.pid) && live(j));
     const item = (p) => {
       const j = jobFor(p.id);
-      const title = (p.titles && p.titles[uiLang]) || p.title;
-      const langs = p.langs.map((l) => `<span${l === uiLang ? ' class="on"' : ''}>${SHORT[l] || l}</span>`).join('');
+      const title = (p.titles && p.titles[readLang]) || p.title;
+      const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${SHORT[l] || l.toUpperCase()}</span>`).join('');
       const active = PAPER && PAPER.id === p.id;
       const unfinished = !j && !p.langs.length;   // stopped (or failed) before its first language: a click goes on with it
       return `<div class="sb-row" data-pid="${p.id}" data-q="${esc(hay(p))}"><a class="sb-item${active ? ' active' : ''}${unfinished ? ' unfinished' : ''}" href="${unfinished ? '#' : `/p/${p.id}?lang=${pick(p)}`}"${unfinished ? ` data-resume="${p.id}"` : ''} title="${esc(p.title)}">
@@ -206,14 +211,14 @@
   // an unfinished paper goes on in the language it was last asked for (else the reader's), in the background
   function resume(pid) {
     const last = [...jobs].reverse().find((j) => j.pid === pid);
-    const lang = (last && last.lang) || uiLang;
+    const lang = (last && last.lang) || readLang;
     submit(pid, lang, false, () => {}).catch(() => {});
   }
   // a paper off the list, after a prompt that says what goes with it; the server moves its folder to papers/.trash
   async function deletePaper(pid) {
     const T = t(), p = papers.find((x) => x.id === pid);
     if (!p) return;
-    const title = (p.titles && p.titles[uiLang]) || p.title;
+    const title = (p.titles && p.titles[readLang]) || p.title;
     if (!confirm(T.del_confirm.replace('{title}', title).replace('{n}', p.notes || 0))) return;
     try { papers = await api('/api/papers/delete', { paper: pid }); }
     catch (err) { alert(err.message === 'busy' ? T.del_busy : err.message); return; }
@@ -660,7 +665,7 @@
       if (forEngine(file)) {
         say(isPdf(file) ? t().pdf_reading : t().file_reading);
         try {
-          const d = await uploadFile(file, uiLang);
+          const d = await uploadFile(file, readLang);
           if (d.paper) { location.href = `/p/${d.paper}?lang=${encodeURIComponent(d.job.lang)}`; return; }   // read already
           const q = new URLSearchParams({ t: file.name });
           if (d.needs === 'engine') q.set('engine', d.upload); else { q.set('follow', d.job.id); if (d.via === 'online') q.set('ref', d.ref); }
@@ -677,7 +682,7 @@
     // a generation of this paper in the toast: its stage and a stop button; done, the page again, at the paragraph being
     // read (the reader picks it up from sessionStorage). `note` says why the page is here before its levels are.
     function toastFor(lang, note) {
-      const T = t(), name = I18N.NATIVE[lang];
+      const T = t(), name = nameOf(lang);
       toast.hidden = false;
       toast.innerHTML = `${sign('mark')}<b>${esc(T.generating)} · ${esc(name)}</b><span class="g-stage">${esc(T.stages.queued)}</span>` +
         `<span class="sb-prog"><i style="width:4%"></i></span>${note ? `<span class="g-note">${esc(note)}</span>` : ''}`;
@@ -710,7 +715,7 @@
         if (u) break;
       }
       try { if (u) sessionStorage.setItem('pf-keep', JSON.stringify({ pid: PAPER.id, uid: u.dataset.u, top: u.getBoundingClientRect().top, level: R && R.level })); } catch { /* private window */ }
-      if (R && lang !== R.lang && I18N.NATIVE[lang]) store.set(UI_KEY, lang);   // a language just made: the interface goes with it
+      if (R && lang !== R.lang) store.set(UI_KEY, lang);   // a language just made: the reader's goes with it
       location.href = `/p/${PAPER.id}?lang=${encodeURIComponent(lang)}`;
     }
     const src = PAPER.source || {};
@@ -731,12 +736,12 @@
       };
     }
     window.DRApp = {
-      onLang(lang, ui) {   // (ui: the reader's language, which a switch of the paper's moves)
-        if (ui && ui !== uiLang && I18N.NATIVE[ui]) uiLang = ui;
+      onLang(lang, readerLang) {   // (readerLang: the reader's language, which a switch of the paper's moves)
+        if (readerLang && readerLang !== readLang && READ[readerLang]) { readLang = readerLang; uiLang = I18N.uiFor(readerLang); }
         renderSidebar();
       },
       generate(lang, force) {
-        const T = t(), name = I18N.NATIVE[lang];
+        const T = t(), name = nameOf(lang);
         if (force && !confirm(`${T.regen} · ${name}?`)) return;
         const update = toastFor(lang);
         submit(PAPER.id, lang, force, update).catch(update.fail);
@@ -768,7 +773,7 @@
     document.getElementById('ref').placeholder = T.placeholder;
     document.getElementById('ref').setAttribute('aria-label', T.placeholder);
     document.getElementById('l-lang').textContent = T.read_in;
-    document.getElementById('lang').value = uiLang;
+    document.getElementById('lang').value = readLang;
     const ui = document.getElementById('ui-lang');
     ui.value = uiLang;
     document.getElementById('ui-lang-box').title = T.language;
@@ -818,14 +823,15 @@
   }
   if (landing) {
     const sel = document.getElementById('lang');
-    for (const code of I18N.CODES) sel.append(Object.assign(h('option'), { value: code, textContent: I18N.NATIVE[code] }));
-    sel.value = uiLang;
-    // the language, top right, and the one to read in, beside the bar: one language, so either moves both
+    for (const [code, name] of Object.entries(READ)) sel.append(Object.assign(h('option'), { value: code, textContent: name }));
+    sel.value = readLang;
+    // the language, top right, and the one to read in, beside the bar: one language, so either moves both (one the
+    // interface has no words for leaves it in English)
     const ui = document.getElementById('ui-lang');
     for (const code of I18N.CODES) ui.append(Object.assign(h('option'), { value: code, textContent: I18N.NATIVE[code] }));
     ui.value = uiLang;
-    sel.onchange = () => setUiLang(sel.value);
-    ui.onchange = () => setUiLang(ui.value);
+    sel.onchange = () => setReaderLang(sel.value);
+    ui.onchange = () => setReaderLang(ui.value);
     document.getElementById('open-settings').onclick = openSettings;
     const help = document.getElementById('ui-help');
     if (window.TFTutorial) help.onclick = () => window.TFTutorial.open(uiLang); else help.hidden = true;
@@ -836,7 +842,7 @@
     function onCard(label, mine, note) {
       const cb = (j) => {
         if (latest !== mine) return;
-        const T = t(), name = esc(label || jobName(j, T)), in_ = j.lang ? ` · ${esc(I18N.NATIVE[j.lang])}` : '';
+        const T = t(), name = esc(label || jobName(j, T)), in_ = j.lang ? ` · ${esc(nameOf(j.lang))}` : '';
         if (j.status === 'moved' && j.next) { watchers.set(j.next, cb); startPolling(); return; }   // (an arXiv paper without HTML: its PDF converts)
         if (j.status === 'error' && j.error === 'needs-engine') { engineCard(j.upload, label || j.title || j.pid); return; }
         if (j.status === 'error') { card.innerHTML = `<div class="jc-t">${esc(T.failed)} · ${name}</div><div class="jc-e">${esc(errText(j.error))}</div>`; return; }
@@ -1276,7 +1282,7 @@
         msg.textContent = r.kind === 'latest' ? t.up_latest : r.kind === 'dev' ? t.up_dev : r.kind === 'check-failed' ? t.up_check_failed
           : r.kind === 'ready' ? t.up_ready.replace('{v}', r.version) : t.up_new.replace('{v}', r.version || '');
       };
-      q('.st-ui').onchange = (e) => { setUiLang(e.target.value); render(); };
+      q('.st-ui').onchange = (e) => { setReaderLang(e.target.value); render(); };
       const sel = q('.st-model');
       if (sel) sel.onchange = async () => { delete tests.gen; if (!data.askModel) delete tests.ask; update(await api('/api/models/select', { model: sel.value })); };
       const askSel = q('.st-askmodel'), effSel = q('.st-effort');

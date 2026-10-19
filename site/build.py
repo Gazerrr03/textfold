@@ -103,7 +103,7 @@ def app_ld(lang):
         "image": SITE + "assets/og.png",
         "screenshot": SITE + "assets/og.png",
         "featureList": ["Five levels per paragraph, from a map of the sections to every word", "Reads beside the original PDF",
-                        "Answers about what you read, citing its paragraphs", "Notes that stay as you zoom out", "Twelve languages",
+                        "Answers about what you read, citing its paragraphs", "Notes that stay as you zoom out", "Many languages",
                         "Folds an agent's replies in Claude Code", "Gives agents a document one level at a time (python3 -m textfold get)"],
         "keywords": "AI output, agent output, AI infrastructure, reading, research papers, PDF reader, sources, Claude Code, Codex, Zotero",
         "author": {"@type": "Person", "name": "Xia Chen", "url": "https://github.com/chenxiachan"},
@@ -182,7 +182,7 @@ Models and agents now write more than people can read. TextFold keeps the whole 
 - Five levels per paragraph. Full and Brief keep the author's own words; Key, Takeaway and Topic are written by a model, each line anchored to the author's sentences it rests on.
 - Reads arXiv, PubMed Central, bioRxiv, medRxiv, DOIs whose full text is open in Europe PMC, Wikipedia, GitHub READMEs, any web page, PDF, Word, PowerPoint, Excel, EPUB, HTML, CSV, pictures, Markdown, text, and a Zotero 7 library.
 - Uses a model the reader already has: Claude Code, Codex or Pi on the computer, a ChatGPT plan, free models on OpenRouter, or an API key (Anthropic, OpenAI, DeepSeek, Qwen, Zhipu GLM, Kimi, MiniMax, Google, Ollama, any OpenAI-compatible endpoint).
-- Twelve languages, translated sentence by sentence: {LANGS_NATIVE}.
+- Many languages, translated sentence by sentence: {LANGS_NATIVE}.
 - The library stays on the reader's computer, and there is no account.
 - Systems: macOS 12 or later (Apple silicon and Intel, signed and notarized), Windows 10 and 11 (64-bit), any system with Python 3.9 or newer. Current version: {VERSION}.
 

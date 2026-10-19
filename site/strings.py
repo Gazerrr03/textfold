@@ -7,7 +7,7 @@ SITE = "https://chenxiachan.github.io/textfold/"
 REPO = "https://github.com/chenxiachan/textfold"
 DL = REPO + "/releases/latest/download/"
 FILES = {"mac_arm": "TextFold-mac-arm64.dmg", "mac_x64": "TextFold-mac-x64.dmg", "win": "TextFold-win-x64-setup.exe"}
-LANGS_NATIVE = "English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português, Italiano, Русский, हिन्दी"
+LANGS_NATIVE = "English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch, Português, Italiano, Русский, हिन्दी, Svenska, Dansk, Norsk bokmål, Suomi, Nederlands, Polski, Čeština, Українська, Türkçe, Bahasa Indonesia, Tiếng Việt"   # textfold/langs.py's, by their own names (tests/test_languages.py)
 
 S = {
     # the head (search engines, AI answers, shared links)

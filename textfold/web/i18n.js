@@ -1,5 +1,6 @@
-// Interface strings. The interface speaks the language the paper is being read in.
-// Every language falls back to English for a missing key.
+// Interface strings. The interface speaks the language the paper is being read in when it has the words for it, else
+// English: a text can be read in more languages (langs.py) than these. Every language falls back to English for a
+// missing key.
 window.DR_I18N = (() => {
   const ENV = ['Theorem', 'Lemma', 'Proposition', 'Corollary', 'Definition', 'Remark', 'Example', 'Proof', 'Conjecture', 'Claim', 'Assumption', 'Observation', 'Notation'];
   const env = (words) => Object.fromEntries(ENV.map((w, i) => [w, words[i]]));
@@ -539,15 +540,17 @@ window.DR_I18N = (() => {
   };
   // text: the document is not a paper, and the questions about it say so
   const t = (lang, text) => ({ ...S.en, ...(S[lang] || {}), ...(text ? { ...DOCS.en, ...(DOCS[lang] || {}) } : {}) });
-  // the language a visitor most likely reads, among the ones offered
-  function guess() {
+  // the language a visitor most likely reads, among the ones offered: the interface's, or `among` (a text's, by name)
+  function guess(among = NATIVE) {
     for (const l of navigator.languages || [navigator.language || 'en']) {
       const x = l.toLowerCase();
       if (x.startsWith('zh')) return /tw|hk|mo|hant/.test(x) ? 'zh-Hant' : 'zh';
-      const base = x.split('-')[0];
-      if (NATIVE[base]) return base;
+      const base = x.split('-')[0] === 'no' ? 'nb' : x.split('-')[0];   // (Norwegian: written as Bokmål)
+      if (among[base]) return base;
     }
     return 'en';
   }
-  return { t, NATIVE, CODES: Object.keys(NATIVE), htmlLang: (l) => HTML_LANG[l] || l, guess };
+  // the interface for a text read in `code`: in that language when it has the words, else in English
+  const uiFor = (code) => (NATIVE[code] ? code : 'en');
+  return { t, NATIVE, CODES: Object.keys(NATIVE), htmlLang: (l) => HTML_LANG[l] || l, guess, uiFor };
 })();

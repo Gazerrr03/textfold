@@ -63,7 +63,7 @@ Agent 写的，总比你有空读的多。一个 [Claude Code mod](https://code.
 - **针对内容，结构化地问 AI。** 选中一段，或者就全文提问。回答先给结论，再列依据，每条依据都标出原文段落，点一下就到。
 - **笔记跟着缩放。** 在页边高光、写笔记，缩小时标过的内容依然在，也会和整页一起保存。
 
-- **用你的语言读。** 十二种语言，逐句翻译，公式保持原样。
+- **用你的语言读。** 支持多种语言，逐句翻译，公式保持原样。
 
 - **你的文献库，井井有条。** 用 ⌘K 搜索；建文件夹整理文档，拖进去或者右键移进去；按类型、添加时间或最近打开排序。
 
@@ -236,6 +236,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 19 日：更多阅读语言。** 新增瑞典语、丹麦语、挪威语、芬兰语、荷兰语、波兰语、捷克语、乌克兰语、土耳其语、印尼语和越南语。界面没有这种语言时显示英文。感谢 [@Kullenej](https://github.com/Kullenej)。
 - **2026 年 10 月 15 日：Pi 的回答也能折叠了。** [Pi 扩展](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md) 把五个层级放到每条回答上，折法和 Claude Code 里一样。感谢 [@jlamweil](https://github.com/jlamweil)。
 - **2026 年 10 月 15 日：不装 PDF 引擎也能读 PDF。** 自带文字的 PDF（大多数论文都是）直接打开，图从原页上裁出来；只有扫描件还需要 PDF 引擎。没有 HTML 版本的 arXiv 论文改读它的 PDF。感谢 [@sylvainHellin](https://github.com/sylvainHellin)。
 - **2026 年 10 月 15 日：你的文献库和你的提问。** 文献库可以搜索、建文件夹，按添加时间或最近打开排序。提问有了发送和停止键，对话里任何一轮都可以删掉，回答问题还可以用比生成层级更强的模型。感谢 [@suhyungJang](https://github.com/suhyungJang)。

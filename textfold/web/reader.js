@@ -28,12 +28,16 @@
   const SRC = (D.meta.source || {}).kind;
   const PAPER = ['europepmc', 'biorxiv', 'medrxiv'].includes(SRC) || (!SRC && /^\d{4}\.\d{4,5}$/.test(D.meta.id));
   const T = Object.fromEntries(I18N.CODES.map((c) => [c, I18N.t(c, !PAPER)]));
-  // One language, the reader's. The paper is read in `lang`: its text, and the names of its own parts (figures, tables,
-  // theorems, references, equations). The interface speaks `ui`: chosen in the app's settings, else the browser's. A
-  // switch of either is a switch of both (setLang, setUi). A paper that does not have the reader's language yet opens
-  // in one it has, and the interface stays as it was.
+  // One language, the reader's (`readerLang`): chosen in the app, else the browser's. The paper is read in `lang`: its
+  // text, and the names of its own parts (figures, tables, theorems, references, equations), in English where the
+  // interface has no words for that language. The interface speaks `ui`: the reader's language when it has the words,
+  // else English. A switch of either is a switch of both (setLang, setUi). A paper that does not have the reader's
+  // language yet opens in one it has, and the interface stays as it was.
   const UI_KEY = 'pf-ui-lang';
-  let ui = (() => { let v = null; try { v = localStorage.getItem(UI_KEY); } catch { /* private window */ } return v && T[v] ? v : I18N.guess(); })();
+  const NAMES = D.langs || I18N.NATIVE;   // every language a text can be read in, by its own name (build.py)
+  const nameOf = (code) => NAMES[code] || I18N.NATIVE[code] || code;
+  let readerLang = (() => { let v = null; try { v = localStorage.getItem(UI_KEY); } catch { /* private window */ } return v && (T[v] || NAMES[v]) ? v : I18N.guess(); })();
+  let ui = I18N.uiFor(readerLang);
   const AVAIL = (D.meta.langs && D.meta.langs.length) ? D.meta.langs : ['en'];
   const STALE = new Set(D.meta.stale || []);
   const trOf = (x) => (lang !== 'en' && x && x.tr && x.tr[lang]) || null;   // a unit's or chunk's translation, if any
@@ -372,7 +376,7 @@
 
   // everything that is text in the chrome or depends on the language but is not a unit
   function applyLang() {
-    const t = T[ui], c = T[lang], m = D.meta;   // (c: the names of the paper's own parts, in the language it is read in)
+    const t = T[ui], c = T[lang] || T.en, m = D.meta;   // (c: the names of the paper's own parts, in the language it is read in)
     document.documentElement.lang = I18N.htmlLang(lang);
     document.documentElement.dataset.lang = lang;
     mirrorLang();
@@ -401,7 +405,7 @@
     const sum = docEl.querySelector('.bib summary'); if (sum) sum.textContent = c.refs;
     document.getElementById('hint').textContent = t.hint;
     document.querySelector('.tagline').textContent = t.tagline;
-    langBtn.innerHTML = `${esc(I18N.NATIVE[lang])}${STALE.has(lang) ? ` <em class="stale">${esc(t.stale)}</em>` : ''} <span class="caret">▾</span>`;
+    langBtn.innerHTML = `${esc(nameOf(lang))}${STALE.has(lang) ? ` <em class="stale">${esc(t.stale)}</em>` : ''} <span class="caret">▾</span>`;
     langBtn.title = t.language;
     bar.querySelectorAll('button').forEach((b) => { b.textContent = t.levels[+b.dataset.l]; });
     requestAnimationFrame(() => { geom = null; placeThumb(); });
@@ -411,7 +415,7 @@
     document.getElementById('back').textContent = `← ${t.back}`;
     for (const uid of unitEl.keys()) renderSide(uid);
     notesForLang();
-    if (window.DRApp) window.DRApp.onLang(lang, ui);
+    if (window.DRApp) window.DRApp.onLang(lang, readerLang);
   }
 
   // a page read from the web is a snapshot: the day it was read, in the interface's language ("6 October 2026")
@@ -1437,7 +1441,7 @@
     if (!AVAIL.includes(l)) { if (window.DRApp) window.DRApp.generate(l, false); return; }
     if (busy) { queued = () => setLang(l); return; }
     store.set('dr-lang', l);
-    if (T[l]) { ui = l; store.set(UI_KEY, l); }   // the interface goes with the text
+    readerLang = l; ui = I18N.uiFor(l); store.set(UI_KEY, l);   // the interface goes with the text (in English when it has no words for it)
     if (D.app) history.replaceState(null, '', `?lang=${encodeURIComponent(l)}${location.hash}`);
     const hot = unitsNear(innerHeight * 1.5, innerHeight * 1.5);
     const band = level === 0 ? null : bandAround(defaultAnchor(), { 4: 30, 3: 45, 2: 60, 1: 150 }[level], hot);
@@ -1495,7 +1499,7 @@
     }
     if (tk === 'eq') {
       const el = edgeTarget(tk, id), tag = el && el.querySelector('.ltx_tag_equation');
-      return `<span class="where">${T[lang].eq}</span> ${esc(tag ? tag.textContent : '')}`;
+      return `<span class="where">${(T[lang] || T.en).eq}</span> ${esc(tag ? tag.textContent : '')}`;
     }
     return esc(id);
   }
@@ -2126,7 +2130,7 @@
     if (popNote && popNote.id === n.id) openNote(note);
     if (chatNote && chatNote.id === n.id) openChat(note);
     let answered;
-    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui, req: mine.req }, mine.ctl.signal); }
+    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui: readerLang, req: mine.req }, mine.ctl.signal); }
     catch (err) {
       if (mine.ctl.signal.aborted || err.message === 'stopped') return;   // (stopAsk put it all back)
       answered = { ...note, thread: [...done, { q, a: '', lang: qlang, error: String(err.message || err).slice(0, 200) }] };
@@ -2567,7 +2571,7 @@
       <div class="sv-row"><div class="sv-l">${esc(t.sv_what)}</div><div class="sv-opts">${radio('what', 'whole', t.sv_whole, t.sv_whole_d)}${radio('what', 'marks', t.sv_marks, t.sv_marks_d, !total)}</div></div>
       <div class="sv-row"><div class="sv-l">${esc(t.sv_incl)}</div><div class="sv-boxes">${box('hl', t.sv_hl)}${box('note', t.sv_notes)}${box('ask', t.sv_asks)}${para}</div></div>
       <div class="sv-row"><div class="sv-l">${esc(t.sv_fmt)}</div><div class="sv-opts sv-fmts">${fmts.map((f) => radio('fmt', f, fmtName[f])).join('')}</div></div>
-      ${langs ? `<div class="sv-row"><div class="sv-l">${esc(t.sv_langs)}</div><div class="sv-opts sv-fmts">${radio('langs', 'current', t.sv_lang_cur.replace('{lang}', I18N.NATIVE[lang]))}${radio('langs', 'all', t.sv_lang_all.replace('{n}', AVAIL.length))}</div></div>` : ''}
+      ${langs ? `<div class="sv-row"><div class="sv-l">${esc(t.sv_langs)}</div><div class="sv-opts sv-fmts">${radio('langs', 'current', t.sv_lang_cur.replace('{lang}', nameOf(lang)))}${radio('langs', 'all', t.sv_lang_all.replace('{n}', AVAIL.length))}</div></div>` : ''}
       <p class="sv-lic">${esc(t.sv_lic)}</p>
       ${err ? `<p class="sv-err">${esc(err)}</p>` : ''}
       <div class="sv-acts"><button type="button" class="sv-cancel">${esc(t.cancel)}</button><button type="submit" class="sv-go"${sv.what === 'marks' && !picked ? ' disabled' : ''}>${esc(t.sv_go)}</button></div>
@@ -3285,18 +3289,18 @@ math { font-size: 1.05em; }
   function renderLangMenu() {
     const t = T[ui];
     langMenu.replaceChildren();
-    for (const code of I18N.CODES) {
+    for (const code of Object.keys(NAMES)) {
       const have = AVAIL.includes(code);
       if (!have && !D.app) continue;
       const b = h('button', `lm-item${code === lang ? ' on' : ''}${have ? '' : ' gen'}`);
       b.type = 'button';
-      b.innerHTML = `<span>${esc(I18N.NATIVE[code])}</span>${!have ? `<em>+ ${esc(t.gen_lang)}</em>` : STALE.has(code) ? `<em class="stale">${esc(t.stale)}</em>` : ''}`;
+      b.innerHTML = `<span>${esc(nameOf(code))}</span>${!have ? `<em>+ ${esc(t.gen_lang)}</em>` : STALE.has(code) ? `<em class="stale">${esc(t.stale)}</em>` : ''}`;
       b.addEventListener('click', () => { closeLangMenu(); if (have) setLang(code); else window.DRApp.generate(code, false); });
       langMenu.append(b);
     }
     if (D.app) {
       const r = h('button', 'lm-item lm-regen'); r.type = 'button';
-      r.innerHTML = `<span>↻ ${esc(t.regen)}</span><em>${esc(I18N.NATIVE[lang])}</em>`;
+      r.innerHTML = `<span>↻ ${esc(t.regen)}</span><em>${esc(nameOf(lang))}</em>`;
       r.addEventListener('click', () => { closeLangMenu(); window.DRApp.generate(lang, true); });
       langMenu.append(r);
     }
@@ -3446,7 +3450,7 @@ math { font-size: 1.05em; }
   }
   // ?lang= (the app), #lang= (a static file), then the reader's language, then the one last read in
   const asked = new URLSearchParams(location.search).get('lang') || (/[#&]lang=([\w-]+)/.exec(location.hash) || [])[1];
-  lang = [asked, D.lang, ui, store.get('dr-lang'), 'en', AVAIL[0]].find((l) => l && AVAIL.includes(l));
+  lang = [asked, D.lang, readerLang, store.get('dr-lang'), 'en', AVAIL[0]].find((l) => l && AVAIL.includes(l));
   const start = /[#&]level=([^&]+)/.exec(location.hash);
   if (start) {
     const want = decodeURIComponent(start[1]).toLowerCase();
@@ -3481,10 +3485,12 @@ math { font-size: 1.05em; }
       if (typeof k.level === 'number' && k.level !== level) { setLevel(k.level); setTimeout(back, DUR + 120); } else back();
     }
   } catch { /* private window */ }
-  // the interface's language, from the app's settings: the text goes with it when the paper has that language
+  // the reader's language, from the app (its settings, the landing's menus): the interface speaks it when it has the
+  // words, else English; the text goes with it when the paper has that language
   function setUi(code) {
-    if (!T[code] || code === ui) return;
-    ui = code;
+    if (!(T[code] || NAMES[code]) || code === readerLang) return;
+    readerLang = code;
+    ui = I18N.uiFor(code);
     store.set(UI_KEY, code);
     if (AVAIL.includes(code) && code !== lang) setLang(code); else applyLang();
   }

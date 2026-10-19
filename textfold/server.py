@@ -474,7 +474,7 @@ def landing_page(jobs):
     data = models_payload()
     boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": data["selectedName"] or "",
             "askName": data["askName"], "modelData": data,
-            "bridge": data["bridge"], "langs": [[code, v[1]] for code, v in langs.LANGS.items()]}
+            "bridge": data["bridge"], "langs": langs.natives()}
     t = (build.WEB / "app.html").read_text(encoding="utf-8")
     return t.replace("{{HEAD}}", build.fonts_head(build.APP_ASSETS)).replace("{{BOOT}}", json.dumps(boot, ensure_ascii=False).replace("</", "<\\/"))
 

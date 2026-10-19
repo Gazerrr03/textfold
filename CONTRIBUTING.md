@@ -20,7 +20,7 @@ Then open `http://localhost:3017` and connect a model (the README says how).
 ## Good places to start
 
 - **A paper that reads wrong.** Open an issue with its arXiv ID, the level and language, and the paragraph (a screenshot is fine). Most fixes go in `textfold/parse.py`, which turns arXiv's HTML into paragraphs, formulas and citations.
-- **A language.** Reading languages are listed in `textfold/langs.py`; the interface's words are in `textfold/web/i18n.js`, in twelve languages.
+- **A language.** A text can be read in every language listed in `textfold/langs.py`: one line adds one. The interface's words are in `textfold/web/i18n.js` and `textfold/web/tutorial.js`, in fewer languages; a text read in one they do not have shows the interface in English. A new interface language needs every table of both files and the desktop app's menu (`tests/test_languages.py` checks).
 - **A model provider.** Presets and model lists are in `textfold/providers.py` and `textfold/models.py`.
 - **A web page or a PDF that reads wrong.** Web pages go through `textfold/webpage.py`, PDFs through `textfold/pdfdoc.py` (the PDF engine's output into paragraphs, headings, figures and formulas).
 - **The format.** Programs that read or write folded text follow [docs/format.md](docs/format.md); a reader of it in another language is welcome.
