@@ -131,6 +131,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 	const apply = (next: Level, ctx: ExtensionContext) => {
 		if (next === level) return;
 		level = next;
+		DEBUG?.(`apply level=${next} screen=${screen ? "yes" : "no"}`);
 		try {
 			pi.appendEntry(ENTRY_TYPE, levelEntryDraft(next));
 		} catch (e) {

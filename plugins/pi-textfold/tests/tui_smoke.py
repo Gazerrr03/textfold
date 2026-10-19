@@ -119,6 +119,14 @@ def read_for(fd, sec):
             end = time.time() + 2
     return buf
 
+def settle_fd(fd, quiet_budget=8):
+    """Read until the pty goes quiet (max `quiet_budget`): a fixed short read
+    once cut a level change's full-screen redraw short and flaked S4."""
+    end = time.time() + quiet_budget
+    while time.time() < end:
+        n = len(buf); read_for(fd, 1.5)
+        if len(buf) == n: break
+
 def resize(fd, rows, cols=100):
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
@@ -181,10 +189,9 @@ if need_first_session:
         S2 = stage("S2-reply", "TextFold · Full" in t1 and len(t1) > 800, "reply landed + panel refresh")
 
     mark = len(clean(buf))  # char offset into the cleaned capture (never byte-slice)
-    os.write(fd, b"\x1b2"); read_for(fd, 2)   # alt+2 Brief
-    os.write(fd, b"\x1b5"); read_for(fd, 2)   # alt+5 Gist
-    os.write(fd, b"\x1b1"); read_for(fd, 2)   # alt+1 Full
-    read_for(fd, 2)
+    os.write(fd, b"\x1b2"); settle_fd(fd)     # alt+2 Brief
+    os.write(fd, b"\x1b5"); settle_fd(fd)     # alt+5 Gist
+    os.write(fd, b"\x1b1"); settle_fd(fd)     # alt+1 Full
     snap("S3-level-keys")
     t2 = clean(buf)[mark:]
     S3 = stage("S3-level-keys",
@@ -193,17 +200,28 @@ if need_first_session:
 
     if wanted("S4"):
         m2 = len(clean(buf))
-        os.write(fd, b"\x1b2"); read_for(fd, 2)  # Brief: folds render on the width change
-        resize(fd, 42); read_for(fd, 2); resize(fd, 40); read_for(fd, 2)
+        os.write(fd, b"\x1b2"); settle_fd(fd)  # Brief first: the fold marker must exist to re-render
+        resize(fd, 42); settle_fd(fd); resize(fd, 40); settle_fd(fd)
         snap("S4-width-refold")
         t3 = clean(buf)[m2:]
-        folds = len(re.findall(FOLD_MARKER, t3))
-        S4 = stage("S4-width-refold", folds >= 1, f"refolds rendered: {folds}")
+        # The whole post-press window IS this stage's evidence: markers carry their
+        # level in the text, so stale frames from other levels cannot masquerade —
+        # a Brief marker here can only come from this stage's alt+2 (S3 ended at
+        # Full, where nothing folds). A pty frame can also precede its notify, so
+        # no slicing by the notify.
+        brief_markers = re.findall(r"Brief · \d+ of \d+ words", t3)
+        if not brief_markers:
+            settle_fd(fd, 10)  # one honest observation extension: the redraw may lag
+            snap("S4-width-refold-retry")
+            t3 = clean(buf)[m2:]
+            brief_markers = re.findall(r"Brief · \d+ of \d+ words", t3)
+        S4 = stage("S4-width-refold", len(brief_markers) >= 1,
+                   f"Brief re-renders: {len(brief_markers)} (window had: {re.findall(FOLD_MARKER, t3)})")
 
     # ── S5 prep: Alt+3 persists Points; the session file is the checkpoint ──────
     if wanted("S5") and (not resume_mode or "S5-prep" not in set(STATE["completed"])):
         m3 = len(clean(buf))
-        os.write(fd, b"\x1b3"); read_for(fd, 2)
+        os.write(fd, b"\x1b3"); settle_fd(fd)
         read_for(fd, 2)
         snap("S5-prep")
         t4 = clean(buf)[m3:]
