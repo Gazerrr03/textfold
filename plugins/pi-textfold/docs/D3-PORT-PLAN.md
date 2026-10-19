@@ -260,7 +260,9 @@ stage, without re-running work whose inputs did not change.**
 
 ## 11. Execution log (2026-10-19)
 
-Base sha: `2cd77e0` (origin/main at checkout). Branch: `d3-port`.
+Base sha: `2cd77e0` (origin/main at checkout); rebased clean (15/15, no conflicts)
+onto `3983059` (origin/main at PR prep — 12 commits ahead, none touching
+`plugins/pi-textfold/`). Branch: `d3-port`.
 
 Commits, one logical change each, all gates green per commit:
 
@@ -274,7 +276,7 @@ Commits, one logical change each, all gates green per commit:
 | `3c2edec` | P5 probes + preflight | py_compile green · S0b all 7 APIs OK |
 | `8dd3221` | P6 README contracts | every documented key/grep checked against the code |
 | `07dbbfb` | P5-fix install-smoke cwd + foldable prompt (fix-forward) | base/digits/resume install smoke exit 0 on plain pi |
-| `095a54e` | taught keys: `/fold calibrate` + `/fold keys` + `keys.ts` (any keyboard, no layout table) | 63 tests · tsc clean · live teach probe exit 0 (real pi TTY: overlay → AZERTY-style `ESC+& 2 ESC+' 4 ESC+(` → saved file + `Saved` notify → learned keys fold same-session after reload → fresh process folds from the file alone); S1–S6 battery PASS |
+| `1b73c78` | taught keys: `/fold calibrate` + `/fold keys` + `keys.ts` (any keyboard, no layout table) | 63 tests · tsc clean · live teach probe exit 0 (real pi TTY: overlay → AZERTY-style `ESC+& 2 ESC+' 4 ESC+(` → saved file + `Saved` notify → learned keys fold same-session after reload → fresh process folds from the file alone); S1–S6 battery PASS |
 
 Acceptance: § 9.1–7 all hold — 54 tests ≥ 46 floor, harness self-sufficient
 (installed pi + Node 22 coded in), the checkpoint path **proven** by an injected
@@ -288,16 +290,15 @@ exist at Full); S5 asserts durable evidence, the notify is reported not asserted
 
 ---
 
-## 12. Difference vs the remote main (`origin/main` = `2cd77e0`, unchanged since the branch was cut)
+## 12. Difference vs the remote main (`origin/main` = `3983059` at PR prep; cut at `2cd77e0`, rebased 15/15 clean)
 
-`d3-port` is 9 commits ahead of `origin/main`; the remote has nothing the branch lacks
-(fast-forwardable; no rebase needed). **No upstream file was touched beyond the two meant to
-change:** `extension/fold.ts`, `extension/level.ts`, `package.json`, `package-lock.json`,
+`d3-port` is 15 commits ahead of `origin/main`; the remote has nothing the branch lacks.
+**No upstream file was touched beyond the two meant to change:** `extension/fold.ts`,
+`extension/level.ts`, `package.json`, `package-lock.json`,
 `tsconfig.json`, `tests/fold.test.ts`, `tests/level.test.ts` are blob-identical to main —
 merge conflicts are structurally impossible outside the two adapted files.
 
-15 files, +1517 / −117 (the plan itself is 317 of those lines; code + tests alone are
-+1201 / −117 over 14 files):
+18 files, +1948 / −132 (the plan itself is part of those lines):
 
 | File | Δ | What it adds over main |
 |---|---|
