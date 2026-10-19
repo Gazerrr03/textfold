@@ -8,7 +8,7 @@
   const readerEl = document.getElementById('paper-data');
   const PAPER = readerEl ? JSON.parse(readerEl.textContent).meta : null;   // the paper open in the reader, if any
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
-  const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि' };
+  const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि', sv: 'SV', da: 'DA' };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const api = (path, body) => fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
