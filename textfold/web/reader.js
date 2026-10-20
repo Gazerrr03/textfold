@@ -2405,7 +2405,9 @@
     const said = el.matches(SAID);
     handleFor = el;
     handle.classList.toggle('slim', said);   // (in a conversation's margin, which is narrow)
-    handle.style.left = `${Math.max(2, r.left - (said ? 12 : 22))}px`;
+    // (an item of a list: beside its list, where a paragraph's is, not over its number, which stands left of the item)
+    const left = el.matches('li') ? el.parentElement.getBoundingClientRect().left : r.left;
+    handle.style.left = `${Math.max(2, left - (said ? 12 : 22))}px`;
     handle.style.top = `${r.top + 2}px`;
     handle.hidden = false;
   }
