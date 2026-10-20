@@ -44,7 +44,9 @@ unclear.
 
 Where things are kept: the code in the project (`textfold/`, with the reader's pages in `textfold/web/`); papers and exports in `papers/` and `out/` of the
 project, or wherever `TEXTFOLD_DATA` points (`PAPERFOLD_DATA`, its earlier name, is read too); settings and keys in
-`~/.textfold/`.
+`~/.textfold/`. While a server runs, `server.json` in the data folder says where it is, for the programs that
+work with it (`server.announce`: format, version, url, port, pid, TextFold's version, when it started, in UTC); it is
+removed when the server stops (^C, or SIGTERM, the app's `server.kill()`), unless a server started since has written its own.
 
 The app (`desktop/`, see its README): an Electron window around the same server, with its own CPython
 (python-build-standalone) and packages, so a reader installs nothing. For macOS, Apple silicon and Intel, signed and

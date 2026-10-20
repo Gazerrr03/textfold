@@ -53,6 +53,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -65,7 +66,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import agents, bridges, build, engine, fetch, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
+from . import __version__, agents, bridges, build, engine, fetch, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
 
 STATIC = {"app.js": "text/javascript", "app.css": "text/css", "reader.js": "text/javascript",
           "reader.css": "text/css", "i18n.js": "text/javascript", "tutorial.js": "text/javascript"}
@@ -874,6 +875,31 @@ def _quiet_children():
     subprocess.Popen.__init__ = quiet
 
 
+def announce(port):
+    """server.json in the data folder: where this server is, for the programs that work with it (an editor's plugin, a
+    script), which could not tell the desktop app's free port from a server run by hand on 3017. Replaced whole, so a
+    program reading it never sees half of it. A server ended outright (on Windows, the app's server.kill(), which sends
+    no signal) leaves it behind: its url then answers nothing."""
+    f = store.DATA / "server.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f"server.json.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps({"format": "textfold/server", "version": 1, "url": f"http://127.0.0.1:{port}", "port": port,
+                               "pid": os.getpid(), "textfold": __version__,
+                               "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, indent=2), encoding="utf-8")
+    os.replace(tmp, f)
+    return f
+
+
+def withdraw(f):
+    """server.json removed when this server stops, if it is still this one's: a server started since on the same
+    data folder has written its own, and that one stays."""
+    try:
+        if json.loads(f.read_text(encoding="utf-8")).get("pid") == os.getpid():
+            f.unlink()
+    except (OSError, ValueError):
+        pass
+
+
 def serve(port=3017):
     if os.name == "nt":
         _quiet_children()
@@ -881,8 +907,21 @@ def serve(port=3017):
     # look for the agents on this computer while the server comes up
     threading.Thread(target=agents.scan, kwargs={"log": print}, daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
-    print(f"TextFold on http://localhost:{port}")
+    port = httpd.server_address[1]   # (the one given, or the free one the system chose for 0)
+
+    def killed(signum, frame):
+        # the desktop app's server.kill(): server.json goes, then the server, at once as before (stopping as ^C does
+        # would wait for the model calls under way, since Python's exit waits for a thread pool's work)
+        withdraw(f)
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+    f = announce(port)
     try:
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGTERM, killed)
+        print(f"TextFold on http://localhost:{port}")
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        withdraw(f)
