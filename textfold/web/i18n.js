@@ -582,6 +582,23 @@ window.DR_I18N = (() => {
   };
   for (const [code, words] of Object.entries(FL)) Object.assign(S[code], words);
 
+  // the type's menu in the reader (Aa): the size, the column's width, the font of the author's words
+  const tys = (w) => ({ ty_title: w[0], ty_size: w[1], ty_smaller: w[2], ty_larger: w[3], ty_usual: w[4], ty_width: w[5], ty_narrow: w[6], ty_standard: w[7], ty_wide: w[8], ty_font: w[9], ty_serif: w[10], ty_sans: w[11], ty_reset: w[12] });
+  const TY = {
+    en: tys(["Text size, width and font", "Size", "Smaller", "Larger", "The usual size", "Width", "Narrow", "Standard", "Wide", "Font", "Serif", "Sans-serif", "Reset"]),
+    zh: tys(["字号、栏宽和字体", "字号", "缩小", "放大", "默认大小", "栏宽", "窄", "标准", "宽", "字体", "衬线", "无衬线", "恢复默认"]),
+    "zh-Hant": tys(["字級、欄寬和字型", "字級", "縮小", "放大", "預設大小", "欄寬", "窄", "標準", "寬", "字型", "襯線", "無襯線", "恢復預設"]),
+    ja: tys(["文字サイズ・幅・フォント", "サイズ", "小さく", "大きく", "標準のサイズ", "幅", "狭い", "標準", "広い", "フォント", "明朝体", "ゴシック体", "元に戻す"]),
+    ko: tys(["글자 크기, 너비, 글꼴", "크기", "작게", "크게", "기본 크기", "너비", "좁게", "보통", "넓게", "글꼴", "명조", "고딕", "기본값으로"]),
+    es: tys(["Tamaño, ancho y fuente del texto", "Tamaño", "Más pequeño", "Más grande", "El tamaño habitual", "Ancho", "Estrecho", "Normal", "Amplio", "Fuente", "Con serifa", "Sin serifa", "Restablecer"]),
+    fr: tys(["Taille, largeur et police du texte", "Taille", "Plus petit", "Plus grand", "La taille habituelle", "Largeur", "Étroite", "Standard", "Large", "Police", "Avec empattements", "Sans empattements", "Rétablir"]),
+    de: tys(["Textgröße, Breite und Schrift", "Größe", "Kleiner", "Größer", "Die übliche Größe", "Breite", "Schmal", "Standard", "Breit", "Schrift", "Serif", "Serifenlos", "Zurücksetzen"]),
+    pt: tys(["Tamanho, largura e fonte do texto", "Tamanho", "Menor", "Maior", "O tamanho habitual", "Largura", "Estreita", "Padrão", "Larga", "Fonte", "Com serifa", "Sem serifa", "Repor"]),
+    it: tys(["Dimensione, larghezza e carattere del testo", "Dimensione", "Più piccolo", "Più grande", "La dimensione abituale", "Larghezza", "Stretta", "Normale", "Ampia", "Carattere", "Con grazie", "Senza grazie", "Ripristina"]),
+    ru: tys(["Размер, ширина и шрифт текста", "Размер", "Меньше", "Больше", "Обычный размер", "Ширина", "Узкая", "Обычная", "Широкая", "Шрифт", "С засечками", "Без засечек", "Сбросить"]),
+    hi: tys(["पाठ का आकार, चौड़ाई और फ़ॉन्ट", "आकार", "छोटा", "बड़ा", "सामान्य आकार", "चौड़ाई", "संकरी", "सामान्य", "चौड़ी", "फ़ॉन्ट", "सेरिफ़", "सान्स-सेरिफ़", "पहले जैसा करें"]),
+  };
+  for (const [code, words] of Object.entries(TY)) Object.assign(S[code], words);
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });
   const SEL = {
