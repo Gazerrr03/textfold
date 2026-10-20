@@ -810,3 +810,18 @@ html.compare .chunk > .side, html.compare .chunk > .lside { position: static; }
 .accbtn { order: 3; }
 .accbtn:disabled { opacity: .5; cursor: default; }
 @media print { .pdfpane, .cmpbtn { display: none !important; } html.compare body, html.app.compare body { padding-left: 0; } }
+
+/* the handle that drags a paragraph, a heading, a section's summary or a message of a conversation into another app,
+   with a link back to it (reader.js, the drags): on hover only, beside the column and outside it, so the zoom's copies
+   never hold it; over the chat and a note's window, in their narrow margin */
+.draghandle { position: fixed; z-index: 50; width: 14px; height: 18px; border-radius: 4px; cursor: grab; color: var(--faint);
+  background: radial-gradient(circle, currentColor 1.1px, transparent 1.5px) 1px 0 / 6px 6px; }
+.draghandle.slim { width: 9px; background-position: 0 0; background-size: 4.5px 6px; }
+.draghandle:hover { color: var(--accent); background-color: var(--accent-soft); }
+.draghandle:active { cursor: grabbing; }
+/* the Topic map's cards are dragged whole (pressed, they are draggable) */
+.doc[data-level="0"] .chunk:not(.empty) { cursor: grab; }
+.doc[data-level="0"] .chunk .u[data-l="0"] { cursor: pointer; }
+.dragimg { position: fixed; top: -200px; left: 0; max-width: 360px; padding: 6px 10px; border-radius: 8px; font: 500 13px/1.35 var(--sans);
+  color: var(--ink); background: var(--card); border: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media print { .draghandle, .dragimg { display: none; } }

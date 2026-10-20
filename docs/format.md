@@ -9,6 +9,9 @@ section as Markdown. A running server gives it too, from what is stored and with
 `GET /api/doc/<id>?lang=<code>`. Version 0 may still change: fields will be added without a new version, and a field renamed or
 removed will come with version 1.
 
+A part of a text dragged out of the reader into another app carries its words and a link back to it:
+[drag-format.md](drag-format.md).
+
 ## The contract
 
 Two kinds of text, never mixed:
