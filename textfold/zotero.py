@@ -10,7 +10,8 @@ file (a PDF, an e-book, a saved web page, a Word file), taken as a file dropped 
 the paper online when its DOI names one, else the PDF engine, else TextFold's own reading), so it is kept beside the
 paper as any original is; else its DOI, in Europe PMC. zotero.json, in the data folder, says which item became which
 document, so the library marks what is open, and keeps the item's record: a document read from the item's own file
-takes its title, authors, date, DOI and citekey from Zotero (apply), which knows them better than the file does.
+takes its title, authors, date, DOI and citekey from Zotero (apply), which knows them better than the file does, and
+every document read from an item is listed with the item's citekey (citekeys).
 
 The library chosen is the reader's settings (~/.textfold/settings.json, "zotero": {"library"}). So are, for a Zotero
 elsewhere, its address and its data folder ("base", "data_dir"), which only that file sets: no page may point the
@@ -174,16 +175,16 @@ def _check(lib):
 # ── an item, read ─────────────────────────────────────────────────────
 
 def read(lib, key):
-    """What an item is read from: {"ref", "title"} for a paper online (its arXiv id, else its DOI when it has no file),
-    or {"data", "name", "refs", "title", "record"} for its file, to be taken as a dropped file is. ValueError("no-file")
-    when it has neither."""
+    """What an item is read from: {"ref", "title", "record"} for a paper online (its arXiv id, else its DOI when it has no
+    file), or {"data", "name", "refs", "title", "record"} for its file, to be taken as a dropped file is.
+    ValueError("no-file") when it has neither."""
     _check(lib)
     if not KEY.fullmatch(key or ""):
         raise ValueError("bad-item")
     r, _ = _get(f"{lib}/items/{key}")
     it = item_of(r)
     if it["arxiv"]:
-        return {"ref": it["arxiv"], "title": it["title"]}
+        return {"ref": it["arxiv"], "title": it["title"], "record": record_of(r, it)}
     for att in _attachments(lib, key):
         f = _file(lib, att)
         if f:
@@ -191,7 +192,7 @@ def read(lib, key):
             return {"data": f.read_bytes(), "name": name, "refs": [it["doi"]] if it["doi"] else [], "title": it["title"],
                     "record": record_of(r, it)}
     if it["doi"]:
-        return {"ref": it["doi"], "title": it["title"]}
+        return {"ref": it["doi"], "title": it["title"], "record": record_of(r, it)}
     raise ValueError("no-file")
 
 
@@ -257,6 +258,21 @@ def links():
         return {k: v["paper"] for k, v in json.loads(store.read_text(_links_file())).items()}
     except (OSError, ValueError, KeyError, TypeError):
         return {}
+
+
+def citekeys():
+    """Each document's citekey, for the documents read from an item that has one: as the item's record has it, Zotero's
+    when the item was read (the last item read, when several became one document, as apply takes it)."""
+    try:
+        data = json.loads(store.read_text(_links_file()))
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for v in data.values() if isinstance(data, dict) else []:
+        rec = v.get("record") if isinstance(v, dict) else None
+        if isinstance(rec, dict) and rec.get("citekey") and isinstance(v.get("paper"), str):
+            out[v["paper"]] = rec["citekey"]
+    return out
 
 
 def link(lib, key, pid, title, record=None):
