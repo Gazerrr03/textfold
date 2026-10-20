@@ -46,6 +46,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 	const calls: string[] = [];
 	let editorText = opts.editorText ?? "";
 	const editorWrites: string[] = [];
+	const pastes: string[] = [];
 
 	const branch = opts.branch as unknown[];
 	const theme: TestTheme = { fg: (_kind: string, s: string) => s, bold: (s: string) => s, dim: (s: string) => s };
@@ -109,6 +110,9 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 				editorText = t;
 				editorWrites.push(t);
 			},
+			pasteToEditor: (t: string) => {
+				pastes.push(t);
+			},
 			setWidget: (key: string, build: unknown, placement?: unknown) => {
 				const w: { factory?: WidgetFactory; content?: string[]; opts?: unknown } = { opts: placement };
 				if (typeof build === "function") w.factory = build as WidgetFactory;
@@ -145,6 +149,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 		ctx: ctx as never,
 		screen,
 		editorWrites,
+		pastes,
 		transformers,
 	};
 	// The factory-based capture path needs resolve on done: kept where the tests use it.
@@ -318,7 +323,7 @@ describe("--textfold-digits registers plain digits from session_start, not the f
 		expect(mk.calls).toContain("shortcut:alt+3");
 	});
 
-	test("a digit on an empty editor folds to its level; a digit in a draft reinserts itself", async () => {
+	test("a digit on an empty editor folds to its level; in a draft it is typed where the cursor is", async () => {
 		const textfold = await load();
 		const mk = makePi({ digitsFlag: true, editorText: "" });
 		textfold(mk.pi);
@@ -331,7 +336,8 @@ describe("--textfold-digits registers plain digits from session_start, not the f
 		textfold(draft.pi);
 		draft.handler("session_start")({ reason: "startup" }, draft.ctx);
 		draft.press("3");
-		expect(draft.editorWrites).toEqual(["ab 3"]);
+		expect(draft.pastes).toEqual(["3"]); // a paste lands at the cursor, not at the end of the draft
+		expect(draft.editorWrites).toEqual([]);
 		expect(draft.entries).toEqual([]); // no fold while typing
 	});
 });
@@ -436,6 +442,14 @@ describe("reasoning folds at the level too", () => {
 		expect(mk.transformers[0]!(thinking, { messageType: "user" })).toBe(thinking);
 	});
 
+	test("a kind of message the extension does not name is left as written", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.press("alt+5");
+		expect(mk.transformers[0]!(thinking, { messageType: "something-new" })).toBe(thinking);
+	});
+
 	test("at Full nothing folds, reasoning included", async () => {
 		const textfold = await load();
 		const mk = makePi({ branch: [] });
@@ -535,6 +549,25 @@ describe("keys you teach once, for any keyboard", () => {
 		await running;
 		expect(readMaybe("/tmp/textfold-wiring-test-cancel.json")).toBeUndefined();
 		expect((mk.ctx as unknown as { reloads?: number }).reloads ?? 0).toBe(0); // quitting teaches nothing live
+		process.env.TEXTFOLD_PI_KEYS_FILE = "";
+	});
+
+	test("/fold calibrate says so when a key comes without Alt, and still waits for that level", async () => {
+		process.env.TEXTFOLD_PI_KEYS_FILE = "/tmp/textfold-wiring-test-bare.json";
+		const textfold = await load();
+		const mk = makePi();
+		textfold(mk.pi);
+		const running = mk.runCommand("fold", "calibrate");
+		const comp = mk.customCaptures[0]({}, {}, {}, () => mk.closeCustom()) as unknown as TeachComponent;
+		comp.handleInput("¡"); // Option+1 on a Mac whose terminal keeps Option for itself
+		const shown = comp.render(78).join("\n");
+		expect(shown).toContain("came without Alt");
+		expect(shown).toContain("Level 1 Full: ?");
+		comp.handleInput("\x1b1");
+		expect(comp.render(78).join("\n")).not.toContain("came without Alt");
+		comp.handleInput("\x1b");
+		await running;
+		expect(readMaybe("/tmp/textfold-wiring-test-bare.json")).toBeUndefined();
 		process.env.TEXTFOLD_PI_KEYS_FILE = "";
 	});
 

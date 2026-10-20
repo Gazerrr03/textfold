@@ -13,7 +13,7 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { parseKey, type KeyId, type TUI, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
+import { parseKey, wrapTextWithAnsi, type KeyId, type TUI, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { appendFileSync } from "node:fs";
 import { fold, LEVELS, worthFolding } from "./fold";
 import { hasBeenWelcomed, keysFile, loadKeys, markWelcomed, saveKeys, type KeysMap } from "./keys";
@@ -49,11 +49,20 @@ The person reading this session can fold your replies with one key: to each para
 - Give a reply longer than four paragraphs a few short headings.
 This changes the order of what you write, not its content or its length.`;
 
+// What folds: the reply and the reasoning around it, named one by one, so a kind of message Pi adds
+// later is left as written until it is chosen here.
+const FOLDS = new Set(["assistant", "assistant-thinking"]);
+
+// Where Alt+digit goes when the terminal keeps Alt for itself.
+const KEYS_FIX = process.platform === "darwin"
+	? "on a Mac, let the terminal send Option as Meta (Terminal: Settings, Profiles, Keyboard; iTerm2: Profiles, Keys, Left Option key Esc+)"
+	: "in GNOME Terminal: Preferences, Shortcuts, disable Switch to Tab";
+
 export default function textfoldFold(pi: ExtensionAPI) {
 	pi.registerFlag("textfold-digits", {
 		type: "boolean",
 		default: false,
-		description: "Digits 1..5 fold on an empty prompt and are reinserted while typing",
+		description: "Digits 1..5 fold on an empty prompt and are typed where the cursor is in a draft",
 	});
 	// The level every reply is read at: 1 Full (as written) to 5 Gist. Full at start, then
 	// restored from the session's branch so a resumed session continues where the reader
@@ -79,7 +88,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 	// (thousands of words of thinking around a few hundred of reply), so folding the reply alone
 	// would leave the reader scrolling past exactly the part the fold exists to spare them.
 	pi.registerMarkdownTransformer((markdown, context) => {
-		if (context.messageType === "user" || level === 1) return markdown;
+		if (!FOLDS.has(context.messageType) || level === 1) return markdown;
 		const f = fold(markdown, level);
 		const worth = worthFolding(markdown, f.text);
 		// One line per settled block (streaming would write one a frame).
@@ -157,7 +166,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 		// the fix; taught users and returning folders never see it.
 		if (ctx?.hasUI !== false && typeof ctx?.ui?.notify === "function"
 			&& !learnedKeys && !restored && !hasBeenWelcomed()) {
-			ctx.ui.notify("TextFold keys: try Alt+3 — if nothing folds, your terminal is eating Alt+numbers (in GNOME Terminal: Preferences → Shortcuts, disable Switch to Tab), or teach your own keys with /fold calibrate", "info");
+			ctx.ui.notify(`TextFold keys: try Alt+3. If nothing folds, the terminal keeps Alt for itself: ${KEYS_FIX}, or teach your own keys with /fold calibrate`, "info");
 			markWelcomed();
 			DEBUG?.("welcomed");
 		}
@@ -251,8 +260,9 @@ export default function textfoldFold(pi: ExtensionAPI) {
 					DEBUG?.(`digit ${n} decision=${decision.kind}${decision.kind === "level" ? ` level=${decision.level}` : ""} editorLen=${editorText.length}`);
 					if (decision.kind === "level") {
 						apply(decision.level, ctx as ExtensionContext);
-					} else if (decision.kind === "reinsert" && typeof ctx?.ui?.setEditorText === "function") {
-						ctx.ui.setEditorText(editorText + `${n}`);
+					} else if (decision.kind === "reinsert") {
+						// typed as a paste, so it lands where the cursor is, not at the end of the draft
+						ctx.ui.pasteToEditor(`${n}`);
 					}
 				},
 			});
@@ -272,6 +282,7 @@ export default function textfoldFold(pi: ExtensionAPI) {
 		const taught: Record<string, string> = {};
 		const levels = [1, 2, 3, 4, 5] as const;
 		let step = 0;
+		let bare = false; // the last key came without Alt (a Mac's Option+1 types ¡)
 		await cmdCtx.ui.custom((tui, _theme, _kb, done) => {
 		const finish = (save: boolean): boolean => {
 			if (save) {
@@ -303,16 +314,22 @@ export default function textfoldFold(pi: ExtensionAPI) {
 						const marker = i === step ? "  ← press Alt+it now" : "";
 						lines.push(`  Level ${level} ${levelName(level)}: ${bound ?? "? " + marker}`);
 					}
+					lines.push("");
+					if (bare) lines.push(...wrapTextWithAnsi(`That key came without Alt: ${KEYS_FIX}.`, Math.max(20, width - 1)), "");
 					lines.push(
-						"",
 						"A plain digit on this step keeps that level's default (alt+<digit>).",
 						"Escape leaves a previous teaching alone. Saved to " + keysFile(),
 					);
 					return lines;
 				},
 				handleInput: (data: string): boolean => {
-					const parsed = String(parseKey(data) ?? "");
+					const parsed = String(parseKey(data) ?? data);
 					if (parsed === "escape" || parsed === "ctrl+c") return finish(false);
+					bare = !parsed.startsWith("alt+") && !/^[1-5]$/.test(parsed);
+					if (bare) {
+						tui?.requestRender?.(true);
+						return true;
+					}
 					if (!parsed.startsWith("alt+")) {
 						if (/^[1-5]$/.test(parsed)) {
 							taught[String(parsed)] = `alt+${parsed}`;
