@@ -24,6 +24,16 @@ changed, when the blockmap allows), and the new version installs when they click
 Settings shows the version and checks by hand. A copy run from the code (`npm start`) does not update itself.
 `TEXTFOLD_UPDATES=<url>` points the app at another folder of release files, for a test.
 
+## Links
+
+`textfold://open?paper=<document id>[&u=<paragraph id>][&n=<note id>][&level=<full|brief|key|takeaway|topic>][&lang=<code>]`,
+its values URL-encoded, opens a document of the library in the window, at a paragraph and a level or at a note, in a
+language: another program (an editor's plugin) links to it so. A link with any part wrong is not followed, and a
+document not in the library opens the landing (`links.js`; `npm test` runs its tests, and `tests/test_desktop_links.py`
+keeps its ids, levels and languages the server's). Only the installed app claims the scheme: declared for macOS in
+`package.json` (`build.protocols`), and claimed when it starts, which Windows needs, since its installer registers none.
+A copy run from the code never claims it; a link on its command line still opens (`npm start -- "textfold://open?paper=2512.23916"`).
+
 ## Build
 
 ```bash

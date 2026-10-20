@@ -5,12 +5,13 @@
 // folder (TEXTFOLD_DATA), and points its window at it. Settings and keys stay where the server always keeps them,
 // ~/.textfold. Pages on other sites open in the system browser, where the reader is already signed in.
 // Run from the repository without a payload (`npm start`), it uses the python3 on the PATH (python on Windows) and the
-// repository itself.
+// repository itself. textfold:// links open a document of the library in the window (links.js).
 const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, shell } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+const links = require('./links');
 
 const WIN = process.platform === 'win32';
 const PAYLOAD = app.isPackaged ? path.join(process.resourcesPath, 'payload') : path.join(__dirname, 'payload');
@@ -21,6 +22,8 @@ const CODE = PACKED ? path.join(PAYLOAD, 'app') : path.join(__dirname, '..');
 
 let server = null;
 let win = null;
+let base = null;      // the server's address, once it answers
+let waiting = null;   // a link that came before that: the last one, opened then
 
 // the data folder (papers/, out/, server.log), the one `python3 -m textfold serve` keeps too (store.app_data()): on a Mac
 // ~/Library/Application Support/TextFold, Electron's own; on Windows %LOCALAPPDATA%\TextFold, where Electron's is Roaming
@@ -29,7 +32,41 @@ app.setName('TextFold');
 if (process.env.TEXTFOLD_DATA) app.setPath('userData', path.resolve(process.env.TEXTFOLD_DATA));
 else if (WIN) app.setPath('userData', path.join(process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local'), 'TextFold'));
 if (!app.requestSingleInstanceLock()) app.quit();
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+app.on('second-instance', (_e, argv) => {
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  follow(links.fromArgv(argv));
+});
+
+// ── textfold:// links ────────────────────────────────────────────────
+// Another program (an editor's plugin) opens a document of the library at a paragraph, a note or a level. The packaged
+// app is the scheme's handler: declared for macOS in package.json (build.protocols), and claimed here, which Windows
+// needs, since its installer registers no scheme. A copy run from the code never claims it, so no build of the
+// repository takes the installed app's links.
+if (app.isPackaged) app.setAsDefaultProtocolClient('textfold');
+// macOS hands a link to the app, before it is ready when the link starts it; Windows and Linux start the app with the
+// link on its command line, and a second instance hands its own to this one (second-instance, above)
+app.on('open-url', (e, url) => { e.preventDefault(); follow(url); });
+follow(links.fromArgv(process.argv));
+
+function follow(link) {
+  const parts = link && links.parse(link);
+  if (!parts) return;
+  waiting = parts;
+  if (base && win && !win.isDestroyed()) go();
+}
+function go() {
+  const url = links.readerUrl(base, waiting);
+  waiting = null;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  // the reader reads #u=, #n= and #level= as it opens, so a link into the page already open opens it again
+  if (url.includes('#') && win.webContents.getURL().split('#')[0] === url.split('#')[0]) {
+    win.webContents.executeJavaScript(`history.replaceState(null, '', ${JSON.stringify(url)}); location.reload();`).catch(() => win.loadURL(url));
+  } else {
+    win.loadURL(url);
+  }
+}
 
 // a free port from a quiet base, so a server run by hand on 3017 is never in the way
 function freePort(start = 31917) {
@@ -105,7 +142,9 @@ async function open() {
     win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<pre style="font:14px -apple-system,'Segoe UI',sans-serif;padding:24px;white-space:pre-wrap">TextFold could not start its server.\n\nThe log is in ${where}</pre>`)}`);
     return;
   }
-  win.loadURL(`http://127.0.0.1:${port}/`);
+  base = `http://127.0.0.1:${port}`;
+  if (waiting) go();
+  else win.loadURL(`${base}/`);
 }
 
 ipcMain.handle('open-external', (_e, url) => (/^https?:/.test(url) ? shell.openExternal(url) : null));
