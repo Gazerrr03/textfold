@@ -847,7 +847,7 @@ html.compare .chunk > .side, html.compare .chunk > .lside { position: static; }
 
 /* the type's menu (Aa), beside the language's and in its look: the size a step at a time, the column's width, the font
    of the author's words (reader.js, the type) */
-.typepick { position: relative; order: 3; flex: none; }
+.typepick { position: relative; order: 3; flex: none; margin-inline: -8px; }   /* (6px from Save and from the language, as the notes' buttons are from each other: the bar's gap is 14px) */
 .typebtn { font: 600 13px/1 var(--serif); color: var(--ink-2); background: none; border: 1px solid var(--line); border-radius: 999px;
   padding: 5px 10px; cursor: pointer; }
 .typebtn:hover, .typebtn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
