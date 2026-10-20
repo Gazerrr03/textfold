@@ -83,16 +83,28 @@ describe('folding', () => {
     for (let i = 1; i < counts.length; i++) expect(counts[i]!).toBeLessThan(counts[i - 1]!)
     expect(words('缓存键 cache key')).toBe(5)
   })
+
+  test('Outline of a reply without headings is Points, not Gist', async () => {
+    const unheaded = [
+      'The first paragraph states its point. It adds a detail or two.',
+      'The second paragraph has a point of its own. It also explains it.',
+      'The third paragraph closes the reply. Nothing else follows it.',
+    ].join('\n\n')
+    expect(fold(unheaded, 4).text).toBe(fold(unheaded, 3).text)
+    expect(fold(unheaded, 4).text).toContain('The second paragraph has a point of its own. …')
+    expect(fold(unheaded, 5).text).toBe('The first paragraph states its point. …')
+  })
 })
 
 describe('tables and code', () => {
   const table = ['| Option | Cost |', '| --- | --- |', ...Array.from({ length: 10 }, (_, i) => `| ${i} | ${i}/mo |`)].join('\n')
   const md = `The options compare like this. The cheapest is not the best.\n\n${table}\n\nPick the second one. It is the best value.`
 
-  test('a table is whole at Brief and Points, and gone at Outline and Gist', async () => {
+  test('a table is whole at Brief and Points, and gone at Gist', async () => {
     expect(fold(md, 2).text).toContain(table)
     expect(fold(md, 3).text).toContain(table)
-    expect(fold(md, 4).text).not.toContain('| Option')
+    // no headings: Outline reads as Points, so the table is still part of the skeleton
+    expect(fold(md, 4).text).toBe(fold(md, 3).text)
     expect(fold(md, 5).text).not.toContain('| Option')
   })
 
@@ -128,11 +140,12 @@ describe('drawings', () => {
   const art = ['`┌────┐    ┌──────────┐    ┌────────┐`  ', '`│ Pi ├───▶│ TextFold ├───▶│ Screen │`  ', '`└────┘    └──────────┘    └────────┘`'].join('\n')
   const md = `The reply goes through three steps. Each one changes it.\n\n${art}\n\nThe fold is the second step. It runs after the drawing.`
 
-  test('a drawing is one block, kept row by row at Brief and Points, and gone at Outline and Gist', async () => {
+  test('a drawing is one block, kept row by row at Brief and Points, and gone at Gist', async () => {
     expect(blocks(md).map((b) => b.kind)).toEqual(['para', 'art', 'para'])
     expect(fold(md, 2).text).toContain(art)
     expect(fold(md, 3).text).toContain(art)
-    expect(fold(md, 4).text).not.toContain('TextFold ├')
+    // no headings: Outline reads as Points, so the drawing is still part of the skeleton
+    expect(fold(md, 4).text).toBe(fold(md, 3).text)
     expect(fold(md, 5).text).not.toContain('TextFold ├')
   })
 

@@ -166,10 +166,16 @@ const MORE = ' …'
 export function fold(md: string, level: number): { text: string; total: number; shown: number } {
   const total = words(md)
   if (level <= 1) return { text: md, total, shown: total }
+  const bs = blocks(md)
+  // Outline is a reply's headings and the first sentence under each. A reply written without
+  // headings has no sections to outline, so it reads as Points: the first sentence of each
+  // paragraph, nothing dropped. Without this it fell to the reply's first sentence, which is
+  // exactly what Gist shows, and level 4 stopped being a level of its own.
+  if (level === 4 && !bs.some((b) => b.kind === 'heading')) level = 3
   const out: string[] = []
   let underHeading = true   // at Outline, a section shows its heading and its first sentence
   let first = true          // at Gist, the reply shows its first sentence
-  for (const b of blocks(md)) {
+  for (const b of bs) {
     if (level === 5 && !first) break
     switch (b.kind) {
       case 'rule':
