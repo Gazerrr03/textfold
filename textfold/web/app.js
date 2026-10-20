@@ -51,11 +51,24 @@
   const nameOf = (code) => READ[code] || I18N.NATIVE[code] || code;
   let readLang = [store.get(UI_KEY), I18N.guess(READ)].find((l) => l && READ[l]) || 'en';
   let uiLang = I18N.uiFor(readLang);
+  // The page keeps the reader's language itself (UI_KEY). The server is told it too, when it changes, and as the landing
+  // opens while it has none (the settings' "lang"; they are every server's, so a page elsewhere never overwrites a
+  // choice): for the programs that work with TextFold (an editor's plugin), which cannot read this window's storage.
+  // Nothing here reads it back.
+  let told = modelData ? modelData.lang : undefined;
+  function tellLang(code) {
+    if (!code || code === told || !READ[code]) return;
+    told = code;
+    // (keepalive: a language just made is told as the page goes to it)
+    fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: code }), keepalive: true })
+      .then((r) => { if (!r.ok) told = undefined; }, () => { told = undefined; });
+  }
   function setReaderLang(code) {
     if (!READ[code]) return;
     readLang = code;
     uiLang = I18N.uiFor(code);
     store.set(UI_KEY, code);
+    tellLang(code);
     renderSidebar();
     if (landing) renderLanding();
     if (window.__reader && window.__reader.setUi) window.__reader.setUi(code);
@@ -801,7 +814,7 @@
         if (u) break;
       }
       try { if (u) sessionStorage.setItem('pf-keep', JSON.stringify({ pid: PAPER.id, uid: u.dataset.u, top: u.getBoundingClientRect().top, level: R && R.level })); } catch { /* private window */ }
-      if (R && lang !== R.lang) store.set(UI_KEY, lang);   // a language just made: the reader's goes with it
+      if (R && lang !== R.lang) { store.set(UI_KEY, lang); tellLang(lang); }   // a language just made: the reader's goes with it
       location.href = `/p/${PAPER.id}?lang=${encodeURIComponent(lang)}`;
     }
     const src = PAPER.source || {};
@@ -837,7 +850,7 @@
     }
     window.DRApp = {
       onLang(lang, readerLang) {   // (readerLang: the reader's language, which a switch of the paper's moves)
-        if (readerLang && readerLang !== readLang && READ[readerLang]) { readLang = readerLang; uiLang = I18N.uiFor(readerLang); }
+        if (readerLang && readerLang !== readLang && READ[readerLang]) { readLang = readerLang; uiLang = I18N.uiFor(readerLang); tellLang(readerLang); }
         renderSidebar();
         fillGaps(lang);
       },
@@ -933,6 +946,7 @@
     for (const code of I18N.CODES) ui.append(Object.assign(h('option'), { value: code, textContent: I18N.NATIVE[code] }));
     ui.value = uiLang;
     sel.onchange = () => setReaderLang(sel.value);
+    if (modelData && modelData.lang == null) tellLang(readLang);   // (one chosen before the server kept it)
     ui.onchange = () => setReaderLang(ui.value);
     document.getElementById('open-settings').onclick = openSettings;
     const help = document.getElementById('ui-help');
