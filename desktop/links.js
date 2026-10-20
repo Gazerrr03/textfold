@@ -1,11 +1,12 @@
 // textfold:// links, which other programs (an editor's plugin) open the app with, and the reader's address each one
 // opens. Nothing here touches Electron, so node tests it alone (links.test.js).
 //
-//   textfold://open?paper=<document id>[&u=<paragraph id>][&n=<note id>][&level=<level>][&lang=<code>]
-//     → <server>/p/<id>?lang=<code>#u=<paragraph id>&level=<level>, or #n=<note id>&level=<level>
+//   textfold://open?paper=<document id>[&u=<paragraph id>][&s=<section id>][&n=<note id>][&level=<level>][&lang=<code>]
+//     → <server>/p/<id>?lang=<code>#u=<paragraph id>&level=<level>, or #s=<section id>…, or #n=<note id>…
 //
 // A link may come from any program, a web page among them, so every part is checked, and a link with one part wrong is
-// not followed at all. It only ever opens a page of the reader: a document not in the library opens the landing.
+// not followed at all. It only ever opens a page of the reader; a document not in the library, the app says so
+// (main.js) and opens the library.
 
 // a document's id, as textfold/store.py's valid_id has it (tests/test_desktop_links.py keeps the two the same)
 const ARXIV_ID = String.raw`\d{4}\.\d{4,5}`;
@@ -18,7 +19,7 @@ const LANGS = ['en', 'zh', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'it', 
 
 const ARXIV = new RegExp(`^(?:${ARXIV_ID})$`);
 const IMPORTED = new RegExp(`^(?:${IMPORTED_ID})$`);
-const PART = /^[\w.-]+$/;   // a paragraph's id (S3.p2), a note's (n-k2x9q0ab)
+const PART = /^[\w.-]+$/;   // a paragraph's id (S3.p2), a section's (S3.SS1), a note's (n-k2x9q0ab)
 
 function validId(id) {
   return ARXIV.test(id) || (IMPORTED.test(id) && id.length <= 80);
@@ -27,12 +28,13 @@ function validId(id) {
 const CHECK = {
   paper: validId,
   u: (v) => PART.test(v),
+  s: (v) => PART.test(v),
   n: (v) => PART.test(v),
   level: (v) => LEVELS.includes(v),
   lang: (v) => LANGS.includes(v),
 };
 
-// A link's parts ({paper, u, n, level, lang}, those it has), or null when it is not one the app follows. Other
+// A link's parts ({paper, u, s, n, level, lang}, those it has), or null when it is not one the app follows. Other
 // parameters are left alone, so that a link a newer program makes still opens what this app knows of it.
 function parse(link) {
   let url;
@@ -52,10 +54,11 @@ function parse(link) {
   return parts.paper ? parts : null;
 }
 
-// The reader's address for a link's parts, on the server at base (http://127.0.0.1:<port>). A note brings its own
-// paragraph, so with one the paragraph is left out, as the reader would.
+// The reader's address for a link's parts, on the server at base (http://127.0.0.1:<port>). One place in the text:
+// a note (which brings its own paragraph), else a paragraph, else a section, as the reader would choose.
 function readerUrl(base, parts) {
-  const hash = [parts.n ? `n=${parts.n}` : parts.u ? `u=${parts.u}` : '', parts.level ? `level=${parts.level}` : ''].filter(Boolean).join('&');
+  const at = parts.n ? `n=${parts.n}` : parts.u ? `u=${parts.u}` : parts.s ? `s=${parts.s}` : '';
+  const hash = [at, parts.level ? `level=${parts.level}` : ''].filter(Boolean).join('&');
   return `${base}/p/${parts.paper}${parts.lang ? `?lang=${encodeURIComponent(parts.lang)}` : ''}${hash ? `#${hash}` : ''}`;
 }
 

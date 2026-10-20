@@ -63,6 +63,7 @@ class LanguagesTest(unittest.TestCase):
         if not main.exists():
             self.skipTest("no desktop/ here")
         self.assertEqual(set(inline(main, "CHECK")), set(INTERFACE))
+        self.assertEqual(set(inline(main, "MISSING")), set(INTERFACE))   # (a link to a document not in the library)
 
     def test_the_website_names_every_reading_language(self):
         sys.path.insert(0, str(ROOT / "site"))

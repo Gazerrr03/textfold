@@ -38,7 +38,7 @@ app.on('second-instance', (_e, argv) => {
 });
 
 // ── textfold:// links ────────────────────────────────────────────────
-// Another program (an editor's plugin) opens a document of the library at a paragraph, a note or a level. The packaged
+// Another program (an editor's plugin) opens a document of the library at a paragraph, a section, a note or a level. The packaged
 // app is the scheme's handler: declared for macOS in package.json (build.protocols), and claimed here, which Windows
 // needs, since its installer registers no scheme. A copy run from the code never claims it, so no build of the
 // repository takes the installed app's links.
@@ -54,13 +54,35 @@ function follow(link) {
   waiting = parts;
   if (base && win && !win.isDestroyed()) go();
 }
-function go() {
-  const url = links.readerUrl(base, waiting);
+// the reader's page of a document not in the library opens the landing without a word: the app says which it was
+const MISSING = { en: 'This link names a document that is not in the library.', zh: '这个链接指向的文档不在列表中。',
+  'zh-Hant': '這個連結指向的文件不在列表中。', ja: 'このリンクが指す文書は一覧にありません。', ko: '이 링크가 가리키는 문서는 목록에 없습니다.',
+  es: 'Este enlace remite a un documento que no está en la biblioteca.', fr: 'Ce lien renvoie à un document qui n’est pas dans la bibliothèque.',
+  de: 'Dieser Link führt zu einem Dokument, das nicht in der Bibliothek ist.', pt: 'Este link leva a um documento que não está na biblioteca.',
+  it: 'Questo link rimanda a un documento che non è nella libreria.', ru: 'Эта ссылка ведёт к документу, которого нет в библиотеке.',
+  hi: 'यह लिंक जिस दस्तावेज़ का है, वह सूची में नहीं है।' };
+async function inLibrary(id) {
+  try {
+    const r = await fetch(`${base}/api/papers`);
+    return !r.ok || (await r.json()).some((p) => p.id === id);
+  } catch {
+    return true;   // (no answer: the page says so itself)
+  }
+}
+async function go() {
+  const parts = waiting;
   waiting = null;
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
-  // the reader reads #u=, #n= and #level= as it opens, so a link into the page already open opens it again
+  if (!(await inLibrary(parts.paper))) {
+    await dialog.showMessageBox(win, { type: 'info', message: inLocale(MISSING), detail: parts.paper });
+    if (!win.isDestroyed()) win.loadURL(`${base}/`);
+    return;
+  }
+  if (win.isDestroyed()) return;
+  const url = links.readerUrl(base, parts);
+  // the reader reads #u=, #s=, #n= and #level= as it opens, so a link into the page already open opens it again
   if (url.includes('#') && win.webContents.getURL().split('#')[0] === url.split('#')[0]) {
     win.webContents.executeJavaScript(`history.replaceState(null, '', ${JSON.stringify(url)}); location.reload();`).catch(() => win.loadURL(url));
   } else {
@@ -247,14 +269,19 @@ function setupUpdates() {
   });
 }
 
+// a table's words in the system's language (its own variant for Chinese in Taiwan, Hong Kong and Macao), else English
+function inLocale(table) {
+  const loc = app.getLocale();
+  return table[/^zh-(TW|HK|MO)|Hant/i.test(loc) ? 'zh-Hant' : loc.split('-')[0]] || table.en;
+}
+
 // The menu: the system's own, with Check for Updates (in the app's menu on a Mac, in Help on Windows) and the project
 // on GitHub. Its words follow the system's language, as the rest of the menu does.
 const CHECK = { en: 'Check for Updates…', zh: '检查更新…', 'zh-Hant': '檢查更新…', ja: 'アップデートを確認…', ko: '업데이트 확인…',
   es: 'Buscar actualizaciones…', fr: 'Rechercher des mises à jour…', de: 'Nach Updates suchen …', pt: 'Procurar atualizações…',
   it: 'Cerca aggiornamenti…', ru: 'Проверить обновления…', hi: 'अपडेट देखें…' };
 function menu(byHand) {
-  const loc = app.getLocale();
-  const label = CHECK[/^zh-(TW|HK|MO)|Hant/i.test(loc) ? 'zh-Hant' : loc.split('-')[0]] || CHECK.en;
+  const label = inLocale(CHECK);
   const check = { label, click: async () => { const r = await byHand(); if (r && r.kind !== 'available' && r.kind !== 'downloading' && r.kind !== 'ready') answer(r); } };
   const github = { label: 'TextFold on GitHub', click: () => shell.openExternal(REPO) };
   const mac = process.platform === 'darwin';
