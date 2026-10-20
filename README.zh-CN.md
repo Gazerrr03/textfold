@@ -275,6 +275,7 @@ pi install ./textfold/plugins/pi-textfold
 <a href="https://github.com/peitianyi23-sudo" title="@peitianyi23-sudo"><img src="https://github.com/peitianyi23-sudo.png?size=80" width="40" height="40" alt="@peitianyi23-sudo" /></a>
 <a href="https://github.com/mcardZH" title="@mcardZH"><img src="https://github.com/mcardZH.png?size=80" width="40" height="40" alt="@mcardZH" /></a>
 <a href="https://github.com/momoko-sketch" title="@momoko-sketch"><img src="https://github.com/momoko-sketch.png?size=80" width="40" height="40" alt="@momoko-sketch" /></a>
+<a href="https://github.com/Knoety" title="@Knoety"><img src="https://github.com/Knoety.png?size=80" width="40" height="40" alt="@Knoety" /></a>
 
 欢迎贡献：先看 [CONTRIBUTING.md](https://github.com/chenxiachan/textfold/blob/main/CONTRIBUTING.md)。
 
