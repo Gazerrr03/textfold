@@ -236,6 +236,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 
 ## What's new
 
+- **October 20, 2026: Pi folds the thinking too.** In Pi, the model's reasoning folds with its reply, so a long coding turn reads in a few lines. Click a level in the row to fold, keep your level when you resume a session, and teach the keys once with `/fold calibrate` on any keyboard. Thanks to [@jlamweil](https://github.com/jlamweil).
 - **October 19, 2026: more languages to read in.** Swedish, Danish, Norwegian, Finnish, Dutch, Polish, Czech, Ukrainian, Turkish, Indonesian and Vietnamese join the languages a text can be read in. Where the interface has no words for a language, it is in English. Thanks to [@Kullenej](https://github.com/Kullenej).
 - **October 15, 2026: Pi's replies fold too.** [An extension for Pi](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md) puts the five levels on every reply, with the same fold as in Claude Code. Thanks to [@jlamweil](https://github.com/jlamweil).
 - **October 15, 2026: PDFs open without the engine.** A PDF with its own text, as most papers have, opens at once, its figures cut from the page; only a scan still needs the PDF engine. An arXiv paper with no HTML version is read from its PDF. Thanks to [@sylvainHellin](https://github.com/sylvainHellin).
