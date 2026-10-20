@@ -2,7 +2,7 @@
 
 Your agent writes more than you have time to read. TextFold folds every reply in [Pi](https://pi.dev) — and the reasoning behind it — to the level you need, from every word to the answer in one sentence, with one key. It is the fold of [TextFold for Claude Code](../textfold/README.md), as a Pi extension, from [TextFold](../../README.md).
 
-<img src="../../docs/assets/pi.gif" width="880" alt="A reply in Pi folding a level at a time, from the full text down to its answer in one sentence, one key each">
+<img src="../../docs/assets/pi-think.gif" width="880" alt="A coding turn in Pi, its thinking and its reply, folding a level at a time until each is one sentence, by key and by a click on the row">
 
 | Key | Level | What you get |
 |:-:|---|---|
@@ -22,11 +22,11 @@ Hold Alt and type the digit, click a level in the row, or type `/fold` and a lev
 
 **The panel shows the fold.** Under the row, a small panel previews the latest reply at the level in force — before any reply when a restart restored a level, and after one at the newest. It keeps the folded reply in view when the reply itself has scrolled away.
 
-**Digits, on request.** `--textfold-digits` puts plain 1–5 to work: on an empty prompt a digit folds to its level; while you type it reinserts itself, so the digit you meant to write still lands (the flag is registered once a session starts, because Pi commits flags after extensions load — a bare digit otherwise gives up its key, which is why the short answer is Alt). Without the flag the Alt keys do everything.
+**Digits, on request.** `--textfold-digits` puts plain 1–5 to work: on an empty prompt a digit folds to its level; in a draft it is typed where the cursor is, so the digit you meant to write still lands (the flag is registered once a session starts, because Pi commits flags after extensions load — a bare digit otherwise gives up its key, which is why the short answer is Alt). Without the flag the Alt keys do everything.
 
 **Why Alt.** Pi hands every key to its extensions before the prompt sees it, so a bare digit would never reach what you type.
 
-**Any keyboard.** On most non-US layouts Alt+1…5 arrives as Alt plus a glyph (Alt+&, Alt+é, …), so the table above would bind nothing. `/fold calibrate` teaches the extension your own five keys — what you press is what it binds, on any layout Pi can name a key for. The teaching is kept in `~/.pi/agent/textfold-keys.json` and takes effect at once; `/fold keys` shows what is bound, and the row and panel name the taught keys once they exist. On your first session Pi also says this once: if Alt+3 folds nothing, your terminal is likely eating Alt+numbers (in GNOME Terminal: Preferences → Shortcuts, disable Switch to Tab) — then teach your keys.
+**Any keyboard.** On most non-US layouts Alt+1…5 arrives as Alt plus a glyph (Alt+&, Alt+é, …), so the table above would bind nothing. `/fold calibrate` teaches the extension your own five keys — what you press is what it binds, on any layout Pi can name a key for. The teaching is kept in `~/.pi/agent/textfold-keys.json` and takes effect at once; `/fold keys` shows what is bound, and the row and panel name the taught keys once they exist. On a Mac, Option+1 types ¡ until the terminal sends Option as Meta (Terminal: Settings → Profiles → Keyboard; iTerm2: Profiles → Keys → Left Option key: Esc+), and `/fold calibrate` says so when a key arrives without it. On your first session Pi also says this once: if Alt+3 folds nothing, your terminal is keeping Alt for itself (on a Mac, the Option setting above; in GNOME Terminal: Preferences → Shortcuts, disable Switch to Tab), then teach your keys.
 
 ## Why you can trust a fold
 

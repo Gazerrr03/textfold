@@ -9,7 +9,7 @@ Your agent writes more than you have time to read. TextFold folds every Claude C
 | **1** | **Full** | every word Claude wrote |
 | **2** | **Brief** | each point, with the reason behind it |
 | **3** | **Points** | just the points, at a glance |
-| **4** | **Outline** | the map of a long reply: its sections, and what each one says |
+| **4** | **Outline** | the map of a long reply: its sections, and what each one says (a reply without headings shows its points) |
 | **5** | **Gist** | the answer, in one sentence |
 
 Type the digit while the prompt is empty, or pick a level in the row above the prompt. A folded reply tells you how much of it you are seeing, and `1` brings back every word. Short replies stay whole: one under about 80 words, or one a fold would barely shorten, always shows as written.

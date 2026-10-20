@@ -201,7 +201,7 @@ claude plugin install textfold@textfold
 | **1** | **Full** | every word Claude wrote |
 | **2** | **Brief** | each point, with the reason behind it |
 | **3** | **Points** | just the points, at a glance |
-| **4** | **Outline** | the map of a long reply: its sections, and what each one says |
+| **4** | **Outline** | the map of a long reply: its sections, and what each one says (a reply without headings shows its points) |
 | **5** | **Gist** | the answer, in one sentence |
 
 Type the digit while the prompt is empty, or pick a level in the row above the prompt. Short replies stay whole: one under about 80 words, or one a fold would barely shorten, always shows as written.
@@ -219,7 +219,7 @@ More in [plugins/textfold](https://github.com/chenxiachan/textfold/blob/main/plu
 
 <br>
 
-<img src="https://raw.githubusercontent.com/chenxiachan/textfold/main/docs/assets/pi.gif" width="880" alt="A reply in Pi folding a level at a time, from the full text down to its answer in one sentence, one key each">
+<img src="https://raw.githubusercontent.com/chenxiachan/textfold/main/docs/assets/pi-think.gif" width="880" alt="A coding turn in Pi, its thinking and its reply, folding a level at a time until each is one sentence, by key and by a click on the row">
 
 An extension puts the same five levels on every reply in [Pi](https://pi.dev). It needs Pi 1.2.0 or later, on Node 22.15 or later.
 
@@ -228,7 +228,7 @@ git clone https://github.com/chenxiachan/textfold.git
 pi install ./textfold/plugins/pi-textfold
 ```
 
-Hold Alt and type the digit, or type `/fold` and a level: `/fold 3`, `/fold points`, `/fold off`. Every reply folds in place, the earlier ones too, and the row above the prompt marks the level you read at. It folds with the mod's own engine, so a reply reads the same at each level in Claude Code and in Pi.
+Hold Alt and type the digit, click a level in the row above the prompt, or type `/fold` and a level: `/fold 3`, `/fold points`, `/fold off`. Every reply folds in place, the earlier ones too, and so does the model's thinking, so a long coding turn reads in a few lines. The level stays with the session, and `/fold calibrate` teaches the keys on any keyboard. On a Mac, let the terminal send Option as Meta, or Option+1 types ¡. It folds with the mod's own engine, so a reply reads the same at each level in Claude Code and in Pi.
 
 More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md). Contributed by [@jlamweil](https://github.com/jlamweil).
 

@@ -201,7 +201,7 @@ claude plugin install textfold@textfold
 | **1** | **Full** | Claude 写的每一个字 |
 | **2** | **Brief** | 每个要点，连同背后的理由 |
 | **3** | **Points** | 只看要点，一眼扫完 |
-| **4** | **Outline** | 长回答的地图：有哪几节，每节讲了什么 |
+| **4** | **Outline** | 长回答的地图：有哪几节，每节讲了什么（没有标题的回答显示要点） |
 | **5** | **Gist** | 一句话的答案 |
 
 在提示框为空时输入数字，或者在提示框上方那一行里选一个层级。短回答保持原样：不到大约 80 个词（中文约 130 字），或者折叠后几乎不会变短的回答，总是原样显示。
@@ -219,7 +219,7 @@ claude plugin install textfold@textfold
 
 <br>
 
-<img src="https://raw.githubusercontent.com/chenxiachan/textfold/main/docs/assets/pi.gif" width="880" alt="Pi 里的一条回答逐级折叠，从全文一直折到一句话的答案，每级一个键">
+<img src="https://raw.githubusercontent.com/chenxiachan/textfold/main/docs/assets/pi-think.gif" width="880" alt="Pi 里的一轮编程对话，思考过程和回答一起逐级折叠，直到各剩一句，用按键，也用鼠标点级别行">
 
 一个扩展把同样的五个层级放到 [Pi](https://pi.dev) 的每条回答上。需要 Pi 1.2.0 或更新的版本，Node 22.15 或更新。
 
@@ -228,7 +228,7 @@ git clone https://github.com/chenxiachan/textfold.git
 pi install ./textfold/plugins/pi-textfold
 ```
 
-按住 Alt 再按数字，或者输入 `/fold` 加层级：`/fold 3`、`/fold points`、`/fold off`。每条回答都在原处折叠，之前的回答也一样；提示框上方那一行标出你正在读的层级。它用的就是 mod 的折叠引擎，所以同一条回答在 Claude Code 和 Pi 里每一级读到的都一样。
+按住 Alt 再按数字，点提示框上方那一行里的层级，或者输入 `/fold` 加层级：`/fold 3`、`/fold points`、`/fold off`。每条回答都在原处折叠，之前的回答也一样，模型的思考过程也一起折叠，很长的一轮编程对话几行就能读完。层级跟着会话保存，`/fold calibrate` 能在任何键盘上教会按键。在 Mac 上要让终端把 Option 当作 Meta，否则 Option+1 打出的是 ¡。它用的就是 mod 的折叠引擎，所以同一条回答在 Claude Code 和 Pi 里每一级读到的都一样。
 
 详见 [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md)。由 [@jlamweil](https://github.com/jlamweil) 贡献。
 
