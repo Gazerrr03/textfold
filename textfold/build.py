@@ -114,7 +114,7 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
         if not assets and (_has_tex(doc) or (saved and saved.get("notes"))):   # (an answer's formulas need it too)
             head += _katex_inside()
             katex = "inside"
-    return (t.replace("{{TITLE}}", escape(doc["meta"]["title"])).replace("{{HEAD}}", head).replace("{{CLASS}}", cls)
+    return (t.replace("{{TITLE}}", escape(doc["meta"].get("name") or doc["meta"]["title"])).replace("{{HEAD}}", head).replace("{{CLASS}}", cls)
              .replace("{{SIDEBAR}}", side).replace("{{SCRIPTS}}", scripts).replace("{{DATA}}", payload(doc, app, katex, saved, pdf)))
 
 

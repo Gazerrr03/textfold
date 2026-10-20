@@ -231,6 +231,11 @@ def assemble(pid, only=None):
         meta["versions"][lang] = tr["version"]
         if not en or tr.get("base") != en["version"]:
             meta["stale"].append(lang)
+        else:   # paragraphs it has no translation for (a call that failed): asked for when it is generated again
+            from .translate import gaps   # (translate imports ladder and llm, which read through this module)
+            n = len(gaps(doc, lang))
+            if n:
+                meta.setdefault("gaps", {})[lang] = n
     return doc
 
 

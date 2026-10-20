@@ -29,8 +29,9 @@
   POST /api/ask               {paper, id, question, req}: the model answers a note's question; the answer is stored in it
   POST /api/ask/stop          {req}: that question stopped: its answer, when it comes, is not stored
   POST /api/papers/delete     {paper}: move a paper to papers/.trash (not while it is being generated)
-  GET  /api/folders           the reader's folders and which document is in which (library.py)
-  POST /api/folders           {op: new | rename | delete | move, ...}: one change; the folders after it
+  POST /api/papers/name       {paper, name}: what the reader calls it in the library ("": its own title again); the list
+  GET  /api/folders           the reader's folders (inside one another) and which document is in which (library.py)
+  POST /api/folders           {op: new | rename | delete | nest | move, ...}: one change; the folders after it
   GET  /api/bridge             the ChatGPT bridge (127.0.0.1:10531): running and its models, or what starting it needs
   POST /api/bridge/start       start it detached (bridges.py)
   POST /api/openrouter/start   {back}: the OpenRouter consent URL (OAuth PKCE); GET /oauth/openrouter is its return
@@ -451,13 +452,22 @@ PAGES = {}  # pid -> (signature of its layers and template, rendered page)
 RELAYOUT = threading.Lock()
 
 
+def assembled(pid, only=None):
+    """The paper as the reader needs it (store.assemble), under the name the reader gave it in the library, if any."""
+    doc = store.assemble(pid, only)
+    name = library.name_of(pid)
+    if name:
+        doc["meta"]["name"] = name
+    return doc
+
+
 def reader_page(pid):
     layers = store.pdir(pid) / "layers"
     sig = tuple(sorted((f.name, f.stat().st_mtime) for f in layers.glob("*.json"))) if layers.exists() else ()
-    sig += ((build.WEB / "template.html").stat().st_mtime,)  # a changed page template re-renders too
+    sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template, or name, re-renders too
     hit = PAGES.get(pid)
     if not hit or hit[0] != sig:
-        hit = (sig, build.page(store.assemble(pid), app=True))
+        hit = (sig, build.page(assembled(pid), app=True))
         PAGES[pid] = hit
     return hit[1]
 
@@ -679,7 +689,7 @@ def make_handler(jobs):
                     if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
                         return self.json({"error": "no such paper"}, 404)
                     kinds = {k for k in body.get("kinds") or [] if k in ("hl", "note", "ask")}
-                    doc = store.assemble(pid, only=[lang] if body.get("langs") == "current" else None)
+                    doc = assembled(pid, only=[lang] if body.get("langs") == "current" else None)
                     chosen = [n for n in notes.read(pid)["notes"] if notes.kind(n) in kinds]
                     saved = {"notes": chosen, "saved": uuid.uuid4().hex[:12], "lang": lang}
                     if body.get("pdf") and pdf.has_source(pid):   # the original beside it: the file, and PDF.js to show it
@@ -722,6 +732,12 @@ def make_handler(jobs):
                     store.trash(pid)
                     library.forget(pid)
                     PAGES.pop(pid, None)
+                    return self.json(listed())
+                if u.path == "/api/papers/name":
+                    pid = str(body.get("paper", ""))
+                    if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
+                        return self.json({"error": "no such paper"}, 404)
+                    library.name(pid, body.get("name"))
                     return self.json(listed())
                 if u.path == "/api/folders":
                     try:

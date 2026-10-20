@@ -72,7 +72,7 @@
 .sb-fhead:hover { background: var(--surface); }
 #sidebar .sb-fhead svg { width: 16px; height: 16px; color: var(--muted); }
 #sidebar .sb-fhead .sb-chev { width: 13px; height: 13px; color: var(--faint); transform: rotate(90deg); transition: transform .15s var(--ease); }
-.sb-folder.shut:not(.found) .sb-chev { transform: none !important; }
+.sb-folder.shut:not(.found) > .sb-frow .sb-chev { transform: none !important; }
 .sb-fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-fn { font: 500 11.5px var(--sans); color: var(--faint); font-variant-numeric: tabular-nums; }
 .sb-fmenu { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px;
@@ -80,11 +80,13 @@
 .sb-frow:hover .sb-fmenu, .sb-fmenu:focus-visible { opacity: 1; }
 .sb-fmenu:hover { background: var(--line-2); color: var(--ink); }
 .sb-fitems { margin: 0 0 4px 13px; padding-left: 4px; border-left: 1px solid var(--line-2); }
-.sb-folder.shut:not(.found) .sb-fitems { display: none; }
+.sb-folder.shut:not(.found) > .sb-fitems { display: none; }
 .sb-fempty { padding: 6px 9px 8px; font-size: 12.5px; color: var(--faint); }
 .sb-list.searching .sb-fempty { display: none; }
-.sb-fname-in { flex: 1; min-width: 0; height: 32px; margin: 2px 0; padding: 0 9px; font: 600 13px var(--sans); color: var(--ink); background: var(--card);
+.sb-fname-in, .sb-dname-in { flex: 1; min-width: 0; height: 32px; margin: 2px 0; padding: 0 9px; font: 600 13px var(--sans); color: var(--ink); background: var(--card);
   border: 1px solid var(--accent); border-radius: 8px; outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+/* a document's name in the library, written in its row */
+.sb-dname-in { display: block; width: 100%; height: 36px; font-weight: 550; font-size: 13.5px; }
 .sb-folder.drop { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .sb-folder.drop .sb-fhead:hover { background: none; }
 .sb-out { display: none; margin: 8px 0 4px; padding: 10px 9px; border: 1.5px dashed var(--line); border-radius: 9px; font-size: 12.5px; color: var(--muted); text-align: center; }
@@ -105,6 +107,7 @@
 .sb-mname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-menu [aria-checked="true"]::after { content: '✓'; color: var(--accent); font-weight: 600; }
 .sb-mlabel { padding: 6px 10px 3px; font: 600 11.5px var(--sans); color: var(--muted); }
+.sb-menu [data-to] { padding-left: calc(10px + var(--d, 0) * 14px); }   /* a folder inside another, as deep as it is */
 .sb-msep { height: 1px; margin: 4px 6px; background: var(--line-2); }
 .sb-item.menu-on:not(.active) { background: var(--surface); }
 .sb-foot { border-top: 1px solid var(--line-2); padding: 10px 12px 14px; }
