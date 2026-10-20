@@ -168,6 +168,8 @@ python3 -m textfold get report.pdf --json                       # 整份文档�
 
 还没折叠过的文档会先用你连接的模型折叠。模型写的每一行都标明是模型写的，并且指回它依据的作者原句：[docs/format.md](https://github.com/chenxiachan/textfold/blob/main/docs/format.md) 说明了这个格式，任何读写折叠文本的程序都可以用。
 
+运行中的 TextFold（应用，或 `python3 -m textfold serve`）会在数据文件夹的 `server.json` 里写下自己在哪里（Mac 上是 `~/Library/Application Support/TextFold`，Windows 上是 `%LOCALAPPDATA%\TextFold`，Linux 上是 `~/.local/share/textfold`，从克隆的仓库运行时就是仓库本身）：`{"format": "textfold/server", "version": 1, "url": "http://127.0.0.1:<port>", "port": <port>, "pid": <pid>, "textfold": "<version>", "started": "<UTC time>"}`。服务器停止时这个文件随之删除；留下来的文件（服务器被直接结束时）指向的地址不会再有回应。
+
 ## 保存一页
 
 阅读页顶部的 **保存** 把一页存成一个 HTML 文件，不需要服务器，在哪里都能打开：各个层级、你选的标注，还可以带上原文 PDF 在左边对照。也可以只存你的标注，存成网页、PDF、Obsidian 用的 Markdown 或 JSON。命令行也能导出这一页，只是不带你的标注：

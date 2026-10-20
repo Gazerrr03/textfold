@@ -1,5 +1,7 @@
 # generated per paper: the arXiv source, the model's layers, the reader's notes (papers carry their authors' licenses)
 papers/
+# where a server run from the clone says it is, while it runs (server.py, announce)
+/server.json
 # exported pages (they hold the papers' text and figures)
 out/
 __pycache__/
