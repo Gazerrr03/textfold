@@ -27,6 +27,15 @@ test('a link to a section opens it at its level', () => {
   assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&s=S3&n=n-k2x9q0ab')), `${BASE}/p/2512.23916#n=n-k2x9q0ab`);
 });
 
+test('a link to one turn of a conversation', () => {
+  const parts = parse('textfold://open?paper=2512.23916&n=n-chat0001&t=2&lang=de');
+  assert.deepEqual(parts, { paper: '2512.23916', n: 'n-chat0001', t: '2', lang: 'de' });
+  assert.equal(readerUrl(BASE, parts), `${BASE}/p/2512.23916?lang=de#n=n-chat0001&t=2`);
+  assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&n=n-chat0001&t=007')), `${BASE}/p/2512.23916#n=n-chat0001&t=7`);
+  // (a turn without its conversation names nothing)
+  assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&u=S3.p2&t=1')), `${BASE}/p/2512.23916#u=S3.p2`);
+});
+
 test('the paper alone, or at a level alone', () => {
   assert.equal(readerUrl(BASE, parse('textfold://open?paper=pmc1234567')), `${BASE}/p/pmc1234567`);
   assert.equal(readerUrl(BASE, parse('textfold://open?paper=pmc1234567&level=full')), `${BASE}/p/pmc1234567#level=full`);
@@ -62,6 +71,9 @@ test('a link with any part wrong is not followed', () => {
     'textfold://open?paper=2512.23916&u=S3+p2',                    // (a space)
     'textfold://open?paper=2512.23916&s=S3/../x',
     'textfold://open?paper=2512.23916&s=S3&s=S4',
+    'textfold://open?paper=2512.23916&n=n-1&t=-1',
+    'textfold://open?paper=2512.23916&n=n-1&t=1000',
+    'textfold://open?paper=2512.23916&n=n-1&t=1.5',
     'textfold://open?paper=2512.23916&n=n-1%3Cscript%3E',
     'textfold://open?paper=2512.23916&level=Key',
     'textfold://open?paper=2512.23916&level=all',
