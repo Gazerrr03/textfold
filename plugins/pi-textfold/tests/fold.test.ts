@@ -68,6 +68,17 @@ describe('folding', () => {
     expect(fold(REPLY, 5).text).toBe('The bug was in the cache key, and it is fixed. …')
   })
 
+  test('a table straight after a paragraph is its own block', async () => {
+    const md = 'The options compare like this.\n| Option | Cost |\n| --- | --- |\n| A | free |\n| B | 5/mo |'
+    expect(blocks(md).map((b) => b.kind)).toEqual(['para', 'table'])
+  })
+
+  test('a table without leading pipes is a table, not a paragraph joined into one line', async () => {
+    const md = 'Option | Cost\n:-- | --:\nA | free\nB | 5/mo'
+    expect(blocks(md)).toEqual([{ kind: 'table', lines: md.split('\n') }])
+    expect(blocks('A heading\n---').map((b) => b.kind)).toEqual(['para'])
+  })
+
   test('each level shows fewer words', async () => {
     const counts = [1, 2, 3, 4, 5].map((n) => fold(REPLY, n).shown)
     for (let i = 1; i < counts.length; i++) expect(counts[i]!).toBeLessThan(counts[i - 1]!)

@@ -13,6 +13,14 @@ const FENCE = /^\s*(`{3,}|~{3,})/
 const HEADING = /^\s{0,3}#{1,6}\s/
 const ITEM = /^(\s*)([-*+]|\d+[.)])\s+/
 const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
+const DELIM = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+
+/** A GFM table starts at a row with a pipe followed by its delimiter row, with or without leading pipes, and
+ *  may come straight after a paragraph. The delimiter needs a pipe, or `Title` over `---` would be one.
+ *  shortcut: the header's cell count is not matched against the delimiter's, as GFM asks; add it if a reply ever
+ *  folds a paragraph that only looks like a table. */
+const tableAt = (lines: string[], i: number) =>
+  (lines[i] ?? '').includes('|') && (lines[i + 1] ?? '').includes('|') && DELIM.test(lines[i + 1] ?? '')
 
 /** A markdown text as blocks: headings, code, lists, tables, quotes, paragraphs. */
 export function blocks(md: string): Block[] {
@@ -49,13 +57,13 @@ export function blocks(md: string): Block[] {
       i++
       continue
     }
-    const kind: Kind = /^\s*\|/.test(line) ? 'table' : /^\s*>/.test(line) ? 'quote' : ITEM.test(line) ? 'list' : 'para'
+    const kind: Kind = /^\s*\|/.test(line) || tableAt(lines, i) ? 'table' : /^\s*>/.test(line) ? 'quote' : ITEM.test(line) ? 'list' : 'para'
     const buf = [line]
     i++
     while (i < lines.length) {
       const l = lines[i] ?? ''
       if (!l.trim() || FENCE.test(l) || HEADING.test(l)) break
-      if (kind === 'para' && ITEM.test(l)) break   // a paragraph that runs into a list
+      if (kind === 'para' && (ITEM.test(l) || tableAt(lines, i))) break   // a paragraph that runs into a list or a table
       buf.push(l)
       i++
     }
