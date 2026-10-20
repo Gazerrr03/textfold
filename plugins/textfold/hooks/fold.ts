@@ -169,7 +169,8 @@ export function fold(md: string, level: number): { text: string; total: number; 
       case 'code':
       case 'table': {
         const rows = b.lines.length - 2   // less the fences, or the header and its rule
-        if (level === 2 && b.lines.length <= 8) out.push(b.lines.join('\n'))
+        // a table is kept whole like a list's items: its rows are already short, and it is often the answer
+        if ((b.kind === 'table' && level <= 3) || (level === 2 && b.lines.length <= 8)) out.push(b.lines.join('\n'))
         else if (level <= 3) out.push(b.kind === 'code' ? `\`⋯ ${Math.max(rows, 1)} lines of code\`` : `\`⋯ a table of ${Math.max(rows, 1)} rows\``)
         break
       }

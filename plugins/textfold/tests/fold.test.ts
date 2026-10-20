@@ -75,6 +75,18 @@ describe('folding', () => {
   })
 })
 
+describe('tables and code', () => {
+  const table = ['| Option | Cost |', '| --- | --- |', ...Array.from({ length: 10 }, (_, i) => `| ${i} | ${i}/mo |`)].join('\n')
+  const md = `The options compare like this. The cheapest is not the best.\n\n${table}\n\nPick the second one. It is the best value.`
+
+  test('a table is whole at Brief and Points, and gone at Outline and Gist', async () => {
+    expect(fold(md, 2).text).toContain(table)
+    expect(fold(md, 3).text).toContain(table)
+    expect(fold(md, 4).text).not.toContain('| Option')
+    expect(fold(md, 5).text).not.toContain('| Option')
+  })
+})
+
 describe('the gate', () => {
   const long = Array.from({ length: 12 }, (_, i) => `Sentence ${i} has a few words in it.`).join(' ')
 
