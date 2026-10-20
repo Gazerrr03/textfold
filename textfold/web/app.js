@@ -677,6 +677,50 @@
   const extOf = (name) => ((/\.([a-z0-9]+)$/i.exec(name || '') || [])[1] || '').toLowerCase();
   const forEngine = (file) => isPdf(file) || ENGINE_EXT.includes(extOf(file.name));
   const isText = (file) => TEXT_EXT.includes(extOf(file.name));
+  // several files at once (dropped, or chosen together): each goes to the server in turn, one upload at a time, and its
+  // job waits in the server's queues, which read the files and write their levels one after another (the sidebar shows
+  // each, with its stop). Files given while others are still going up wait for them. Says what came of them: how many
+  // were taken, the uploads that wait for the PDF engine, and each file not taken with why.
+  let adding = Promise.resolve();
+  function addFiles(files, lang, step) {
+    const run = adding.then(async () => {
+      const got = { taken: 0, engine: [], skipped: [] };
+      for (const [k, file] of files.entries()) {
+        step(k, file);
+        const why = !forEngine(file) && !isText(file) ? t().md_only
+          : file.size > 100 * 1024 * 1024 ? (isPdf(file) ? t().pdf_large : t().file_large)
+          : isText(file) && !modelName ? t().fl_no_model : '';
+        if (why) { got.skipped.push([file.name, why]); continue; }
+        try {
+          if (isText(file)) {
+            const r = await api('/api/import', { name: file.name, text: await file.text() });
+            await submit(r.paper, lang, false, () => {});
+          } else {
+            const d = await uploadFile(file, lang);
+            if (d.needs === 'engine') { got.engine.push(d.upload); continue; }
+            watch(d.job, () => {});
+          }
+          got.taken++;
+          // the library again, so that the sidebar names a stored file by its title while its job waits
+          try { papers = await api('/api/papers'); if (menu) stale = true; else renderSidebar(); } catch { /* the next poll does */ }
+        } catch (x) { got.skipped.push([file.name, errText(x.message)]); }
+      }
+      return got;
+    });
+    adding = run.catch(() => {});
+    return run;
+  }
+  // what came of them, as lines: [heading, the lines under it, the files not taken (name: why), a few at most]
+  function filesSaid(got, n, T) {
+    const lines = [got.taken ? (modelName ? T.fl_queue : T.fl_read) : '', got.engine.length ? T.fl_engine.replace('{n}', got.engine.length) : ''].filter(Boolean);
+    const not = got.skipped.slice(0, 6).map(([name, why]) => `${name}: ${why}`);
+    if (got.skipped.length > 6) not.push('…');
+    return [T.fl_added.replace('{n}', got.taken + got.engine.length).replace('{m}', n), lines, not];
+  }
+  // the PDF engine installed for the files waiting for it (the server converts each once it is in); the sidebar shows it
+  async function installForFiles() {
+    watch(await api('/api/engine/install', {}), () => {});
+  }
   // OpenRouter's consent page. In the browser: this tab goes there and comes back with the key. Inside the app: the
   // system browser (where the reader is signed in) goes there, and the app waits for the key, then offers the models.
   async function connectOpenRouter(back) {
@@ -757,9 +801,28 @@
     document.addEventListener('dragenter', (e) => { if (hasFile(e)) { over++; say(t().drop_md); } });
     document.addEventListener('dragleave', () => { if (--over <= 0) { over = 0; if (toast.textContent === t().drop_md) toast.hidden = true; } });
     document.addEventListener('dragover', (e) => { if (hasFile(e)) e.preventDefault(); });
+    // several dropped here: they go in from this page, which stays open, and the toast says what came of them
+    async function dropFiles(files) {
+      const T = t();
+      const got = await addFiles(files, readLang, (k, file) => {
+        toast.hidden = false;
+        toast.innerHTML = `${sign('down')}<b>${esc(T.fl_adding.replace('{k}', k + 1).replace('{n}', files.length))}</b>` +
+          `<span class="g-stage">${esc(file.name)}</span><span class="sb-prog"><i style="width:${Math.round((100 * k) / files.length) + 4}%"></i></span>`;
+      });
+      const [head, lines, not] = filesSaid(got, files.length, T);
+      toast.hidden = false;
+      toast.innerHTML = `${got.skipped.length && !got.taken && !got.engine.length ? sign('warn', 'warn') : sign('mark')}<b>${esc(head)}</b>${shut(T.close)}` +
+        lines.map((l) => `<span class="g-note">${esc(l)}</span>`).join('') +
+        (not.length ? `<span class="g-note">${esc(T.fl_skipped)}<br>${not.map(esc).join('<br>')}</span>` : '') +
+        (got.engine.length ? `<span class="g-acts"><button type="button" class="g-go primary">${esc(T.engine_install)}</button></span>` : '');
+      toast.querySelector('.g-x').onclick = () => { toast.hidden = true; };
+      const go = toast.querySelector('.g-go');
+      if (go) go.onclick = async () => { go.disabled = true; try { await installForFiles(); toast.hidden = true; } catch (x) { go.disabled = false; say(errText(x.message), 4000); } };
+    }
     document.addEventListener('drop', async (e) => {
       if (!e.dataTransfer.files.length) return;
       e.preventDefault(); over = 0;
+      if (e.dataTransfer.files.length > 1) { dropFiles([...e.dataTransfer.files]); return; }
       const file = e.dataTransfer.files[0];
       if (forEngine(file)) {
         say(isPdf(file) ? t().pdf_reading : t().file_reading);
@@ -1067,11 +1130,36 @@
         start(r.paper, r.title);
       } catch (x) { fail(errText(x.message)); }
     }
+    // several at once: they go in one after another, and the card says what came of them; the page stays here, the
+    // sidebar showing each (one file opens as before)
+    async function openFiles(list) {
+      const files = [...list];
+      if (files.length < 2) { openFile(files[0]); return; }
+      err.hidden = true;
+      const T = t(), mine = {};
+      latest = mine;
+      card.hidden = false;
+      const got = await addFiles(files, sel.value, (k, file) => {
+        if (latest !== mine) return;
+        card.innerHTML = `<div class="jc-t">${esc(T.fl_adding.replace('{k}', k + 1).replace('{n}', files.length))}</div><div class="jc-s">${esc(file.name)}</div>` +
+          `<span class="sb-prog"><i style="width:${Math.round((100 * k) / files.length) + 4}%"></i></span>`;
+      });
+      if (latest !== mine) return;   // (something started since has the card; the files are in the sidebar)
+      const [head, lines, not] = filesSaid(got, files.length, T);
+      card.innerHTML = `<div class="jc-head"><div class="jc-t">${esc(head)}</div><button type="button" class="jc-stop jc-close">${esc(T.close)}</button></div>` +
+        lines.map((l) => `<div class="jc-s">${esc(l)}</div>`).join('') +
+        (not.length ? `<div class="jc-n">${esc(T.fl_skipped)}</div>${not.map((l) => `<div class="jc-e">${esc(l)}</div>`).join('')}` : '') +
+        (got.engine.length ? `<div class="jc-acts"><button type="button" class="primary jc-install">${esc(T.engine_install)}</button></div>` : '');
+      card.querySelector('.jc-close').onclick = () => { card.hidden = true; };
+      const inst = card.querySelector('.jc-install');
+      if (inst) inst.onclick = async () => { inst.disabled = true; try { await installForFiles(); card.hidden = true; } catch (x) { inst.disabled = false; fail(errText(x.message)); } };
+    }
     const fileIn = document.getElementById('file'), zone = document.getElementById('dropzone');
+    fileIn.multiple = true;
     fileIn.accept = [...ENGINE_EXT, ...TEXT_EXT].map((x) => `.${x}`).join(',');
     zone.title = [...ENGINE_EXT, ...TEXT_EXT].filter((x) => !['htm', 'mht', 'jpeg', 'tif', 'markdown', 'mdown'].includes(x)).map((x) => `.${x}`).join(' ');
     zone.onclick = () => fileIn.click();
-    fileIn.onchange = () => { openFile(fileIn.files[0]); fileIn.value = ''; };
+    fileIn.onchange = () => { openFiles(fileIn.files); fileIn.value = ''; };   // (openFiles copies the list first)
     let depth = 0;   // dragenter and dragleave fire for every child the file passes over
     const dropping = (on) => { zone.classList.toggle('dragging', on); document.getElementById('dropzone-t').textContent = on ? t().drop_md : t().drop_zone; };
     document.addEventListener('dragenter', (e) => { if ([...e.dataTransfer.types].includes('Files')) { depth++; dropping(true); } });
@@ -1080,7 +1168,7 @@
     document.addEventListener('drop', (e) => {
       if (!e.dataTransfer.files.length) return;
       e.preventDefault(); depth = 0; dropping(false);
-      openFile(e.dataTransfer.files[0]);
+      openFiles(e.dataTransfer.files);
     });
     renderLanding();
     // a first visit: how TextFold works, once (not when arriving mid-way: a file to generate, or back from OpenRouter)
