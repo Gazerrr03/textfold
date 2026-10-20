@@ -321,3 +321,32 @@ Behavior a main user gains: the fold level survives a restart (and a resumed ses
 the row at it before any reply); a small panel previews the reply's fold with every stage;
 and, behind `--textfold-digits`, plain 1–5 fold empty prompts and reinsert themselves in a
 draft. Alt keys, `/fold`, the fold engine, the prompt section, and the row are untouched.
+
+---
+
+## 13. After the PR (2026-10-20)
+
+`origin/main` moved to `5a5de9d` (40 commits). Three of them — #29, #30, #31 —
+updated the fold engine in **both** copies, `plugins/textfold/hooks/fold.ts` and
+`plugins/pi-textfold/extension/fold.ts`, and the pi tests with it: tables kept
+whole at Brief and Points (GFM tables, with or without leading pipes, even
+straight after a paragraph), a mermaid drawing kept whole, and code up to six
+lines kept at Points. The port needed no engine sync after all — main did it.
+The branch was **merged** with `origin/main` instead of rebased, so the open PR
+keeps its history and the diff vs main is only the new work.
+
+What this round adds:
+
+| Change | Why | Evidence |
+|---|---|---|
+| Reasoning folds at the level, with the reply (`extension/index.ts`) | Measured on a real session: one turn held 384 words of reply, **10,540 words of thinking** and 19 tool calls; across the session 545 of 575 text pieces were under the 80-word gate. Folding only replies folded the closing paragraph and left the work untouched | `assistant-thinking` now goes through the same transformer + gate, `user` never does: 4 wiring tests; live pty probe at `--thinking max` logged `fold assistant-thinking shown 195/332` beside `fold assistant shown 132/274`, exit 0 |
+| Outline no longer collapses into Gist (`fold.ts`, both copies + tests) | A reply written without headings kept only its first sentence at level 4 — exactly Gist's text (reproduced live: Points 30/200, Outline 17/200, Gist 17/200) | Level 4 falls back to Points when the reply has no headings: same tests in both copies, live probe Points 132 → Outline 132 → Gist 30 |
+| A full redraw re-folds **every** reply, not just the last (corrected claim) | The panel's original note said the transcript never invalidates. The probe shows the opposite: one Alt+3 after two replies logged `fold assistant shown 61/241` **and** `61/239` | README and `panel.ts` reworded: the panel is a stay-in-view preview, not a workaround |
+
+Gates on the merged tree: **87 tests**, `tsc --noEmit` clean, live probes exit 0
+(reasoning folds; two replies re-fold; Outline≠Gist). `extension/fold.ts` is
+still blob-equal to `plugins/textfold/hooks/fold.ts`, the Outline fix included.
+`plugins/textfold/tests/fold.test.ts` gained the matching Outline case; it runs
+in that plugin's own harness, not here.
+
+---

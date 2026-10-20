@@ -1,12 +1,12 @@
 /**
  * The fold-preview panel for Pi's textfold extension.
  *
- * Pure helpers, so the tests can cover them without running Pi. The panel exists
- * because pi-tui's Markdown component caches rendered lines by (text, width) and
- * the transcript never invalidates when extension state changes; `ctx.ui.setWidget`
- * re-renders unconditionally, so the panel always shows the reply at the level in
- * force. It is the second widget (the row above the prompt being the first): it
- * shows the reply's own fold, before any reply from a restart's restore onward.
+ * Pure helpers, so the tests can cover them without running Pi. The panel keeps the latest
+ * reply's fold in view even after the reply has scrolled out of the transcript: a level
+ * change redraws the transcript through `screen.invalidate()` (every reply re-folds, proven
+ * on pi 1.3.0 with two replies), but the transcript scrolls, and a reader who just pressed
+ * Alt+3 wants the folded reply where they are looking. It is the second widget (the row
+ * above the prompt being the first), and it shows the restored level before any reply.
  */
 import { fold, LEVELS, worthFolding } from "./fold";
 import { hintForKeys, type Level } from "./level";
