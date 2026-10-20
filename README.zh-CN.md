@@ -238,6 +238,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 20 日：TextFold 和 Obsidian。** Obsidian 插件 [TextFold Bridge](https://github.com/adalach/obsidian-textfold-bridge) 让笔记里的链接直接指到 TextFold 里的某一段、某一节或某条标注。把阅读器里的段落、整节或选中的文字拖进笔记，会带上回到原处的链接。你自己的笔记也能在 Obsidian 里按五个层级折叠，改过之后原地重新折叠，标注会在新文字里找回原来的位置。感谢 [@adalach](https://github.com/adalach)。
 - **2026 年 10 月 20 日：Pi 的思考过程也能折叠了。** 在 Pi 里，模型的思考过程和回答一起折叠，很长的一轮编程对话几行就能读完。点一下级别行就能折叠，接着上次的会话时级别不变，用 `/fold calibrate` 教一次按键，任何键盘都能用。感谢 [@jlamweil](https://github.com/jlamweil)。
 - **2026 年 10 月 19 日：更多阅读语言。** 新增瑞典语、丹麦语、挪威语、芬兰语、荷兰语、波兰语、捷克语、乌克兰语、土耳其语、印尼语和越南语。界面没有这种语言时显示英文。感谢 [@Kullenej](https://github.com/Kullenej)。
 - **2026 年 10 月 15 日：Pi 的回答也能折叠了。** [Pi 扩展](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md) 把五个层级放到每条回答上，折法和 Claude Code 里一样。感谢 [@jlamweil](https://github.com/jlamweil)。
