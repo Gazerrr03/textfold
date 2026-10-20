@@ -42,8 +42,10 @@
   POST /api/zotero/read        {item: "<lib>/<key>", lang}: an item read. {ref} for its paper online, generated as a
                                link is; else its file, taken as a file dropped on the landing is (/api/files' reply)
 
-Loopback only, and POSTs from other origins are refused. Settings and keys live in
-~/.textfold/settings.json (mode 600), never in the project folder, which may be synced or shared.
+Loopback only, and POSTs from other origins are refused. A request addressed to any name but this computer's own
+(localhost, 127.0.0.1, [::1]) is answered 421 and nothing else: a web page that points its own domain at 127.0.0.1 (DNS
+rebinding) is the same origin as its requests to the browser, so only the name they carry tells them apart. Settings and
+keys live in ~/.textfold/settings.json (mode 600), never in the project folder, which may be synced or shared.
 """
 import base64
 import json
@@ -489,6 +491,16 @@ def landing_page(jobs):
     return t.replace("{{HEAD}}", build.fonts_head(build.APP_ASSETS)).replace("{{BOOT}}", json.dumps(boot, ensure_ascii=False).replace("</", "<\\/"))
 
 
+LOCAL_NAMES = ("localhost", "127.0.0.1", "[::1]")
+
+
+def addressed_here(host):
+    """Whether a request's Host header names this computer (any port): what a page on another site cannot make its
+    browser send, even once its domain points at 127.0.0.1."""
+    m = re.fullmatch(r"(\[[0-9a-f:.]+\]|[^:\[\]]+)(?::\d{1,5})?", (host or "").strip().lower())
+    return bool(m) and m.group(1) in LOCAL_NAMES
+
+
 def make_handler(jobs):
     class Handler(BaseHTTPRequestHandler):
         def send(self, code, body, ctype="application/json; charset=utf-8", cache="no-store"):
@@ -507,6 +519,8 @@ def make_handler(jobs):
             self.send(code, json.dumps(obj, ensure_ascii=False))
 
         def do_GET(self):
+            if not addressed_here(self.headers.get("Host")):   # (DNS rebinding: the module's docstring)
+                return self.json({"error": "misdirected"}, 421)
             u = urlparse(self.path)
             try:
                 if u.path == "/":
@@ -601,6 +615,8 @@ def make_handler(jobs):
                 self.json({"error": str(e)}, 500)
 
         def do_POST(self):
+            if not addressed_here(self.headers.get("Host")):
+                return self.json({"error": "misdirected"}, 421)
             u = urlparse(self.path)
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).hostname not in ("localhost", "127.0.0.1"):
