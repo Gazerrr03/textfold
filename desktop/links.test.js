@@ -27,6 +27,15 @@ test('a link to a section opens it at its level', () => {
   assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&s=S3&n=n-k2x9q0ab')), `${BASE}/p/2512.23916#n=n-k2x9q0ab`);
 });
 
+test('a link to a run of paragraphs, from u to to', () => {
+  const parts = parse('textfold://open?paper=2512.23916&u=S1.p1.1&to=S1.p3.1&level=key');
+  assert.deepEqual(parts, { paper: '2512.23916', u: 'S1.p1.1', to: 'S1.p3.1', level: 'key' });
+  assert.equal(readerUrl(BASE, parts), `${BASE}/p/2512.23916#u=S1.p1.1&to=S1.p3.1&level=key`);
+  // (to goes with u: alone, or with a section or a note, it names nothing)
+  assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&s=S1&to=S1.p3.1')), `${BASE}/p/2512.23916#s=S1`);
+  assert.equal(readerUrl(BASE, parse('textfold://open?paper=2512.23916&n=n-1&u=S1.p1.1&to=S1.p3.1')), `${BASE}/p/2512.23916#n=n-1`);
+});
+
 test('a link to one turn of a conversation', () => {
   const parts = parse('textfold://open?paper=2512.23916&n=n-chat0001&t=2&lang=de');
   assert.deepEqual(parts, { paper: '2512.23916', n: 'n-chat0001', t: '2', lang: 'de' });
@@ -72,6 +81,8 @@ test('a link with any part wrong is not followed', () => {
     'textfold://open?paper=2512.23916&s=S3/../x',
     'textfold://open?paper=2512.23916&s=S3&s=S4',
     'textfold://open?paper=2512.23916&n=n-1&t=-1',
+    'textfold://open?paper=2512.23916&u=S1.p1.1&to=S1.p3.1%23x',
+    'textfold://open?paper=2512.23916&u=S1.p1.1&to=a&to=b',
     'textfold://open?paper=2512.23916&n=n-1&t=1000',
     'textfold://open?paper=2512.23916&n=n-1&t=1.5',
     'textfold://open?paper=2512.23916&n=n-1%3Cscript%3E',
