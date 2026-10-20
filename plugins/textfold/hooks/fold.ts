@@ -6,7 +6,7 @@
 
 export const LEVELS = ['Full', 'Brief', 'Points', 'Outline', 'Gist'] as const
 
-type Kind = 'heading' | 'code' | 'list' | 'table' | 'quote' | 'para' | 'rule'
+type Kind = 'heading' | 'code' | 'list' | 'table' | 'quote' | 'para' | 'rule' | 'art'
 type Block = { kind: Kind; lines: string[] }
 
 const FENCE = /^\s*(`{3,}|~{3,})/
@@ -67,10 +67,14 @@ export function blocks(md: string): Block[] {
       buf.push(l)
       i++
     }
-    out.push({ kind, lines: buf })
+    const art = kind === 'para' && buf.length > 1 && buf.slice(0, -1).every((l) => ART_ROW.test(l))
+    out.push({ kind: art ? 'art' : kind, lines: buf })
   }
   return out
 }
+
+// A row of a drawing, as Pi draws a mermaid block before the fold sees it: one inline code span, then a hard break.
+const ART_ROW = /^(`+).*\1 {2}$/
 
 const ABBREV = /\b(?:e\.g|i\.e|etc|vs|cf|al|approx|Dr|Mr|Ms|Fig|Eq|No)\.$/i
 
@@ -169,6 +173,9 @@ export function fold(md: string, level: number): { text: string; total: number; 
     if (level === 5 && !first) break
     switch (b.kind) {
       case 'rule':
+        break
+      case 'art':
+        if (level <= 3) out.push(b.lines.join('\n'))   // a picture: kept whole, never joined into one line
         break
       case 'heading':
         if (level <= 4) out.push(b.lines[0] ?? '')

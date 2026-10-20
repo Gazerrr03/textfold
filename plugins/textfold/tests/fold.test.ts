@@ -103,3 +103,21 @@ describe('the gate', () => {
     expect(worthFolding('缓'.repeat(120), '缓')).toBe(false)
   })
 })
+
+describe('drawings', () => {
+  // Pi's mermaid renderer turns a mermaid block into these rows before any extension sees the reply.
+  const art = ['`┌────┐    ┌──────────┐    ┌────────┐`  ', '`│ Pi ├───▶│ TextFold ├───▶│ Screen │`  ', '`└────┘    └──────────┘    └────────┘`'].join('\n')
+  const md = `The reply goes through three steps. Each one changes it.\n\n${art}\n\nThe fold is the second step. It runs after the drawing.`
+
+  test('a drawing is one block, kept row by row at Brief and Points, and gone at Outline and Gist', async () => {
+    expect(blocks(md).map((b) => b.kind)).toEqual(['para', 'art', 'para'])
+    expect(fold(md, 2).text).toContain(art)
+    expect(fold(md, 3).text).toContain(art)
+    expect(fold(md, 4).text).not.toContain('TextFold ├')
+    expect(fold(md, 5).text).not.toContain('TextFold ├')
+  })
+
+  test('a paragraph of one code span is still a paragraph', async () => {
+    expect(blocks('`npm test`').map((b) => b.kind)).toEqual(['para'])
+  })
+})
