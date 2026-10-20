@@ -81,7 +81,10 @@ export default function textfoldFold(pi: ExtensionAPI) {
 	pi.registerMarkdownTransformer((markdown, context) => {
 		if (context.messageType === "user" || level === 1) return markdown;
 		const f = fold(markdown, level);
-		if (!worthFolding(markdown, f.text)) return markdown;
+		const worth = worthFolding(markdown, f.text);
+		// One line per settled block (streaming would write one a frame).
+		if (!context.isStreaming) DEBUG?.(`fold ${context.messageType} ${worth ? "shown" : "whole"} ${f.shown}/${f.total} level=${level}`);
+		if (!worth) return markdown;
 		return `${f.text || "…"}\n\n*${levelName(level)} · ${f.shown} of ${f.total} words · Alt+1 unfolds*`;
 	});
 
