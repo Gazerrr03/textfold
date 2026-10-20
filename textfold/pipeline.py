@@ -48,7 +48,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
     en = store.read(pid, "en")
     if cfg is None and (en is None or force or (lang != "en" and store.read(pid, f"tr-{lang}") is None)):
         # fetched and parsed, so it can be read as written; its levels need a model
-        raise RuntimeError("No model is available: install Claude Code, Codex or Pi, or add an API provider in the settings")
+        raise RuntimeError("No model is available: install Claude Code, Codex, Pi or WorkBuddy, or add an API provider in the settings")
     model = llm.label(cfg) if cfg else ""
     if en is None or (force and lang == "en"):
         check()

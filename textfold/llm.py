@@ -121,6 +121,8 @@ def _once(prompt, schema, spec, timeout, system):
             return _claude(prompt, schema, spec["model"], effort, timeout, system)
         if spec["runtime"] == "codex":
             return agents.run_codex(spec["model"], prompt, schema, system, effort, timeout)
+        if spec["runtime"] == "codebuddy":
+            return agents.run_codebuddy(spec["model"], prompt, schema, system, effort, timeout)
         return agents.run_pi(spec["model"], prompt, schema, system, effort, timeout)
     if spec["protocol"] == "anthropic":
         return _anthropic(prompt, schema, spec, timeout, system)

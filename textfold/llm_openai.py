@@ -4,6 +4,12 @@ compatible layer, MiniMax, a local Ollama, or a custom one (the providers of Tho
 Not every provider honours a JSON schema, so the schema rides in the prompt and JSON mode is asked for;
 a provider that rejects JSON mode is asked again without it.
 
+A service that answers only streamed (server-sent events) is read too: a reply that comes as a stream is joined into
+one, and a service that refuses a request not streamed is asked again with "stream": true. Every other endpoint gets
+the requests it got before: the stream is asked for only after it refused them. WorkBuddy Cloud's applications
+(*.workbuddy.host), which take a stream alone, are asked for one at once, with their publishable key sent the way
+their SDK sends it.
+
 A reasoning level (spec["effort"]: off, low, medium, high; None for the model's own) is spelled the way each provider
 documents it. These spellings change as APIs change, so none of them is relied on: a request a provider refuses is
 sent again the next way, and last with no reasoning field at all, which every endpoint takes. The way that worked is
@@ -20,10 +26,62 @@ _WORKED = {}   # (base, model, level) -> index of the request shape that was acc
 WAITS = (5, 15, 30, 45)   # seconds before asking again when rate-limited (free models: 20 requests a minute)
 
 
+def _workbuddy(base):
+    """An application of WorkBuddy Cloud: its chat completions are streamed only (its SDK: "non-streaming is
+    unsupported"), and its key is the application's publishable key."""
+    host = urllib.parse.urlparse(base).hostname or ""
+    return host.endswith(".workbuddy.host")
+
+
+def auth(base, api_key):
+    """The headers that carry a key: a bearer token, as every OpenAI-compatible endpoint takes it; for WorkBuddy Cloud
+    the publishable key in x-wb-webapp-access-key and no Authorization, which its SDK keeps for a signed-in user's
+    session."""
+    if _workbuddy(base):
+        return {"x-wb-webapp-access-key": api_key or ""}
+    return {"Authorization": f"Bearer {api_key or 'none'}"}
+
+
 def _post(url, body, headers, timeout):
     req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+        kind = r.headers.get("Content-Type") or ""
+        raw = r.read()
+    if "text/event-stream" in kind or raw.lstrip().startswith(b"data:"):   # streamed, asked for or not
+        return _events(raw)
+    return json.loads(raw)
+
+
+def _events(raw):
+    """A streamed reply (data: {chunk} lines, data: [DONE] last) as one chat completion: the pieces of its first
+    choice joined, its usage if a chunk carries one. A chunk that is only an error is given back as it came."""
+    text, usage = [], None
+    for line in raw.decode("utf-8", errors="replace").split("\n"):   # (not splitlines: a reply may hold U+2028)
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            continue
+        if not isinstance(chunk, dict):
+            continue
+        if chunk.get("error") and not chunk.get("choices"):
+            return chunk
+        usage = chunk.get("usage") or usage
+        for c in chunk.get("choices") or []:
+            if not isinstance(c, dict) or c.get("index", 0) != 0:
+                continue
+            part = c.get("delta") or c.get("message") or {}
+            piece = part.get("content") if isinstance(part, dict) else None
+            if isinstance(piece, list):
+                piece = "".join((p.get("text") or "") if isinstance(p, dict) else str(p) for p in piece)
+            if isinstance(piece, str):
+                text.append(piece)
+    return {"choices": [{"message": {"content": "".join(text)}}], **({"usage": usage} if usage else {})}
 
 
 def _content(d):
@@ -75,30 +133,37 @@ def call(prompt, schema, spec, system, timeout):
             {"role": "user", "content": f"{prompt}\n\nReply with one JSON object that matches this JSON Schema:\n{json.dumps(schema)}"},
         ],
     }
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {spec.get('api_key') or 'none'}"}
+    headers = {"Content-Type": "application/json", **auth(base, spec.get("api_key"))}
     if "openrouter.ai" in base:
         headers["X-Title"] = "TextFold"
     ways = reasoning(base, level)
     key = (base, spec["model"], level)
-    shapes = [(r, jm) for r in ways for jm in (True, False)]   # each reasoning shape with JSON mode, then without
+    shapes = [(r, jm, False) for r in ways for jm in (True, False)]   # each reasoning shape with JSON mode, then without
+    streamed = len(shapes)
+    shapes += [({}, jm, True) for jm in (True, False)]   # last, for a service that answers only streamed: the plain request
+    if _workbuddy(base):   # streamed only: every shape as a stream
+        shapes, streamed = [(r, jm, True) for r in ways for jm in (True, False)], 0
     start = _WORKED.get(key, 0)
     last, busy = None, 0
     i = start
     while i < len(shapes):
-        r, jm = shapes[i]
+        r, jm, st = shapes[i]
         try:
-            d = _post(f"{base}/chat/completions", {**body, **r, **({"response_format": {"type": "json_object"}} if jm else {})}, headers, timeout)
+            d = _post(f"{base}/chat/completions", {**body, **r, **({"response_format": {"type": "json_object"}} if jm else {}),
+                                                   **({"stream": True} if st else {})}, headers, timeout)
         except urllib.error.HTTPError as e:
             last = e
+            said = e.read()[:300].decode(errors="replace")
             if e.code in (429, 502, 503, 529) and busy < len(WAITS):   # rate-limited or busy: wait, then the same again
                 after = e.headers.get("Retry-After") if e.headers else None
                 time.sleep(min(60, float(after)) if after and after.replace(".", "", 1).isdigit() else WAITS[busy])
                 busy += 1
                 continue
             if e.code in (400, 404, 415, 422) and i + 1 < len(shapes):   # this shape refused: the next one
-                i += 1
+                # (a service that takes only a stream says so: straight to the streamed requests)
+                i = streamed if i < streamed and "stream" in said.lower() else i + 1
                 continue
-            raise RuntimeError(f"{spec.get('provider') or base}: HTTP {e.code} {e.read()[:300].decode(errors='replace')}")
+            raise RuntimeError(f"{spec.get('provider') or base}: HTTP {e.code} {said}")
         except urllib.error.URLError as e:
             raise RuntimeError(f"{spec.get('provider') or base}: {e.reason}")
         text = _content(d)
