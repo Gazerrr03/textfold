@@ -78,13 +78,16 @@
   let folders = BOOT.folders || { folders: [], of: {} };   // the reader's folders (each in its parent, or at the top), and which document is in which (library.py)
   let sbQuery = '';        // the sidebar's search, as typed
   let editing = null;      // a folder's name being written: 'new', or the folder's id
-  let dragging = null;     // the document being dragged to a folder
+  let dragging = null;     // the documents being dragged to a folder (one, or those picked)
   let draggingFolder = null;   // the folder being dragged into another, or to the top
   let moving = null;       // the document a new folder is being named for (its menu's New folder…)
   let within = null;       // the folder a new one is being named inside (its menu's New subfolder…); none: at the top
   let renaming = null;     // the document whose name in the library is being written
   let menu = null;         // a folder's or a document's menu, while it is open
   let stale = false;       // the list as polled while a menu was open: drawn when it closes
+  const chosen = new Set();   // the documents picked to be moved or deleted together (⌘/Ctrl- or Shift-click, a row's Select)
+  let chosenAt = null;        // the one picked last: a Shift-click picks every row shown from it to the one clicked
+  const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   const FOLDED = 'textfold.folded';   // the folders shut, kept for next time
   const SORT = 'textfold.sort';       // the list's order: 'kind' (the default), 'added' (when it came in) or 'opened' (last)
   const folded = new Set((store.get(FOLDED) || '').split(' ').filter(Boolean));
@@ -127,6 +130,7 @@
     stale = false;
     const T = t();
     const listed = new Set(papers.map((p) => p.id));
+    for (const id of chosen) if (!listed.has(id)) chosen.delete(id);   // (deleted meanwhile)
     const pending = jobs.filter((j) => !listed.has(j.pid) && live(j));
     const item = (p) => {
       const j = jobFor(p.id);
@@ -138,10 +142,11 @@
       const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${SHORT[l] || l.toUpperCase()}</span>`).join('');
       const active = PAPER && PAPER.id === p.id;
       const unfinished = !j && !p.langs.length;   // stopped (or failed) before its first language: a click goes on with it
-      return `<div class="sb-row" data-pid="${p.id}" data-q="${esc(hay(p))}"><a class="sb-item${active ? ' active' : ''}${unfinished ? ' unfinished' : ''}" href="${unfinished ? '#' : `/p/${p.id}?lang=${pick(p)}`}"${unfinished ? ` data-resume="${p.id}"` : ''} title="${esc(p.title)}">
+      return `<div class="sb-row${chosen.has(p.id) ? ' chosen' : ''}" data-pid="${p.id}" data-q="${esc(hay(p))}"><a class="sb-item${active ? ' active' : ''}${unfinished ? ' unfinished' : ''}" href="${unfinished ? '#' : `/p/${p.id}?lang=${pick(p)}`}"${unfinished ? ` data-resume="${p.id}"` : ''} title="${esc(p.title)}">
         <span class="sb-t">${esc(title)}</span><span class="sb-m"><span class="sb-id">${p.id}</span><span class="sb-langs">${langs}</span></span>
         ${j ? progress(j, T) : unfinished ? `<span class="sb-stage">${esc(T.unfinished)}</span>` : ''}</a>` +
-        (j ? stopBtn(j, T) : `<button type="button" class="sb-del" data-del="${p.id}" title="${esc(T.del_paper)}" aria-label="${esc(T.del_paper)}">×</button>`) + '</div>';
+        (j ? stopBtn(j, T) : chosen.size ? '<span class="sb-check" aria-hidden="true"></span>'
+          : `<button type="button" class="sb-del" data-del="${p.id}" title="${esc(T.del_paper)}" aria-label="${esc(T.del_paper)}">×</button>`) + '</div>';
     };
     // papers, Wikipedia articles, GitHub READMEs and documents of one's own, each under its name when there is more than one kind
     // (a file read from a Zotero item is among the papers: Zotero says what it is)
@@ -194,7 +199,11 @@
       <div class="sb-order" role="radiogroup" aria-label="${esc(T.sort_label)}">${['kind', 'added', 'opened'].map((o) =>
         `<button type="button" role="radio" aria-checked="${o === order}" data-sort="${o}" title="${esc(T[`sort_${o}`])}">${esc(T[`by_${o}`])}</button>`).join('')}</div>
       ${groups.length > 1 || fs.length ? '' : `<div class="sb-label">${esc(groups.length ? groups[0][0] : T.papers)}</div>`}
-      <nav class="sb-list">${pending.map(pend).join('')}${listed_ || (pending.length ? '' : `<div class="sb-empty">${esc(T.empty)}</div>`)}</nav>
+      <nav class="sb-list${chosen.size ? ' choosing' : ''}">${pending.map(pend).join('')}${listed_ || (pending.length ? '' : `<div class="sb-empty">${esc(T.empty)}</div>`)}</nav>
+      ${chosen.size ? `<div class="sb-chosen" role="toolbar" aria-label="${esc(T.sel_n.replace('{n}', chosen.size))}" title="${esc(selTip(T))}">` +
+        `<span class="sb-cn">${esc(T.sel_n.replace('{n}', chosen.size))}</span><button type="button" class="sb-cmove">${esc(T.sel_move)}</button>` +
+        `<button type="button" class="sb-cdel">${esc(T.sel_delete)}</button>` +
+        `<button type="button" class="sb-cx" title="${esc(T.sel_clear)}" aria-label="${esc(T.sel_clear)}">×</button></div>` : ''}
       <div class="sb-foot"><button type="button" class="sb-zotero">${BOOKS}${esc(T.z_lib)}</button><button type="button" class="sb-settings">⚙ ${esc(T.settings)}</button>${window.TFTutorial && PAPER ? `<button type="button" class="sb-help">? ${esc(T.tut_open)}</button>` : ''}<div class="sb-model">${esc(modelLabel())}</div></div>
       <div class="sb-resize" role="separator" aria-orientation="vertical" tabindex="0" title="${esc(T.sb_resize)}" aria-label="${esc(T.sb_resize)}"></div>`;
     // polled every second while something generates: drawn again only when it changed, and where it was scrolled to
@@ -238,16 +247,38 @@
     const lang = (last && last.lang) || readLang;
     submit(pid, lang, false, () => {}).catch(() => {});
   }
-  // a paper off the list, after a prompt that says what goes with it; the server moves its folder to papers/.trash
+  // a paper off the list, or those picked, after a prompt that says what goes with them; the server moves their
+  // folders to papers/.trash, and for a while the corner offers them back (Undo), here or on the page it goes to
   async function deletePaper(pid) {
     const T = t(), p = papers.find((x) => x.id === pid);
     if (!p) return;
     const title = p.name || (p.titles && p.titles[readLang]) || p.title;
     if (!confirm(T.del_confirm.replace('{title}', title).replace('{n}', p.notes || 0))) return;
-    try { papers = await api('/api/papers/delete', { paper: pid }); }
-    catch (err) { alert(err.message === 'busy' ? T.del_busy : err.message); return; }
-    if (PAPER && PAPER.id === pid) { location.href = '/'; return; }
+    await deleteAll([pid], T.del_done.replace('{title}', title));
+  }
+  async function deleteChosen(ids) {
+    const T = t(), ps = papers.filter((p) => ids.includes(p.id));
+    if (ps.length < 2) { if (ps.length) await deletePaper(ps[0].id); return; }
+    const n = ps.reduce((k, p) => k + (p.notes || 0), 0);
+    if (!confirm(T.sel_del_confirm.replace('{k}', ps.length).replace('{n}', n))) return;
+    await deleteAll(ps.map((p) => p.id), T.del_done_n.replace('{n}', ps.length));
+  }
+  async function deleteAll(ids, said) {
+    const T = t();
+    let r;
+    try { r = await api('/api/papers/delete', { papers: ids }); } catch (err) { alert(err.message); return; }
+    papers = r.papers;
+    for (const id of r.deleted) chosen.delete(id);
+    if (r.busy.length) alert(ids.length === 1 ? T.del_busy : T.sel_busy.replace('{n}', r.busy.length));
+    if (!r.deleted.length) { renderSidebar(); return; }
+    const undo = { ids: r.deleted, said: r.deleted.length === ids.length ? said : T.del_done_n.replace('{n}', r.deleted.length), until: Date.now() + UNDO_MS };
+    if (PAPER && r.deleted.includes(PAPER.id)) {   // (the paper being read: the landing says it, and offers it back)
+      try { sessionStorage.setItem(UNDO, JSON.stringify(undo)); } catch { /* private window */ }
+      location.href = '/';
+      return;
+    }
     renderSidebar();
+    offerUndo(undo);
   }
   function setCollapsed(c) {
     side.classList.toggle('collapsed', c);
@@ -387,8 +418,9 @@
     if (f) { f.focus(); f.select(); }
   }
   async function saveName(value) {
-    const id = editing, name = value.trim(), papers = moving ? [moving] : [], parent = within;
+    const id = editing, name = value.trim(), papers = moving ? [].concat(moving) : [], parent = within, many = Array.isArray(moving);
     editing = null; moving = null; within = null;
+    if (many && name) chosen.clear();
     if (name && id) {
       try { folders = await api('/api/folders', id === 'new' ? { op: 'new', name, papers, parent } : { op: 'rename', id, name }); }
       catch (err) { alert(err.message); }
@@ -423,8 +455,9 @@
     catch (err) { alert(err.message); }
     renderSidebar();
   }
-  async function moveTo(pid, folder) {
-    try { folders = await api('/api/folders', { op: 'move', papers: [pid], folder }); }
+  async function moveTo(pids, folder) {   // (one, or those picked: they are let go of)
+    const many = Array.isArray(pids);
+    try { folders = await api('/api/folders', { op: 'move', papers: [].concat(pids), folder }); if (many) chosen.clear(); }
     catch (err) { alert(err.message); }
     renderSidebar();
   }
@@ -469,18 +502,66 @@
     showMenu(btn, (fs ? `<div class="sb-mlabel">${esc(T.f_move_to)}</div>${fs}` : '') +
       (here ? `<button type="button" role="menuitem" data-to="">${esc(T.f_take_out)}</button>` : '') +
       `<button type="button" role="menuitem" data-act="new">${FOLDER_NEW}<span class="sb-mname">${esc(T.f_new)}…</span></button>` +
-      `<div class="sb-msep" role="separator"></div><button type="button" role="menuitem" data-act="rename">${esc(T.f_rename)}</button>` +
+      `<div class="sb-msep" role="separator"></div>` +
+      (chosen.has(pid) ? '' : `<button type="button" role="menuitem" data-act="pick" title="${esc(selTip(T))}">${esc(T.sel_pick)}</button>`) +
+      `<button type="button" role="menuitem" data-act="rename">${esc(T.f_rename)}</button>` +
       (p && p.name ? `<button type="button" role="menuitem" data-act="unname">${esc(T.d_unname)}</button>` : '') +
       `<button type="button" role="menuitem" class="danger" data-act="delete">${esc(T.del_paper)}</button>`,
     (a) => {
       if (a.dataset.act === 'new') editName('new', pid);
+      else if (a.dataset.act === 'pick') { chosen.add(pid); chosenAt = pid; renderSidebar(); }
       else if (a.dataset.act === 'rename') editDocName(pid);
       else if (a.dataset.act === 'unname') nameDoc(pid, '');
       else if (a.dataset.act === 'delete') deletePaper(pid);
       else if ((a.dataset.to || null) !== here) moveTo(pid, a.dataset.to || null);
     }, at);
   }
-  // under its button at the sidebar's right, or where the right click was (kept inside the sidebar); a pick closes it
+  // the documents picked: into a folder (ticked: the one they are all in), out of theirs, into a new one, or deleted
+  function chosenMenu(btn, at) {
+    const T = t(), ids = [...chosen], ins = new Set(ids.map((id) => folders.of[id] || null)), all = ins.size === 1 ? [...ins][0] : undefined;
+    const fs = tree().map(([f, depth]) => `<button type="button" role="menuitemradio" aria-checked="${f.id === all}" data-to="${f.id}" style="--d:${depth}">` +
+      `${FOLDER}<span class="sb-mname">${esc(f.name)}</span></button>`).join('');
+    showMenu(btn, (fs ? `<div class="sb-mlabel">${esc(T.f_move_to)}</div>${fs}` : '') +
+      ([...ins].some(Boolean) ? `<button type="button" role="menuitem" data-to="">${esc(T.f_take_out)}</button>` : '') +
+      `<button type="button" role="menuitem" data-act="new">${FOLDER_NEW}<span class="sb-mname">${esc(T.f_new)}…</span></button>` +
+      `<div class="sb-msep" role="separator"></div><button type="button" role="menuitem" class="danger" data-act="delete">${esc(T.sel_del_n.replace('{n}', ids.length))}</button>`,
+    (a) => {
+      if (a.dataset.act === 'new') editName('new', ids);
+      else if (a.dataset.act === 'delete') deleteChosen(ids);
+      else if ((a.dataset.to || null) !== all) moveTo(ids, a.dataset.to || null);
+    }, at);
+  }
+  const selTip = (T) => T.sel_tip.replace('⌘', MAC ? '⌘' : 'Ctrl');
+  function clearChosen() { chosen.clear(); chosenAt = null; renderSidebar(); }
+  const shownRows = () => [...side.querySelectorAll('.sb-list .sb-row[data-pid]:not([hidden])')].filter((r) => r.offsetParent);
+  // ⌘/Ctrl-click or Shift-click on a document picks it instead of opening it; while some are picked, a click picks or
+  // unpicks, and Shift picks every row shown from the one picked last to this one
+  side.addEventListener('click', (e) => {
+    const a = e.target.closest('.sb-row[data-pid] > .sb-item');
+    if (!a || e.button !== 0 || !(e.metaKey || e.ctrlKey || e.shiftKey || chosen.size)) return;
+    e.preventDefault(); e.stopPropagation();
+    const pid = a.parentElement.dataset.pid, rows = shownRows().map((r) => r.dataset.pid);
+    const i = rows.indexOf(chosenAt), j = rows.indexOf(pid);
+    if (e.shiftKey && i >= 0 && j >= 0) for (const id of rows.slice(Math.min(i, j), Math.max(i, j) + 1)) chosen.add(id);
+    else if (chosen.has(pid)) chosen.delete(pid);
+    else chosen.add(pid);
+    chosenAt = pid;
+    renderSidebar();
+    if (e.detail === 0) { const again = side.querySelector(`.sb-row[data-pid="${CSS.escape(pid)}"] > .sb-item`); if (again) again.focus(); }   // (the keyboard's Enter)
+  }, true);
+  side.addEventListener('mousedown', (e) => { if (e.shiftKey && e.target.closest('.sb-row[data-pid] > .sb-item')) e.preventDefault(); });   // (no text selected by it)
+  // Esc lets go of them; ⌘A (Ctrl+A) in the list picks every document it shows
+  addEventListener('keydown', (e) => {
+    if (side.classList.contains('collapsed') || menu || (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]'))) return;
+    if (e.key === 'Escape' && chosen.size && !document.querySelector('dialog[open]')) { e.preventDefault(); clearChosen(); }
+    else if (e.key === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && document.activeElement && side.querySelector('.sb-list').contains(document.activeElement)) {
+      e.preventDefault();
+      for (const r of shownRows()) chosen.add(r.dataset.pid);
+      renderSidebar();
+    }
+  });
+  // under its button at the sidebar's right (above it, where there is no room below), or where the right click was
+  // (kept inside the sidebar); a pick closes it
   function showMenu(btn, items, pick, at) {
     closeMenu();
     menu = document.createElement('div');
@@ -494,7 +575,8 @@
       menu.style.left = `${Math.max(8, Math.min(at.x - s.left, s.width - menu.offsetWidth - 8))}px`;
       menu.style.top = `${Math.max(8, Math.min(at.y - s.top, s.height - menu.offsetHeight - 8))}px`;
     } else {
-      menu.style.top = `${Math.min(r.bottom - s.top + 4, s.height - menu.offsetHeight - 8)}px`;
+      const below = r.bottom - s.top + 4;
+      menu.style.top = `${below + menu.offsetHeight + 8 > s.height ? Math.max(8, r.top - s.top - menu.offsetHeight - 4) : below}px`;
       menu.style.right = `${Math.max(8, s.right - r.right)}px`;
     }
     menu.onclick = (e) => {
@@ -516,7 +598,8 @@
     if ((!row || !row.querySelector('.sb-item')) && !(head && head.querySelector('.sb-fmenu'))) { closeMenu(); return; }   // (a name being written: the field's own)
     e.preventDefault();
     const at = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null;   // (none from the keyboard: by the row)
-    if (row) docMenu(row.querySelector('.sb-item'), row.dataset.pid, at);
+    if (row && chosen.size > 1 && chosen.has(row.dataset.pid)) chosenMenu(row.querySelector('.sb-item'), at);
+    else if (row) docMenu(row.querySelector('.sb-item'), row.dataset.pid, at);
     else folderMenu(head.querySelector('.sb-fmenu'), head.parentElement.dataset.folder, at);
   });
   document.addEventListener('contextmenu', (e) => { if (menu && !side.contains(e.target)) closeMenu(); });
@@ -524,6 +607,9 @@
     const b = e.target.closest('button');
     if (!b) return;
     if (b.matches('.sb-newf')) editName('new');
+    else if (b.matches('.sb-cmove')) { e.stopPropagation(); if (menu) closeMenu(); else chosenMenu(b); }
+    else if (b.matches('.sb-cdel')) deleteChosen([...chosen]);
+    else if (b.matches('.sb-cx')) clearChosen();
     else if (b.matches('.sb-order [data-sort]')) { store.set(SORT, b.dataset.sort); renderSidebar(); }
     else if (b.matches('.sb-fhead')) {   // shut, or open again
       const id = b.closest('.sb-folder').dataset.folder;
@@ -543,7 +629,7 @@
   function dropTo(at) {
     const to = at.matches('.sb-folder') ? at.dataset.folder : null;
     if (draggingFolder) return parentOf(draggingFolder) === to || (to && inside(draggingFolder).has(to)) ? undefined : to;
-    return (folders.of[dragging] || null) === to ? undefined : to;
+    return dragging.every((id) => (folders.of[id] || null) === to) ? undefined : to;
   }
   // held near the list's top or bottom (or over the search above it), the list scrolls, the faster the nearer its edge:
   // a document far down reaches the folders at the top
@@ -574,11 +660,18 @@
       return;
     }
     if (!row) return;
-    dragging = row.dataset.pid;
+    const pid = row.dataset.pid;
+    dragging = chosen.size > 1 && chosen.has(pid) ? [...chosen] : [pid];   // (a picked one takes the others along)
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/x-textfold-paper', dragging);
+    e.dataTransfer.setData('application/x-textfold-paper', dragging.join(' '));
+    if (dragging.length > 1) {   // what the pointer carries: how many
+      const img = h('div', 'sb-dragimg', esc(t().sel_n.replace('{n}', dragging.length)));
+      document.body.append(img);
+      e.dataTransfer.setDragImage(img, 14, 14);
+      setTimeout(() => img.remove());
+    }
     side.classList.add('dragging');
-    side.classList.toggle('from-folder', !!folders.of[dragging]);
+    side.classList.toggle('from-folder', dragging.some((id) => folders.of[id]));
   });
   side.addEventListener('dragend', () => {
     dragging = null; draggingFolder = null; edgeStep = 0;
@@ -603,10 +696,10 @@
     const at = (dragging || draggingFolder) && dropOn(e);
     if (!at) return;
     e.preventDefault();
-    const pid = dragging, fid = draggingFolder, to = dropTo(at);
+    const pids = dragging, fid = draggingFolder, to = dropTo(at);
     dragging = null; draggingFolder = null;
     if (to === undefined) return;
-    if (fid) nestFolder(fid, to); else moveTo(pid, to);
+    if (fid) nestFolder(fid, to); else moveTo(pids.length > 1 ? pids : pids[0], to);
   });
 
   // ── jobs ─────────────────────────────────────────────────────────────
@@ -750,10 +843,46 @@
     warn: '<path d="M10 6.5V11M10 13.8v.2"/><circle cx="10" cy="10" r="7"/>',
     out: '<path d="M8.5 5.5h-3v9h9v-3M11.5 4.5h4v4M15.5 4.5l-6 6"/>',
     x: '<path d="M6 6l8 8M14 6l-8 8"/>',
+    bin: '<path d="M4.5 6h11M8.2 6V4.5h3.6V6M6 6l.8 9.5h6.4L14 6"/>',
   };
   const svg = (k) => `<svg viewBox="0 0 20 20" aria-hidden="true">${SIGN[k]}</svg>`;
   const sign = (k, tone) => `<span class="g-ico${tone ? ` ${tone}` : ''}">${k === 'mark' ? MARK : svg(k)}</span>`;
   const shut = (label) => `<button type="button" class="g-x" aria-label="${esc(label)}" title="${esc(label)}">${svg('x')}</button>`;
+
+  // ── a delete's Undo: for ten seconds the corner says what went, with a button that brings it back as it was (in
+  //    its folder, under its name); the paper being read, deleted, is offered back on the page it goes to ──
+  const UNDO = 'textfold.undo', UNDO_MS = 10000;
+  const undoBox = h('div', 'gen-toast undo-toast');
+  undoBox.hidden = true; toasts.append(undoBox);
+  let undoTimer = 0;
+  function offerUndo(u) {
+    const T = t(), close = () => { undoBox.querySelector('.g-x').onclick = () => { undoBox.hidden = true; }; };
+    clearTimeout(undoTimer);
+    undoBox.hidden = false;
+    undoBox.innerHTML = `${sign('bin')}<b>${esc(u.said)}</b>${shut(T.close)}<span class="g-acts"><button type="button" class="g-go">${esc(T.undo)}</button></span>`;
+    close();
+    const b = undoBox.querySelector('.g-go');
+    b.onclick = async () => {
+      b.disabled = true;
+      clearTimeout(undoTimer);
+      try {
+        const r = await api('/api/papers/restore', { papers: u.ids });
+        papers = r.papers; folders = r.folders;
+        renderSidebar();
+        undoBox.innerHTML = `${sign('done', 'ok')}<b>${esc(T.undone)}</b>`;
+        undoTimer = setTimeout(() => { undoBox.hidden = true; }, 2500);
+      } catch (err) {
+        undoBox.innerHTML = `${sign('warn', 'warn')}<b>${esc(err.message)}</b>${shut(T.close)}`;
+        close();
+      }
+    };
+    undoTimer = setTimeout(() => { undoBox.hidden = true; }, Math.max(0, u.until - Date.now()));
+  }
+  try {
+    const u = JSON.parse(sessionStorage.getItem(UNDO) || 'null');
+    sessionStorage.removeItem(UNDO);
+    if (u && Array.isArray(u.ids) && u.until > Date.now()) offerUndo(u);
+  } catch { /* private window */ }
 
   // ── the app's own updates (desktop/main.js): a newer release, downloaded and installed when the reader says ──
   if (window.desktop && window.desktop.onUpdate) {

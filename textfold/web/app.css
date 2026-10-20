@@ -110,6 +110,23 @@
 .sb-menu [data-to] { padding-left: calc(10px + var(--d, 0) * 14px); }   /* a folder inside another, as deep as it is */
 .sb-msep { height: 1px; margin: 4px 6px; background: var(--line-2); }
 .sb-item.menu-on:not(.active) { background: var(--surface); }
+/* documents picked to go together (app.js, the picked): each ticked where its × was; a dark bar under the list says
+   how many, and moves or deletes them */
+.sb-row.chosen > .sb-item, .sb-row.chosen > .sb-item:hover { background: var(--accent-soft); }
+.sb-check { position: absolute; top: 10px; right: 8px; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line);
+  background: var(--card); pointer-events: none; }
+.sb-row:hover .sb-check { border-color: var(--accent); }
+.sb-row.chosen .sb-check { border-color: var(--accent); background: var(--accent)
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-5' fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat; }
+.sb-chosen { display: flex; align-items: center; gap: 2px; margin: 0 8px 8px; padding: 5px 5px 5px 12px; border-radius: 10px; background: var(--ink);
+  color: var(--card); font: 600 12.5px var(--sans); box-shadow: var(--pop); }
+.sb-cn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-chosen button { flex: none; border: 0; background: none; color: inherit; font: inherit; padding: 5px 8px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.sb-chosen button:hover, .sb-chosen button:focus-visible { background: color-mix(in srgb, var(--card) 18%, transparent); outline: none; }
+.sb-chosen .sb-cx { font-size: 17px; font-weight: 500; line-height: 1; padding: 3px 7px; opacity: .75; }
+.sb-chosen .sb-cx:hover { opacity: 1; }
+.sb-dragimg { position: fixed; top: -200px; left: 0; padding: 6px 11px; border-radius: 8px; font: 600 13px var(--sans); color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
 .sb-foot { border-top: 1px solid var(--line-2); padding: 10px 12px 14px; }
 .sb-settings, .sb-help, .sb-zotero { width: 100%; text-align: left; border: 0; background: none; font: 550 13px var(--sans); color: var(--ink-2); padding: 6px 4px; border-radius: 7px; cursor: pointer; }
 .sb-settings:hover, .sb-help:hover, .sb-zotero:hover { background: var(--surface); }
