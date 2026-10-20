@@ -167,13 +167,13 @@ export function fold(md: string, level: number): { text: string; total: number; 
         underHeading = true
         break
       case 'code':
-      case 'table': {
-        const rows = b.lines.length - 2   // less the fences, or the header and its rule
-        // a table is kept whole like a list's items: its rows are already short, and it is often the answer
-        if ((b.kind === 'table' && level <= 3) || (level === 2 && b.lines.length <= 8)) out.push(b.lines.join('\n'))
-        else if (level <= 3) out.push(b.kind === 'code' ? `\`⋯ ${Math.max(rows, 1)} lines of code\`` : `\`⋯ a table of ${Math.max(rows, 1)} rows\``)
+      case 'table':
+        if (level > 3) break
+        // a table is kept whole like a list's items: its rows are already short, and it is often the answer;
+        // code is kept up to Brief's 6 lines, the command a reply is about, and a longer listing folds to its line
+        if (b.kind === 'table' || b.lines.length <= 8) out.push(b.lines.join('\n'))
+        else out.push(`\`⋯ ${b.lines.length - 2} lines of code\``)   // less the fences
         break
-      }
       case 'list': {
         const its = items(b).filter((it) => level === 2 || it.indent === 0)
         if (level <= 3) {
