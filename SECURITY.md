@@ -12,7 +12,9 @@ TextFold runs on your own computer and reads text from places it does not contro
 cannot act on your computer, and so that it cannot steer the model that folds it:
 
 - The local server listens on 127.0.0.1 only, and refuses any change asked for by another site (it checks the origin
-  of every request that writes).
+  of every request that writes). It answers only requests addressed to this computer's own names (localhost,
+  127.0.0.1, [::1]), so a site that points its own domain at this computer (DNS rebinding) cannot read the library
+  either.
 - Text from Europe PMC, bioRxiv, medRxiv, Wikipedia, GitHub READMEs, Markdown files, web pages and converted PDFs
   passes through an allowlist before the reader shows it: no script, no event handler, no `javascript:` link, no
   frame, no form, no embedded object.

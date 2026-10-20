@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from . import llm_openai
 from .store import HOME, OLD_HOMES, ROOT
 
 THOUGHTDAG_ENV = ROOT.parent / "thoughtdag-main" / ".env"
@@ -156,7 +157,7 @@ def ollama_models(base="http://localhost:11434", strict=False):
 
 def probe(base, api_key, timeout=15):
     """GET {base}/models (ThoughtDAG server.mjs:799-824): [{id, created?, vision?, contextLength?}]."""
-    req = urllib.request.Request(f"{base.rstrip('/')}/models", headers={"Authorization": f"Bearer {api_key or 'none'}"})
+    req = urllib.request.Request(f"{base.rstrip('/')}/models", headers=llm_openai.auth(base, api_key))
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = json.loads(r.read())

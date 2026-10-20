@@ -32,13 +32,15 @@ The landing takes a link or ID (arXiv, PubMed Central, Europe PMC, bioRxiv, medR
 file (the dashed box under the bar, or dropped anywhere on the page), and a language; a line under the bar names
 the sources it reads; the sidebar lists every paper generated so far. In a paper,
 the language menu switches between generated languages, generates a new one, or regenerates the current one.
-One language, the reader's (12 languages: English, 简体中文, 繁體中文, 日本語, 한국어, Español, Français, Deutsch,
-Português, Italiano, Русский, हिन्दी): the browser's, or the one last chosen (kept in the browser, `pf-ui-lang`). The
-interface speaks it, and a paper is read in it: its text, and the names of its own parts (figures, tables, theorems,
-references, equations). A switch of either is a switch of both: the paper's menu at the top right, a language
-generated there, Settings, or the two menus of the landing. A paper that has not that language yet opens in one it
-has, and the interface stays; nothing is generated unasked. A question is answered in the language it is asked in,
-the interface's when that is unclear.
+One language, the reader's, any of `textfold/langs.py`: the browser's, or the one last chosen (kept in the browser,
+`pf-ui-lang`). A paper is read in it: its text, and the names of its own parts (figures, tables, theorems, references,
+equations). The interface speaks it when `web/i18n.js` has its words (English, 简体中文, 繁體中文, 日本語, 한국어, Español,
+Français, Deutsch, Português, Italiano, Русский, हिन्दी), and English otherwise, as are then the names of the paper's
+parts. A switch of either is a switch of both: the paper's menu at the top right, a language generated there, Settings,
+or the two menus of the landing (the one beside the bar offers every language a text can be read in, the one at the
+top right the interface's). A paper that has not that language yet opens in one it has, and the interface stays;
+nothing is generated unasked. A question is answered in the language it is asked in, the reader's when that is
+unclear.
 
 Where things are kept: the code in the project (`textfold/`, with the reader's pages in `textfold/web/`); papers and exports in `papers/` and `out/` of the
 project, or wherever `TEXTFOLD_DATA` points (`PAPERFOLD_DATA`, its earlier name, is read too); settings and keys in
@@ -71,11 +73,18 @@ takes the gallery from there. The repository's own Pages keeps its old address, 
 Models (⚙ Model & API), ported from ThoughtDAG's model access:
 
 - **Agents on this computer**, found at startup (and on Rescan) on PATH, the login shell's PATH, the usual install
-  directories and the node version managers. Claude Code, Codex and Pi run generations, each listing its own models
-  (Pi brings whatever providers it is configured with); Gemini CLI, Qwen Code, opencode, Cursor Agent, Kimi CLI, Amp,
+  directories and the node version managers. Claude Code, Codex, Pi and CodeBuddy run generations, each listing its own models
+  (Pi brings whatever providers it is configured with; CodeBuddy, WorkBuddy's copy of it first, the account's); Gemini CLI, Qwen Code, opencode, Cursor Agent, Kimi CLI, Amp,
   Goose, Crush, Droid, Copilot CLI, iFlow and Aider are reported when present. Claude Code is called without the
   user's settings and CLAUDE.md (`--setting-sources project,local` in a scratch folder; again with them if that fails
-  to sign in).
+  to sign in). CodeBuddy is called the same way, but with its user settings (without them it has no sign-in and
+  waits), `--tools StructuredOutput` (the one tool its structured output needs) and WorkBuddy's quiet switches (no
+  memory, no reminders: ~400 tokens of its own a call); WorkBuddy's copy runs on the app's Electron as node, with
+  WorkBuddy's settings folder, as WorkBuddy runs it (`agents.env_for`). WorkBuddy's copy is not a documented way in,
+  so it is looked for widely and checked (`agents.locate_codebuddy`): WorkBuddy where it runs (the process list), its
+  usual places, where Windows' installer recorded it or a Mac's Spotlight knows it; CodeBuddy inside it by name; the
+  first copy that answers `--version` (on the app's program, else on node), else a codebuddy installed on its own;
+  CodeBuddy's own sign-in when WorkBuddy's settings have none.
 - **Two easy ways in** (`textfold/bridges.py`, as in ThoughtDAG):
   - **ChatGPT plan, local bridge**: openai-oauth (npm) serves the plan as an OpenAI-compatible endpoint on
     127.0.0.1:10531, signed in with Codex's login (or a browser sign-in). Running, it joins the providers on its own
@@ -360,7 +369,7 @@ textfold/zotero.py   a Zotero library through Zotero Desktop's local API; an ite
 textfold/tokens.py   tokenizer, sentence splitter, LCS alignment
 textfold/ladder.py   one model call per section; validation; written words aligned to source words for the morph
 textfold/links.py    argument links, one call over the whole paper
-textfold/translate.py  any language: sentence-aligned translation + short levels, one call per section (langs.py: the 12 languages)
+textfold/translate.py  any language: sentence-aligned translation + short levels, one call per section (langs.py: the languages a text can be read in)
 textfold/store.py    versioned layers per paper; assembling a reader from them
 textfold/pipeline.py fetch → parse → English ladder + links (once) → translation, with progress
 textfold/server.py   local server: pages, /api/papers, /api/jobs (and /api/jobs/stop), /api/generate, /api/settings

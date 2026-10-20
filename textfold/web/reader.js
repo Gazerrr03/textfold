@@ -28,19 +28,30 @@
   const SRC = (D.meta.source || {}).kind;
   const PAPER = ['europepmc', 'biorxiv', 'medrxiv'].includes(SRC) || (!SRC && /^\d{4}\.\d{4,5}$/.test(D.meta.id));
   const T = Object.fromEntries(I18N.CODES.map((c) => [c, I18N.t(c, !PAPER)]));
-  // One language, the reader's. The paper is read in `lang`: its text, and the names of its own parts (figures, tables,
-  // theorems, references, equations). The interface speaks `ui`: chosen in the app's settings, else the browser's. A
-  // switch of either is a switch of both (setLang, setUi). A paper that does not have the reader's language yet opens
-  // in one it has, and the interface stays as it was.
+  // One language, the reader's (`readerLang`): chosen in the app, else the browser's. The paper is read in `lang`: its
+  // text, and the names of its own parts (figures, tables, theorems, references, equations), in English where the
+  // interface has no words for that language. The interface speaks `ui`: the reader's language when it has the words,
+  // else English. A switch of either is a switch of both (setLang, setUi). A paper that does not have the reader's
+  // language yet opens in one it has, and the interface stays as it was.
   const UI_KEY = 'pf-ui-lang';
-  let ui = (() => { let v = null; try { v = localStorage.getItem(UI_KEY); } catch { /* private window */ } return v && T[v] ? v : I18N.guess(); })();
+  const NAMES = D.langs || I18N.NATIVE;   // every language a text can be read in, by its own name (build.py)
+  const nameOf = (code) => NAMES[code] || I18N.NATIVE[code] || code;
+  let readerLang = (() => { let v = null; try { v = localStorage.getItem(UI_KEY); } catch { /* private window */ } return v && (T[v] || NAMES[v]) ? v : I18N.guess(); })();
+  let ui = I18N.uiFor(readerLang);
   const AVAIL = (D.meta.langs && D.meta.langs.length) ? D.meta.langs : ['en'];
   const STALE = new Set(D.meta.stale || []);
+  // the paragraphs a language's translation has none for (store.assemble: a call that failed), by language; the app
+  // asks for them as the language is opened, and its menu can ask again
+  const GAPS = D.meta.gaps || {};
+  const gapTag = (code, t) => (GAPS[code] && !STALE.has(code) ? `<em class="stale">${esc(t.gaps_tag.replace('{n}', GAPS[code]))}</em>` : '');
+  // a document in Chinese or Japanese (store.assemble): the CJK rules below are its only, an English paper reads as before
+  const CJK_DOC = !!D.meta.cjk;
   const trOf = (x) => (lang !== 'en' && x && x.tr && x.tr[lang]) || null;   // a unit's or chunk's translation, if any
 
   const perf = (name, t0) => { if (window.__drPerf) window.__drPerf.push([name, Math.round((performance.now() - t0) * 10) / 10]); };
   const docEl = document.getElementById('doc');
   docEl.classList.add('doc');   // the page's CSS speaks of .doc, which the keyframes' sandbox is too
+  if (CJK_DOC) docEl.classList.add('cjk');
   const ghostEl = document.getElementById('ghosts');
   let level = 4;
   let lang = 'en';
@@ -59,8 +70,10 @@
   function view(uid) {
     const u = U[uid];
     const z = trOf(u);
-    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: z.lad.brief, tn: z.lad.tn, topic: z.lad.topic, p: `${lang}~` };
-    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: u.lad.brief, tn: u.lad.tn, topic: u.lad.topic, p: '' };
+    const l = z ? z.lad : u.lad;
+    // glue: the half of a sentence a page break left in the unit before this one (ladder.dress)
+    if (z) return { toks: z.toks, sents: z.sents, ev: u.lad.ev.filter((s) => s < z.sents.length), brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, p: `${lang}~` };
+    return { toks: u.toks, sents: u.sents, ev: u.lad.ev, brief: l.brief, tn: l.tn, topic: l.topic, glue: l.glue, p: '' };
   }
 
   // ── pieces: what a unit shows at a level ─────────────────────────────
@@ -82,8 +95,26 @@
       for (const s of sents) {
         const [a, b] = v.sents[s];
         if (prevEnd !== null && a !== prevEnd) out.push({ id: `${p}gap${s}`, gap: true });
-        for (let i = a; i < b; i++) out.push({ id: p + i, i, tok: v.toks[i], lead: keep.has(i) });
+        for (let i = a; i < b; i++) {
+          if (!CJK_DOC) { out.push({ id: p + i, i, tok: v.toks[i], lead: keep.has(i) }); continue; }
+          const raw = v.toks[i], txt = raw && raw.t !== undefined ? raw.t : raw;
+          // a CJK footnote marker (①-⑩, ⑴-⒑, ⒈-⒑) glued into a sentence: dropped for display; a token that is
+          // nothing but markers is not rendered at all (Full keeps the text as written). † ‡ § ¶ are left alone:
+          // English papers use them as ordinary marks
+          const clean = String(txt).replace(/[①②③④⑤⑥⑦⑧⑨⑩⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⒈⒉⒊⒋⒌⒍⒎⒏⒐⒑]/g, "");
+          if (!clean.trim()) continue;
+          out.push({ id: p + i, i, tok: clean === txt ? raw : (typeof raw === "string" ? clean : { ...raw, t: clean }), lead: keep.has(i) });
+        }
         prevEnd = b;
+      }
+      // the page break cut this sentence in two and the first half stays in the unit before: joined here, at the
+      // first word, so the sentence reads whole ("…的法律位阶为行政" + "法规，加强对…") and stays one line
+      if (v.glue) {
+        const first = out.find((x) => !x.gap && x.tok);
+        if (first) {
+          const tk = typeof first.tok === "string" ? { t: first.tok } : first.tok;
+          first.tok = { ...tk, t: v.glue + (tk.t || "") };
+        }
       }
     } else {
       // i: the token of the full text a written word came from (none for the model's own words)
@@ -93,7 +124,8 @@
         // topic words carry k, the takeaway word they slide from; a topic the model phrased itself may have none
         const inTopic = new Set(v.topic.map((t) => t.k).filter((k) => k !== undefined));
         out = brief.slice(0, v.tn).map((x, j) => ({ ...x, lead: inTopic.has(j) }));
-      } else out = v.topic.map((t, j) => ({ id: t.k !== undefined ? brief[t.k].id : `${p}t${j}`, i: t.k !== undefined ? brief[t.k].i : undefined, tok: t, lead: true }));
+      } else if (CJK_DOC && !v.tn) out = [];   // a takeaway that stepped down (ladder.fold_background): its topic with it
+      else out = v.topic.map((t, j) => ({ id: t.k !== undefined ? brief[t.k].id : `${p}t${j}`, i: t.k !== undefined ? brief[t.k].i : undefined, tok: t, lead: true }));
       if (mine && L > 0) {   // the reader's passages after the written line, in the author's words (same ids: they stay put)
         const used = new Set(out.map((x) => x.id));
         let prev = null;
@@ -164,6 +196,10 @@
   // the drawing itself, into the unit's element (or a copy of it: the keyframes' sandbox)
   function drawUnit(uid, L, el, map, hot) {
     el.dataset.l = L;
+    if (CJK_DOC) {   // an apparatus unit (footnote, contents line): not shown at all when folded, as written at Full
+      el.hidden = L < 4 && !pieces(uid, L).length;
+      if (el.hidden) { el._tx.replaceChildren(); return; }
+    }
     if (!hot) {
       el._tx.innerHTML = textHtml(uid, L);
       if (el._tx.querySelector('.texsrc')) texify(el._tx);
@@ -314,7 +350,11 @@
       if (b.k === 'h') {
         boxes.length = 0;
         const c = chunkById[b.chunk];
-        const cur = h('section', `chunk l${c.level}${c.units.length ? '' : ' empty'}`);
+        // An empty section whose title is a reference itself ([EB/OL], a URL): the converter read a footnote as a
+        // section heading. Full keeps it as written; every folded level drops the section, or Takeaway shows a
+        // block of quoted text where a heading should be
+        const ref = CJK_DOC && !c.units.length && /\[[A-Za-z]+\/OL\]|https?:\/\//.test(c.title || '');
+        const cur = h('section', `chunk l${c.level}${c.units.length ? '' : ' empty'}${ref ? ' ref' : ''}`);
         cur.dataset.chunk = c.id; cur.id = c.id;
         const hd = h('h2', 'hd'); hd.dataset.id = `h:${c.id}`;
         hd.hidden = !c.num && !c.title;   // a document's opening text has no heading of its own
@@ -372,12 +412,13 @@
 
   // everything that is text in the chrome or depends on the language but is not a unit
   function applyLang() {
-    const t = T[ui], c = T[lang], m = D.meta;   // (c: the names of the paper's own parts, in the language it is read in)
+    const t = T[ui], c = T[lang] || T.en, m = D.meta;   // (c: the names of the paper's own parts, in the language it is read in)
     document.documentElement.lang = I18N.htmlLang(lang);
     document.documentElement.dataset.lang = lang;
     mirrorLang();
-    const trTitle = lang !== 'en' && m.titles && m.titles[lang];
-    paperHead.innerHTML = `<h1>${esc(trTitle || m.title)}</h1>${trTitle ? `<div class="orig">${esc(m.title)}</div>` : ''}<div class="authors">${esc((m.authors || []).map(flipName).join(', '))}</div>` +
+    // the reader's name for it in the library (m.name), if they gave one, over its own title in this language
+    const trTitle = lang !== 'en' && m.titles && m.titles[lang], below = m.name ? trTitle || m.title : trTitle ? m.title : '';
+    paperHead.innerHTML = `<h1>${esc(m.name || trTitle || m.title)}</h1>${below ? `<div class="orig">${esc(below)}</div>` : ''}<div class="authors">${esc((m.authors || []).map(flipName).join(', '))}</div>` +
       (m.license || m.snapshot ? `<div class="license">${[m.license ? `<a href="${esc(m.license)}" target="_blank" rel="noopener">${esc(licenseName(m.license, t))}</a>` : '',
         m.snapshot ? esc(t.snapshot.replace('{date}', longDate(m.snapshot))) : ''].filter(Boolean).join(' · ')}</div>` : '');
     [...paperHead.children].forEach((c) => { c.dataset.id = `ph:${c.className || c.tagName}`; });
@@ -401,7 +442,7 @@
     const sum = docEl.querySelector('.bib summary'); if (sum) sum.textContent = c.refs;
     document.getElementById('hint').textContent = t.hint;
     document.querySelector('.tagline').textContent = t.tagline;
-    langBtn.innerHTML = `${esc(I18N.NATIVE[lang])}${STALE.has(lang) ? ` <em class="stale">${esc(t.stale)}</em>` : ''} <span class="caret">▾</span>`;
+    langBtn.innerHTML = `${esc(nameOf(lang))}${STALE.has(lang) ? ` <em class="stale">${esc(t.stale)}</em>` : gapTag(lang, t) ? ` ${gapTag(lang, t)}` : ''} <span class="caret">▾</span>`;
     langBtn.title = t.language;
     bar.querySelectorAll('button').forEach((b) => { b.textContent = t.levels[+b.dataset.l]; });
     requestAnimationFrame(() => { geom = null; placeThumb(); });
@@ -411,7 +452,7 @@
     document.getElementById('back').textContent = `← ${t.back}`;
     for (const uid of unitEl.keys()) renderSide(uid);
     notesForLang();
-    if (window.DRApp) window.DRApp.onLang(lang, ui);
+    if (window.DRApp) window.DRApp.onLang(lang, readerLang);
   }
 
   // a page read from the web is a snapshot: the day it was read, in the interface's language ("6 October 2026")
@@ -428,6 +469,10 @@
   function renderStake(c, st) {
     const lad = (trOf(c) && trOf(c).lad) || c.lad;
     st.replaceChildren();
+    if (CJK_DOC) {   // no section stake: leave no empty row
+      st.hidden = !lad || !lad.take.length;
+      if (st.hidden) return;
+    }
     if (!lad) return;
     const mk = stakeMarks(c.id);
     lad.take.forEach((tk, i) => {
@@ -1130,7 +1175,7 @@
       for (const c of node.children) { const k = copy(c); if (k) { el.append(k); any = true; } }
       return any || node.tagName === 'SECTION' || cl.contains('chunks') ? el : null;
     }
-    const root = h('div', 'doc');
+    const root = h('div', CJK_DOC ? 'doc cjk' : 'doc');
     root.dataset.level = L;
     for (const c of docEl.children) { const k = copy(c); if (k) root.append(k); }
     return { root, units, heads };
@@ -1437,7 +1482,7 @@
     if (!AVAIL.includes(l)) { if (window.DRApp) window.DRApp.generate(l, false); return; }
     if (busy) { queued = () => setLang(l); return; }
     store.set('dr-lang', l);
-    if (T[l]) { ui = l; store.set(UI_KEY, l); }   // the interface goes with the text
+    readerLang = l; ui = I18N.uiFor(l); store.set(UI_KEY, l);   // the interface goes with the text (in English when it has no words for it)
     if (D.app) history.replaceState(null, '', `?lang=${encodeURIComponent(l)}${location.hash}`);
     const hot = unitsNear(innerHeight * 1.5, innerHeight * 1.5);
     const band = level === 0 ? null : bandAround(defaultAnchor(), { 4: 30, 3: 45, 2: 60, 1: 150 }[level], hot);
@@ -1495,7 +1540,7 @@
     }
     if (tk === 'eq') {
       const el = edgeTarget(tk, id), tag = el && el.querySelector('.ltx_tag_equation');
-      return `<span class="where">${T[lang].eq}</span> ${esc(tag ? tag.textContent : '')}`;
+      return `<span class="where">${(T[lang] || T.en).eq}</span> ${esc(tag ? tag.textContent : '')}`;
     }
     return esc(id);
   }
@@ -1509,6 +1554,7 @@
     return ensureSide(uid);
   }
   function hostOf(key) {
+    if (key === '¶') return { el: paperHead, after: null };   // the whole paper: its head (the reader's notes on it)
     if (!key.startsWith('§')) return { el: unitEl.get(key), after: null };
     const s = secs.get(key.slice(1));
     return s ? { el: s.sec, after: s.hd } : null;
@@ -1753,6 +1799,7 @@
   // what a change of notes redraws: the units, their margin, the keyframes (which hold the marks)
   function notesChanged(uids) {
     for (const uid of new Set(uids)) {
+      if (uid === '¶') { renderNoteCards(uid); continue; }   // the whole paper: the notes on it, by its head
       if (uid.startsWith('§')) {   // a section: its heading's mark, its summary's marks, its margins
         const sc = secs.get(uid.slice(1));
         if (!sc) continue;
@@ -2000,7 +2047,7 @@
   // a question note is a conversation about its passage: every turn asked there, and a field to ask the next
   const turnsOf = (n) => n.thread || (n.ask ? [n.ask] : []);
   function openNote(n, draft = false, back = '') {   // back: a question stopped, in the field again to be put right
-    if (whole(n.anchor)) { openChat(n, back); return; }   // a conversation about the whole paper lives in the chat
+    if (whole(n.anchor) && n.kind === 'ask') { openChat(n, back); return; }   // a conversation about the whole paper lives in the chat
     const was = popNote && popNote.id === n.id && npop.querySelector('.np-input'), typed = was ? was.value : '';   // (drawn again: what is written stays)
     popNote = n; popDraft = draft;
     const t = T[ui], a = n.anchor, ask = n.kind === 'ask';
@@ -2016,7 +2063,7 @@
     }
     npop.innerHTML = `<div class="np-quote"><span class="np-where">${esc(whereA(a))}</span> ${esc(a.quote.exact.length > 160 ? a.quote.exact.slice(0, 157) + '…' : a.quote.exact)}` +
       `${ask ? `<span class="np-at">${esc(askedAt(a))}</span>` : ''}</div>${body}` +
-      (draft ? '' : `<div class="np-acts">${!ask ? `<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
+      (draft ? '' : `<div class="np-acts">${!ask && !whole(a) ? `<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
         `<button type="button" data-act="link">${esc(t.n_copy)}</button><button type="button" data-act="del">${esc(t.n_delete)}</button></div>`);
     texify(npop);
     npop.hidden = false;
@@ -2126,7 +2173,7 @@
     if (popNote && popNote.id === n.id) openNote(note);
     if (chatNote && chatNote.id === n.id) openChat(note);
     let answered;
-    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui, req: mine.req }, mine.ctl.signal); }
+    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui: readerLang, req: mine.req }, mine.ctl.signal); }
     catch (err) {
       if (mine.ctl.signal.aborted || err.message === 'stopped') return;   // (stopAsk put it all back)
       answered = { ...note, thread: [...done, { q, a: '', lang: qlang, error: String(err.message || err).slice(0, 200) }] };
@@ -2254,7 +2301,8 @@
   function renderNoteCards(key) {
     const list = notesOf.get(key) || [], t = T[ui], host = hostOf(key);
     if (!host || !host.el) return;
-    const mine = list.filter((n) => n.kind !== 'ask' && n.text && n.text.trim()), asks = list.filter((n) => n.kind === 'ask');
+    // (the conversations about the whole paper live in the chat: its head carries the reader's own notes alone)
+    const mine = list.filter((n) => n.kind !== 'ask' && n.text && n.text.trim()), asks = key === '¶' ? [] : list.filter((n) => n.kind === 'ask');
     const card = (n) => {
       const c = h('button', `ncard${n.kind === 'ask' ? ' ask' : ''}`);
       c.type = 'button';
@@ -2361,7 +2409,7 @@
       if (g && g !== sec) { sec = g; items += `<div class="nl-sec">${esc(g)}</div>`; }
       const body = k === 'ask'
         ? `<b>${esc((turns[0] || {}).q || '')}</b>${said ? `<span class="nl-a">${texLite(clipTex(said.takeaway, 120))}</span>` : ''}${a.quote.exact ? `<span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>` : ''}`
-        : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span><span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>`
+        : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span>${a.quote.exact ? `<span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>` : ''}`
         : `<span class="nl-hl">${texLite(clipTex(a.quote.exact, 150))}</span>`;
       const sure = nmSure === n.id;
       items += `<div class="nl-item ${k}" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
@@ -2369,7 +2417,8 @@
     }
     const tab = (f, label) => `<button type="button" class="nl-tab${nmFilter === f ? ' on' : ''}" data-f="${f}">${esc(label)}<em>${count[f]}</em></button>`;
     const list = nmenu.querySelector('.nl-list'), top = list ? list.scrollTop : 0;
-    nmenu.innerHTML = `<div class="nl-tabs">${tab('all', t.n_all)}${tab('hl', t.n_highlight)}${tab('note', t.n_note)}${tab('ask', t.n_ask)}</div>` +
+    nmenu.innerHTML = `<div class="nl-tabs">${tab('all', t.n_all)}${tab('hl', t.n_highlight)}${tab('note', t.n_note)}${tab('ask', t.n_ask)}` +
+      `<button type="button" class="nl-new" data-x="card" title="${esc(t.n_card_tip)}">＋ ${esc(t.n_card)}</button></div>` +
       `<div class="nl-list">${items || `<div class="nm-note">${esc(t.n_none)}</div>`}</div>` +
       `<div class="nl-x"><button type="button" class="lm-item" data-x="save"><span>${esc(t.sv_save)}…</span></button></div>` +
       (D.app ? '' : `<div class="nm-note">${esc(t.n_local)}</div>`);
@@ -2399,15 +2448,26 @@
     if (n) { nmenu.hidden = true; flyToNote(n); return; }
     if (nmSure) { nmSure = null; renderNotesMenu(); }
     if (e.target.closest('[data-x="save"]')) openSave();
+    if (e.target.closest('[data-x="card"]')) { nmenu.hidden = true; newCard(); }
   });
   addEventListener('click', (e) => { if (!nmenu.hidden && !e.target.closest('.notesmenu')) nmenu.hidden = true; });
   // after any zoom under way (and a moment more)
   const afterZoom = (fn, wait = 0) => setTimeout(function tick() { if (busy) setTimeout(tick, 80); else fn(); }, wait);
   // a note from the list: the page flies to its passage (from the map, it first steps in to Key), opens the paragraph
   // to its full text in place where the zoom hides the passage, and opens the note there; Back returns
+  // a note of the reader's own on the whole paper, not on a passage: written in a card by the paper's head (kept once
+  // it has words; an empty one goes when it closes)
+  function newCard() {
+    if (popNote) closeNote();
+    scrollTo({ top: 0, behavior: 'smooth' });   // (the head opens the page)
+    const n = { id: noteId(), kind: 'note', text: '', thread: [],
+      anchor: { unit: null, section: null, on: 'paper', lang, level, tokens: null, sents: null, quote: { exact: '' } } };
+    afterZoom(() => openNote(n, true), 260);
+  }
   function flyToNote(n) {
     const a = n.anchor, from = { y: scrollY, level, from: null };
-    if (whole(a)) { openChat(n); return; }
+    if (whole(a) && n.kind === 'ask') { openChat(n); return; }
+    if (whole(a)) { if (popNote) closeNote(); scrollTo({ top: 0, behavior: 'smooth' }); afterZoom(() => openNote(n), 260); return; }
     if (busy || !targetEl(a)) return;
     if (popNote) closeNote();
     const fly = () => {
@@ -2460,7 +2520,7 @@
         const whole_ = para && paraOf(n.anchor, true);
         out.push(...quote(`[!question] ${said[0].q}`), ...(whole_ ? quote(whole_) : n.anchor.quote.exact ? quote(`*${n.anchor.quote.exact}*`) : []));
         said.forEach((x, k) => out.push('>', ...(k ? quote(`**${x.q}**`) : []), ...(k ? ['>'] : []), ...quote(answerText(x.a)), '>', ...quote(`→ ${x.takeaway}`)));
-      } else out.push(...quote((para && paraOf(n.anchor, true)) || n.anchor.quote.exact));
+      } else if (!whole(n.anchor)) out.push(...quote((para && paraOf(n.anchor, true)) || n.anchor.quote.exact));   // (a note on the whole paper quotes nothing)
       out.push('', `^${n.id}`, '');
       if (n.text && n.text.trim()) out.push(n.text.trim(), '');
       out.push(`[${t.n_open}](${noteLink(n)})`, '');
@@ -2567,7 +2627,7 @@
       <div class="sv-row"><div class="sv-l">${esc(t.sv_what)}</div><div class="sv-opts">${radio('what', 'whole', t.sv_whole, t.sv_whole_d)}${radio('what', 'marks', t.sv_marks, t.sv_marks_d, !total)}</div></div>
       <div class="sv-row"><div class="sv-l">${esc(t.sv_incl)}</div><div class="sv-boxes">${box('hl', t.sv_hl)}${box('note', t.sv_notes)}${box('ask', t.sv_asks)}${para}</div></div>
       <div class="sv-row"><div class="sv-l">${esc(t.sv_fmt)}</div><div class="sv-opts sv-fmts">${fmts.map((f) => radio('fmt', f, fmtName[f])).join('')}</div></div>
-      ${langs ? `<div class="sv-row"><div class="sv-l">${esc(t.sv_langs)}</div><div class="sv-opts sv-fmts">${radio('langs', 'current', t.sv_lang_cur.replace('{lang}', I18N.NATIVE[lang]))}${radio('langs', 'all', t.sv_lang_all.replace('{n}', AVAIL.length))}</div></div>` : ''}
+      ${langs ? `<div class="sv-row"><div class="sv-l">${esc(t.sv_langs)}</div><div class="sv-opts sv-fmts">${radio('langs', 'current', t.sv_lang_cur.replace('{lang}', nameOf(lang)))}${radio('langs', 'all', t.sv_lang_all.replace('{n}', AVAIL.length))}</div></div>` : ''}
       <p class="sv-lic">${esc(t.sv_lic)}</p>
       ${err ? `<p class="sv-err">${esc(err)}</p>` : ''}
       <div class="sv-acts"><button type="button" class="sv-cancel">${esc(t.cancel)}</button><button type="submit" class="sv-go"${sv.what === 'marks' && !picked ? ' disabled' : ''}>${esc(t.sv_go)}</button></div>
@@ -3285,18 +3345,24 @@ math { font-size: 1.05em; }
   function renderLangMenu() {
     const t = T[ui];
     langMenu.replaceChildren();
-    for (const code of I18N.CODES) {
+    if (D.app && gapTag(lang, t)) {   // first: the paragraphs left untranslated, asked for again (the rest stays as it is)
+      const f = h('button', 'lm-item lm-regen lm-fill'); f.type = 'button';
+      f.innerHTML = `<span>↻ ${esc(t.gaps_fill.replace('{n}', GAPS[lang]))}</span><em>${esc(nameOf(lang))}</em>`;
+      f.addEventListener('click', () => { closeLangMenu(); window.DRApp.fill(lang); });
+      langMenu.append(f);
+    }
+    for (const code of Object.keys(NAMES)) {
       const have = AVAIL.includes(code);
       if (!have && !D.app) continue;
       const b = h('button', `lm-item${code === lang ? ' on' : ''}${have ? '' : ' gen'}`);
       b.type = 'button';
-      b.innerHTML = `<span>${esc(I18N.NATIVE[code])}</span>${!have ? `<em>+ ${esc(t.gen_lang)}</em>` : STALE.has(code) ? `<em class="stale">${esc(t.stale)}</em>` : ''}`;
+      b.innerHTML = `<span>${esc(nameOf(code))}</span>${!have ? `<em>+ ${esc(t.gen_lang)}</em>` : STALE.has(code) ? `<em class="stale">${esc(t.stale)}</em>` : gapTag(code, t)}`;
       b.addEventListener('click', () => { closeLangMenu(); if (have) setLang(code); else window.DRApp.generate(code, false); });
       langMenu.append(b);
     }
     if (D.app) {
       const r = h('button', 'lm-item lm-regen'); r.type = 'button';
-      r.innerHTML = `<span>↻ ${esc(t.regen)}</span><em>${esc(I18N.NATIVE[lang])}</em>`;
+      r.innerHTML = `<span>↻ ${esc(t.regen)}</span><em>${esc(nameOf(lang))}</em>`;
       r.addEventListener('click', () => { closeLangMenu(); window.DRApp.generate(lang, true); });
       langMenu.append(r);
     }
@@ -3446,7 +3512,7 @@ math { font-size: 1.05em; }
   }
   // ?lang= (the app), #lang= (a static file), then the reader's language, then the one last read in
   const asked = new URLSearchParams(location.search).get('lang') || (/[#&]lang=([\w-]+)/.exec(location.hash) || [])[1];
-  lang = [asked, D.lang, ui, store.get('dr-lang'), 'en', AVAIL[0]].find((l) => l && AVAIL.includes(l));
+  lang = [asked, D.lang, readerLang, store.get('dr-lang'), 'en', AVAIL[0]].find((l) => l && AVAIL.includes(l));
   const start = /[#&]level=([^&]+)/.exec(location.hash);
   if (start) {
     const want = decodeURIComponent(start[1]).toLowerCase();
@@ -3481,14 +3547,22 @@ math { font-size: 1.05em; }
       if (typeof k.level === 'number' && k.level !== level) { setLevel(k.level); setTimeout(back, DUR + 120); } else back();
     }
   } catch { /* private window */ }
-  // the interface's language, from the app's settings: the text goes with it when the paper has that language
+  // the reader's language, from the app (its settings, the landing's menus): the interface speaks it when it has the
+  // words, else English; the text goes with it when the paper has that language
   function setUi(code) {
-    if (!T[code] || code === ui) return;
-    ui = code;
+    if (!(T[code] || NAMES[code]) || code === readerLang) return;
+    readerLang = code;
+    ui = I18N.uiFor(code);
     store.set(UI_KEY, code);
     if (AVAIL.includes(code) && code !== lang) setLang(code); else applyLang();
   }
-  window.__reader = { setLevel, setLang, setUi, get ui() { return ui; }, zoomBy,
+  // the name the reader gave the text in the library, changed while it is open: its head and the window's title follow
+  function rename(name) {
+    D.meta.name = name || undefined;
+    document.title = name || D.meta.title;
+    applyLang();
+  }
+  window.__reader = { setLevel, setLang, setUi, rename, get ui() { return ui; }, zoomBy,
     get compared() { if (!cmp || !cmp.grams) return null; const ids = [...order.keys()]; return { units: ids.length, found: ids.filter((id) => locate(id)).length, words: cmp.words.length }; }, get level() { return level; }, get lang() { return lang; }, get pos() { return pos; },
     get staged() { return !!stage; }, get _caps() { return caps; }, get keyframes() { return caps.map((c) => (c ? c.P.size : 0)); },
     // holding the zoom at a position, as a hand would (for looking at the motion frame by frame)

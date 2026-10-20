@@ -29,8 +29,9 @@
   POST /api/ask               {paper, id, question, req}: the model answers a note's question; the answer is stored in it
   POST /api/ask/stop          {req}: that question stopped: its answer, when it comes, is not stored
   POST /api/papers/delete     {paper}: move a paper to papers/.trash (not while it is being generated)
-  GET  /api/folders           the reader's folders and which document is in which (library.py)
-  POST /api/folders           {op: new | rename | delete | move, ...}: one change; the folders after it
+  POST /api/papers/name       {paper, name}: what the reader calls it in the library ("": its own title again); the list
+  GET  /api/folders           the reader's folders (inside one another) and which document is in which (library.py)
+  POST /api/folders           {op: new | rename | delete | nest | move, ...}: one change; the folders after it
   GET  /api/bridge             the ChatGPT bridge (127.0.0.1:10531): running and its models, or what starting it needs
   POST /api/bridge/start       start it detached (bridges.py)
   POST /api/openrouter/start   {back}: the OpenRouter consent URL (OAuth PKCE); GET /oauth/openrouter is its return
@@ -41,8 +42,10 @@
   POST /api/zotero/read        {item: "<lib>/<key>", lang}: an item read. {ref} for its paper online, generated as a
                                link is; else its file, taken as a file dropped on the landing is (/api/files' reply)
 
-Loopback only, and POSTs from other origins are refused. Settings and keys live in
-~/.textfold/settings.json (mode 600), never in the project folder, which may be synced or shared.
+Loopback only, and POSTs from other origins are refused. A request addressed to any name but this computer's own
+(localhost, 127.0.0.1, [::1]) is answered 421 and nothing else: a web page that points its own domain at 127.0.0.1 (DNS
+rebinding) is the same origin as its requests to the browser, so only the name they carry tells them apart. Settings and
+keys live in ~/.textfold/settings.json (mode 600), never in the project folder, which may be synced or shared.
 """
 import base64
 import json
@@ -158,7 +161,7 @@ class Jobs:
         self.pending = {}  # files that wait for the engine to be installed: pid -> (file, name, lang)
         for side in (store.DATA / "uploads").glob("*.json"):   # (kept beside each, so a restart forgets none)
             try:
-                w = json.loads(side.read_text(encoding="utf-8"))
+                w = json.loads(store.read_text(side))
                 f = side.parent / Path(w.get("file") or side.stem + ".pdf").name
                 if f.exists() and not (store.pdir(f.stem) / "meta.json").exists():
                     self.pending[f.stem] = (str(f), w["name"], w["lang"])
@@ -225,7 +228,7 @@ class Jobs:
             if job["kind"] == "generate" and stage not in ("queued", "fetch") and (store.pdir(job["pid"]) / "meta.json").exists():
                 if not job.get("title"):   # a new paper's title, once it is parsed
                     try:
-                        job["title"] = json.loads((store.pdir(job["pid"]) / "meta.json").read_text(encoding="utf-8"))["title"]
+                        job["title"] = json.loads(store.read_text(store.pdir(job["pid"]) / "meta.json"))["title"]
                     except (OSError, ValueError, KeyError):
                         pass
                 if job.get("attach") and not job.get("attached"):   # the reader's own copy of an online paper's PDF
@@ -292,7 +295,7 @@ class Jobs:
             PAGES.pop(job["pid"], None)
 
     def _pdf_link(self, job, url=None):
-        url = url or (store.pdir(job["pid"]) / "url.txt").read_text(encoding="utf-8").strip()
+        url = url or store.read_text(store.pdir(job["pid"]) / "url.txt").strip()
         with urllib.request.urlopen(urllib.request.Request(url, headers=fetch.UA), timeout=90) as r:
             data = r.read(pdf.LIMIT + 1)
         if data[:5] != b"%PDF-" or len(data) > pdf.LIMIT:
@@ -451,13 +454,22 @@ PAGES = {}  # pid -> (signature of its layers and template, rendered page)
 RELAYOUT = threading.Lock()
 
 
+def assembled(pid, only=None):
+    """The paper as the reader needs it (store.assemble), under the name the reader gave it in the library, if any."""
+    doc = store.assemble(pid, only)
+    name = library.name_of(pid)
+    if name:
+        doc["meta"]["name"] = name
+    return doc
+
+
 def reader_page(pid):
     layers = store.pdir(pid) / "layers"
     sig = tuple(sorted((f.name, f.stat().st_mtime) for f in layers.glob("*.json"))) if layers.exists() else ()
-    sig += ((build.WEB / "template.html").stat().st_mtime,)  # a changed page template re-renders too
+    sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template, or name, re-renders too
     hit = PAGES.get(pid)
     if not hit or hit[0] != sig:
-        hit = (sig, build.page(store.assemble(pid), app=True))
+        hit = (sig, build.page(assembled(pid), app=True))
         PAGES[pid] = hit
     return hit[1]
 
@@ -474,9 +486,19 @@ def landing_page(jobs):
     data = models_payload()
     boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": data["selectedName"] or "",
             "askName": data["askName"], "modelData": data,
-            "bridge": data["bridge"], "langs": [[code, v[1]] for code, v in langs.LANGS.items()]}
+            "bridge": data["bridge"], "langs": langs.natives()}
     t = (build.WEB / "app.html").read_text(encoding="utf-8")
     return t.replace("{{HEAD}}", build.fonts_head(build.APP_ASSETS)).replace("{{BOOT}}", json.dumps(boot, ensure_ascii=False).replace("</", "<\\/"))
+
+
+LOCAL_NAMES = ("localhost", "127.0.0.1", "[::1]")
+
+
+def addressed_here(host):
+    """Whether a request's Host header names this computer (any port): what a page on another site cannot make its
+    browser send, even once its domain points at 127.0.0.1."""
+    m = re.fullmatch(r"(\[[0-9a-f:.]+\]|[^:\[\]]+)(?::\d{1,5})?", (host or "").strip().lower())
+    return bool(m) and m.group(1) in LOCAL_NAMES
 
 
 def make_handler(jobs):
@@ -497,6 +519,8 @@ def make_handler(jobs):
             self.send(code, json.dumps(obj, ensure_ascii=False))
 
         def do_GET(self):
+            if not addressed_here(self.headers.get("Host")):   # (DNS rebinding: the module's docstring)
+                return self.json({"error": "misdirected"}, 421)
             u = urlparse(self.path)
             try:
                 if u.path == "/":
@@ -591,6 +615,8 @@ def make_handler(jobs):
                 self.json({"error": str(e)}, 500)
 
         def do_POST(self):
+            if not addressed_here(self.headers.get("Host")):
+                return self.json({"error": "misdirected"}, 421)
             u = urlparse(self.path)
             origin = self.headers.get("Origin")
             if origin and urlparse(origin).hostname not in ("localhost", "127.0.0.1"):
@@ -660,7 +686,7 @@ def make_handler(jobs):
                         return self.json({"error": "no such PDF"}, 404)
                     if not engine.where():
                         return self.json({"error": "needs-engine"}, 409)
-                    name = json.loads((store.pdir(pid) / "meta.json").read_text(encoding="utf-8")).get("source", {}).get("name") or "document.pdf"
+                    name = json.loads(store.read_text(store.pdir(pid) / "meta.json")).get("source", {}).get("name") or "document.pdf"
                     return self.json(jobs.convert(pid, src, name, body.get("lang") or "en", tier, replace=True))
                 if u.path == "/api/jobs/stop":
                     job = jobs.stop(body.get("id", ""))
@@ -673,13 +699,13 @@ def make_handler(jobs):
                         pid = local.import_text(text, name)
                     except ValueError:
                         return self.json({"error": "not-markdown"}, 400)
-                    return self.json({"paper": pid, "title": json.loads((store.pdir(pid) / "meta.json").read_text(encoding="utf-8"))["title"]})
+                    return self.json({"paper": pid, "title": json.loads(store.read_text(store.pdir(pid) / "meta.json"))["title"]})
                 if u.path == "/api/export":   # the paper as one file, saved by the reader for themself
                     pid, lang = str(body.get("paper") or ""), str(body.get("lang") or "en")
                     if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
                         return self.json({"error": "no such paper"}, 404)
                     kinds = {k for k in body.get("kinds") or [] if k in ("hl", "note", "ask")}
-                    doc = store.assemble(pid, only=[lang] if body.get("langs") == "current" else None)
+                    doc = assembled(pid, only=[lang] if body.get("langs") == "current" else None)
                     chosen = [n for n in notes.read(pid)["notes"] if notes.kind(n) in kinds]
                     saved = {"notes": chosen, "saved": uuid.uuid4().hex[:12], "lang": lang}
                     if body.get("pdf") and pdf.has_source(pid):   # the original beside it: the file, and PDF.js to show it
@@ -722,6 +748,12 @@ def make_handler(jobs):
                     store.trash(pid)
                     library.forget(pid)
                     PAGES.pop(pid, None)
+                    return self.json(listed())
+                if u.path == "/api/papers/name":
+                    pid = str(body.get("paper", ""))
+                    if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
+                        return self.json({"error": "no such paper"}, 404)
+                    library.name(pid, body.get("name"))
                     return self.json(listed())
                 if u.path == "/api/folders":
                     try:

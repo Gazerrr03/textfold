@@ -63,7 +63,7 @@ Agent 写的，总比你有空读的多。一个 [Claude Code mod](https://code.
 - **针对内容，结构化地问 AI。** 选中一段，或者就全文提问。回答先给结论，再列依据，每条依据都标出原文段落，点一下就到。
 - **笔记跟着缩放。** 在页边高光、写笔记，缩小时标过的内容依然在，也会和整页一起保存。
 
-- **用你的语言读。** 十二种语言，逐句翻译，公式保持原样。
+- **用你的语言读。** 支持多种语言，逐句翻译，公式保持原样。
 
 - **你的文献库，井井有条。** 用 ⌘K 搜索；建文件夹整理文档，拖进去或者右键移进去；按类型、添加时间或最近打开排序。
 
@@ -134,7 +134,7 @@ TextFold 用你已有的模型，不需要注册账号。启动时它会自己�
 
 | 你有 | 怎么做 |
 |---|---|
-| Claude Code、Codex 或 Pi | 什么都不用做，TextFold 会自动找到并使用。 |
+| Claude Code、Codex、Pi 或 WorkBuddy | 什么都不用做，TextFold 会自动找到并使用。WorkBuddy（试验）用你登录的账号和它的模型；单独安装的 CodeBuddy 命令行也可以。 |
 | ChatGPT 订阅 | 点 **使用我的 ChatGPT 订阅**。电脑上会启动一个小的本地桥，用你的账号登录（需要 Node.js）。 |
 | 什么都还没有 | 点 **OpenRouter 一键授权**。授权一次，免费模型马上可用。 |
 | 一个 API key | **设置 › 添加供应商**：Anthropic、OpenAI、DeepSeek、通义千问、智谱 GLM、Kimi、MiniMax、Google、Ollama，或任何 OpenAI 兼容接口。 |
@@ -236,6 +236,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 19 日：更多阅读语言。** 新增瑞典语、丹麦语、挪威语、芬兰语、荷兰语、波兰语、捷克语、乌克兰语、土耳其语、印尼语和越南语。界面没有这种语言时显示英文。感谢 [@Kullenej](https://github.com/Kullenej)。
 - **2026 年 10 月 15 日：Pi 的回答也能折叠了。** [Pi 扩展](https://github.com/chenxiachan/textfold/blob/main/plugins/pi-textfold/README.md) 把五个层级放到每条回答上，折法和 Claude Code 里一样。感谢 [@jlamweil](https://github.com/jlamweil)。
 - **2026 年 10 月 15 日：不装 PDF 引擎也能读 PDF。** 自带文字的 PDF（大多数论文都是）直接打开，图从原页上裁出来；只有扫描件还需要 PDF 引擎。没有 HTML 版本的 arXiv 论文改读它的 PDF。感谢 [@sylvainHellin](https://github.com/sylvainHellin)。
 - **2026 年 10 月 15 日：你的文献库和你的提问。** 文献库可以搜索、建文件夹，按添加时间或最近打开排序。提问有了发送和停止键，对话里任何一轮都可以删掉，回答问题还可以用比生成层级更强的模型。感谢 [@suhyungJang](https://github.com/suhyungJang)。
@@ -272,6 +273,9 @@ pi install ./textfold/plugins/pi-textfold
 <a href="https://github.com/Kullenej" title="@Kullenej"><img src="https://github.com/Kullenej.png?size=80" width="40" height="40" alt="@Kullenej" /></a>
 <a href="https://github.com/666xz666" title="@666xz666"><img src="https://github.com/666xz666.png?size=80" width="40" height="40" alt="@666xz666" /></a>
 <a href="https://github.com/peitianyi23-sudo" title="@peitianyi23-sudo"><img src="https://github.com/peitianyi23-sudo.png?size=80" width="40" height="40" alt="@peitianyi23-sudo" /></a>
+<a href="https://github.com/mcardZH" title="@mcardZH"><img src="https://github.com/mcardZH.png?size=80" width="40" height="40" alt="@mcardZH" /></a>
+<a href="https://github.com/momoko-sketch" title="@momoko-sketch"><img src="https://github.com/momoko-sketch.png?size=80" width="40" height="40" alt="@momoko-sketch" /></a>
+<a href="https://github.com/Knoety" title="@Knoety"><img src="https://github.com/Knoety.png?size=80" width="40" height="40" alt="@Knoety" /></a>
 
 欢迎贡献：先看 [CONTRIBUTING.md](https://github.com/chenxiachan/textfold/blob/main/CONTRIBUTING.md)。
 

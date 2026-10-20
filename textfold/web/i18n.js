@@ -1,5 +1,6 @@
-// Interface strings. The interface speaks the language the paper is being read in.
-// Every language falls back to English for a missing key.
+// Interface strings. The interface speaks the language the paper is being read in when it has the words for it, else
+// English: a text can be read in more languages (langs.py) than these. Every language falls back to English for a
+// missing key.
 window.DR_I18N = (() => {
   const ENV = ['Theorem', 'Lemma', 'Proposition', 'Corollary', 'Definition', 'Remark', 'Example', 'Proof', 'Conjecture', 'Claim', 'Assumption', 'Observation', 'Notation'];
   const env = (words) => Object.fromEntries(ENV.map((w, i) => [w, words[i]]));
@@ -401,40 +402,40 @@ window.DR_I18N = (() => {
     d_today: w[11], d_week: w[12], d_month: w[13], d_older: w[14] });
   const F = {
     en: lib(['Search titles, authors, ids…', 'Nothing matches.', 'New folder', 'Folder name', 'Rename', 'Delete folder',
-      'Delete the folder “{name}”? The documents in it stay in the library.', 'Drag documents here.', 'Folder actions', 'Not in a folder',
+      'Delete the folder “{name}”? What is in it moves up a level; its documents stay in the library.', 'Drag documents here.', 'Folder actions', 'Not in a folder',
       ['Order', 'By kind', 'By date added', 'By last opened'], 'Today', 'Past 7 days', 'Past 30 days', 'Earlier']),
     zh: lib(['搜索标题、作者、编号…', '没有匹配的文档。', '新建文件夹', '文件夹名称', '重命名', '删除文件夹',
-      '删除文件夹“{name}”？里面的文档会留在文献库里。', '把文档拖到这里。', '文件夹操作', '不放在文件夹里',
+      '删除文件夹“{name}”？里面的文档和子文件夹会移到上一层，文档仍留在文献库里。', '把文档拖到这里。', '文件夹操作', '不放在文件夹里',
       ['排序', '按类型', '按添加时间', '按最近打开'], '今天', '最近 7 天', '最近 30 天', '更早']),
     'zh-Hant': lib(['搜尋標題、作者、編號…', '沒有符合的文件。', '新增資料夾', '資料夾名稱', '重新命名', '刪除資料夾',
-      '刪除資料夾「{name}」？裡面的文件會留在文獻庫裡。', '把文件拖到這裡。', '資料夾操作', '不放在資料夾裡',
+      '刪除資料夾「{name}」？裡面的文件和子資料夾會移到上一層，文件仍留在文獻庫裡。', '把文件拖到這裡。', '資料夾操作', '不放在資料夾裡',
       ['排序', '依類型', '依加入時間', '依最近開啟'], '今天', '最近 7 天', '最近 30 天', '更早']),
     ja: lib(['タイトル・著者・ID で検索…', '一致する文書はありません。', '新しいフォルダ', 'フォルダ名', '名前を変更', 'フォルダを削除',
-      'フォルダ「{name}」を削除しますか？中の文書はライブラリに残ります。', 'ここに文書をドラッグします。', 'フォルダの操作', 'フォルダに入れない',
+      'フォルダ「{name}」を削除しますか？中の文書とフォルダは一つ上の階層に移り、文書はライブラリに残ります。', 'ここに文書をドラッグします。', 'フォルダの操作', 'フォルダに入れない',
       ['並べ替え', '種類別', '追加日順', '最近開いた順'], '今日', '過去 7 日間', '過去 30 日間', 'それ以前']),
     ko: lib(['제목, 저자, ID 검색…', '일치하는 문서가 없습니다.', '새 폴더', '폴더 이름', '이름 바꾸기', '폴더 삭제',
-      '‘{name}’ 폴더를 삭제할까요? 안에 있는 문서는 라이브러리에 남습니다.', '문서를 여기로 끌어 오세요.', '폴더 작업', '폴더에서 빼기',
+      '‘{name}’ 폴더를 삭제할까요? 안에 있는 문서와 폴더는 한 단계 위로 옮겨지고, 문서는 라이브러리에 남습니다.', '문서를 여기로 끌어 오세요.', '폴더 작업', '폴더에서 빼기',
       ['정렬', '종류별', '추가한 날짜순', '최근 연 순서'], '오늘', '지난 7일', '지난 30일', '그 이전']),
     es: lib(['Buscar títulos, autores, identificadores…', 'Nada coincide.', 'Nueva carpeta', 'Nombre de la carpeta', 'Renombrar', 'Eliminar carpeta',
-      '¿Eliminar la carpeta «{name}»? Los documentos que contiene se quedan en la biblioteca.', 'Arrastra documentos aquí.', 'Acciones de la carpeta', 'Fuera de las carpetas',
+      '¿Eliminar la carpeta «{name}»? Lo que contiene sube un nivel; sus documentos se quedan en la biblioteca.', 'Arrastra documentos aquí.', 'Acciones de la carpeta', 'Fuera de las carpetas',
       ['Orden', 'Por tipo', 'Por fecha de incorporación', 'Por última apertura'], 'Hoy', 'Últimos 7 días', 'Últimos 30 días', 'Antes']),
     fr: lib(['Rechercher titres, auteurs, identifiants…', 'Aucun résultat.', 'Nouveau dossier', 'Nom du dossier', 'Renommer', 'Supprimer le dossier',
-      'Supprimer le dossier « {name} » ? Les documents qu’il contient restent dans la bibliothèque.', 'Glissez des documents ici.', 'Actions du dossier', 'Hors des dossiers',
+      'Supprimer le dossier « {name} » ? Son contenu remonte d’un niveau ; ses documents restent dans la bibliothèque.', 'Glissez des documents ici.', 'Actions du dossier', 'Hors des dossiers',
       ['Ordre', 'Par type', 'Par date d’ajout', 'Par dernière ouverture'], 'Aujourd’hui', '7 derniers jours', '30 derniers jours', 'Plus ancien']),
     de: lib(['Titel, Autoren, IDs suchen…', 'Nichts gefunden.', 'Neuer Ordner', 'Ordnername', 'Umbenennen', 'Ordner löschen',
-      'Den Ordner „{name}“ löschen? Die Dokumente darin bleiben in der Bibliothek.', 'Dokumente hierher ziehen.', 'Ordneraktionen', 'Ohne Ordner',
+      'Den Ordner „{name}“ löschen? Sein Inhalt rückt eine Ebene nach oben; die Dokumente bleiben in der Bibliothek.', 'Dokumente hierher ziehen.', 'Ordneraktionen', 'Ohne Ordner',
       ['Reihenfolge', 'Nach Art', 'Nach Hinzufügedatum', 'Zuletzt geöffnet'], 'Heute', 'Letzte 7 Tage', 'Letzte 30 Tage', 'Älter']),
     pt: lib(['Buscar títulos, autores, identificadores…', 'Nada encontrado.', 'Nova pasta', 'Nome da pasta', 'Renomear', 'Excluir pasta',
-      'Excluir a pasta “{name}”? Os documentos nela continuam na biblioteca.', 'Arraste documentos para cá.', 'Ações da pasta', 'Fora das pastas',
+      'Excluir a pasta “{name}”? O que está nela sobe um nível; os documentos continuam na biblioteca.', 'Arraste documentos para cá.', 'Ações da pasta', 'Fora das pastas',
       ['Ordem', 'Por tipo', 'Por data de inclusão', 'Por última abertura'], 'Hoje', 'Últimos 7 dias', 'Últimos 30 dias', 'Antes']),
     it: lib(['Cerca titoli, autori, identificativi…', 'Nessun risultato.', 'Nuova cartella', 'Nome della cartella', 'Rinomina', 'Elimina cartella',
-      'Eliminare la cartella «{name}»? I documenti al suo interno restano nella libreria.', 'Trascina qui i documenti.', 'Azioni della cartella', 'Fuori dalle cartelle',
+      'Eliminare la cartella «{name}»? Il suo contenuto sale di un livello; i documenti restano nella libreria.', 'Trascina qui i documenti.', 'Azioni della cartella', 'Fuori dalle cartelle',
       ['Ordine', 'Per tipo', 'Per data di aggiunta', 'Per ultima apertura'], 'Oggi', 'Ultimi 7 giorni', 'Ultimi 30 giorni', 'Prima']),
     ru: lib(['Поиск по названиям, авторам, идентификаторам…', 'Ничего не найдено.', 'Новая папка', 'Название папки', 'Переименовать', 'Удалить папку',
-      'Удалить папку «{name}»? Документы из неё останутся в библиотеке.', 'Перетащите сюда документы.', 'Действия с папкой', 'Вне папок',
+      'Удалить папку «{name}»? Её содержимое поднимется на уровень выше; документы останутся в библиотеке.', 'Перетащите сюда документы.', 'Действия с папкой', 'Вне папок',
       ['Порядок', 'По типу', 'По дате добавления', 'По последнему открытию'], 'Сегодня', 'Последние 7 дней', 'Последние 30 дней', 'Раньше']),
     hi: lib(['शीर्षक, लेखक, आईडी खोजें…', 'कुछ नहीं मिला।', 'नया फ़ोल्डर', 'फ़ोल्डर का नाम', 'नाम बदलें', 'फ़ोल्डर हटाएँ',
-      'फ़ोल्डर “{name}” हटाएँ? इसके दस्तावेज़ लाइब्रेरी में बने रहेंगे।', 'दस्तावेज़ यहाँ खींचें।', 'फ़ोल्डर के विकल्प', 'किसी फ़ोल्डर में नहीं',
+      'फ़ोल्डर “{name}” हटाएँ? इसके अंदर की चीज़ें एक स्तर ऊपर चली जाएँगी; दस्तावेज़ लाइब्रेरी में बने रहेंगे।', 'दस्तावेज़ यहाँ खींचें।', 'फ़ोल्डर के विकल्प', 'किसी फ़ोल्डर में नहीं',
       ['क्रम', 'प्रकार के अनुसार', 'जोड़ने की तारीख़ के अनुसार', 'हाल में खोले गए के अनुसार'], 'आज', 'पिछले 7 दिन', 'पिछले 30 दिन', 'इससे पहले']),
   };
   for (const [code, words] of Object.entries(F)) Object.assign(S[code], words);
@@ -470,6 +471,38 @@ window.DR_I18N = (() => {
     hi: ['फ़ोल्डर में ले जाएँ', 'फ़ोल्डर से निकालें'],
   };
   for (const [code, [a, b]] of Object.entries(MV)) Object.assign(S[code], { f_move_to: a, f_take_out: b });
+  // a folder inside another, and up out of it; a document's name in the library, and its own title back
+  const NEST = {
+    en: ['New folder inside', 'Move up a level', 'Name in the library', 'Use its own title'],
+    zh: ['新建子文件夹', '移到上一层', '在文献库里的名称', '恢复原标题'],
+    'zh-Hant': ['新增子資料夾', '移到上一層', '在文獻庫裡的名稱', '恢復原標題'],
+    ja: ['サブフォルダを作成', '一つ上の階層へ移動', 'ライブラリでの名前', '元のタイトルに戻す'],
+    ko: ['하위 폴더 만들기', '한 단계 위로 이동', '라이브러리에서의 이름', '원래 제목으로'],
+    es: ['Nueva carpeta dentro', 'Subir un nivel', 'Nombre en la biblioteca', 'Usar su propio título'],
+    fr: ['Nouveau dossier à l’intérieur', 'Remonter d’un niveau', 'Nom dans la bibliothèque', 'Reprendre son propre titre'],
+    de: ['Neuer Unterordner', 'Eine Ebene nach oben', 'Name in der Bibliothek', 'Eigenen Titel verwenden'],
+    pt: ['Nova pasta dentro', 'Subir um nível', 'Nome na biblioteca', 'Usar o título original'],
+    it: ['Nuova cartella all’interno', 'Sposta su di un livello', 'Nome nella libreria', 'Usa il titolo originale'],
+    ru: ['Новая вложенная папка', 'На уровень выше', 'Название в библиотеке', 'Вернуть исходное название'],
+    hi: ['अंदर नया फ़ोल्डर', 'एक स्तर ऊपर ले जाएँ', 'लाइब्रेरी में नाम', 'मूल शीर्षक वापस लाएँ'],
+  };
+  for (const [code, [a, b, c, d]] of Object.entries(NEST)) Object.assign(S[code], { f_new_sub: a, f_up: b, d_name: c, d_unname: d });
+  // the paragraphs a translation came back without, asked for again; and a note of the reader's own on the whole text
+  const GAP = {
+    en: ['Translating the {n} paragraphs left untranslated', 'Translate the {n} paragraphs left out', '{n} untranslated', 'New note', 'A note of your own on the whole text, not on a passage: it sits by the title'],
+    zh: ['正在补译 {n} 段没翻译的段落', '补译 {n} 段', '{n} 段未译', '新建笔记', '不针对某段文字、写给整篇的笔记，放在标题旁'],
+    'zh-Hant': ['正在補譯 {n} 段沒翻譯的段落', '補譯 {n} 段', '{n} 段未譯', '新增筆記', '不針對某段文字、寫給整篇的筆記，放在標題旁'],
+    ja: ['未翻訳の {n} 段落を翻訳しています', '未翻訳の {n} 段落を翻訳', '{n} 段落が未翻訳', '新しいメモ', '特定の箇所ではなく全体へのメモ（タイトルの横に置かれます）'],
+    ko: ['번역되지 않은 {n}개 문단을 번역하는 중', '번역되지 않은 {n}개 문단 번역', '{n}개 문단 미번역', '새 메모', '특정 구절이 아닌 전체에 대한 메모(제목 옆에 놓입니다)'],
+    es: ['Traduciendo los {n} párrafos sin traducir', 'Traducir los {n} párrafos que faltan', '{n} sin traducir', 'Nueva nota', 'Una nota tuya sobre el texto entero, no sobre un pasaje: va junto al título'],
+    fr: ['Traduction des {n} paragraphes restés non traduits', 'Traduire les {n} paragraphes manquants', '{n} non traduits', 'Nouvelle note', 'Une note à vous sur l’ensemble du texte, pas sur un passage : elle se place près du titre'],
+    de: ['Die {n} unübersetzten Absätze werden übersetzt', 'Die {n} fehlenden Absätze übersetzen', '{n} unübersetzt', 'Neue Notiz', 'Eine eigene Notiz zum ganzen Text, nicht zu einer Stelle: Sie steht beim Titel'],
+    pt: ['Traduzindo os {n} parágrafos sem tradução', 'Traduzir os {n} parágrafos que faltam', '{n} sem tradução', 'Nova nota', 'Uma nota sua sobre o texto inteiro, não sobre um trecho: fica ao lado do título'],
+    it: ['Traduzione dei {n} paragrafi rimasti non tradotti', 'Traduci i {n} paragrafi mancanti', '{n} non tradotti', 'Nuova nota', 'Una tua nota sull’intero testo, non su un passo: sta accanto al titolo'],
+    ru: ['Перевожу {n} непереведённых абзацев', 'Перевести {n} пропущенных абзацев', 'не переведено: {n}', 'Новая заметка', 'Ваша заметка ко всему тексту, а не к отрывку: она стоит рядом с названием'],
+    hi: ['अनूदित न हुए {n} अनुच्छेदों का अनुवाद हो रहा है', 'छूटे हुए {n} अनुच्छेदों का अनुवाद करें', '{n} अनूदित नहीं', 'नया नोट', 'पूरे पाठ पर आपका अपना नोट, किसी अंश पर नहीं: यह शीर्षक के पास रहता है'],
+  };
+  for (const [code, [a, b, c, d, e]] of Object.entries(GAP)) Object.assign(S[code], { gaps_filling: a, gaps_fill: b, gaps_tag: c, n_card: d, n_card_tip: e });
   // a question's field and its turns: send it, stop it while the model answers, take a turn out of the conversation
   const turn = (w) => ({ n_send: w[0], n_stop: w[1], n_turn_del: w[2], n_turn_del_q: w[3] });
   const Q = {
@@ -539,15 +572,17 @@ window.DR_I18N = (() => {
   };
   // text: the document is not a paper, and the questions about it say so
   const t = (lang, text) => ({ ...S.en, ...(S[lang] || {}), ...(text ? { ...DOCS.en, ...(DOCS[lang] || {}) } : {}) });
-  // the language a visitor most likely reads, among the ones offered
-  function guess() {
+  // the language a visitor most likely reads, among the ones offered: the interface's, or `among` (a text's, by name)
+  function guess(among = NATIVE) {
     for (const l of navigator.languages || [navigator.language || 'en']) {
       const x = l.toLowerCase();
       if (x.startsWith('zh')) return /tw|hk|mo|hant/.test(x) ? 'zh-Hant' : 'zh';
-      const base = x.split('-')[0];
-      if (NATIVE[base]) return base;
+      const base = x.split('-')[0] === 'no' ? 'nb' : x.split('-')[0];   // (Norwegian: written as Bokmål)
+      if (among[base]) return base;
     }
     return 'en';
   }
-  return { t, NATIVE, CODES: Object.keys(NATIVE), htmlLang: (l) => HTML_LANG[l] || l, guess };
+  // the interface for a text read in `code`: in that language when it has the words, else in English
+  const uiFor = (code) => (NATIVE[code] ? code : 'en');
+  return { t, NATIVE, CODES: Object.keys(NATIVE), htmlLang: (l) => HTML_LANG[l] || l, guess, uiFor };
 })();

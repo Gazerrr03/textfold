@@ -48,7 +48,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
     en = store.read(pid, "en")
     if cfg is None and (en is None or force or (lang != "en" and store.read(pid, f"tr-{lang}") is None)):
         # fetched and parsed, so it can be read as written; its levels need a model
-        raise RuntimeError("No model is available: install Claude Code, Codex or Pi, or add an API provider in the settings")
+        raise RuntimeError("No model is available: install Claude Code, Codex, Pi or WorkBuddy, or add an API provider in the settings")
     model = llm.label(cfg) if cfg else ""
     if en is None or (force and lang == "en"):
         check()
@@ -66,5 +66,12 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
             check()
             translate.build(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), force=force, stop=stop)
             store.save_tr(doc, lang, en["version"], model)
+        elif cfg is not None:
+            store.apply_tr(doc, lang, tr)
+            if translate.gaps(doc, lang):   # paragraphs it was stored without (a call that failed): asked for now
+                check()
+                translate.fill(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), stop=stop)
+                was = tr.get("model") or model
+                store.save_tr(doc, lang, en["version"], was if was == model else f"{was} + {model}")
     progress("done", 1, 1)
     return pid

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from . import store
+from . import langs, store
 from .fetch import fetch_images
 
 WEB = Path(__file__).resolve().parent / "web"   # the reader's pages, styles, scripts and vendor files
@@ -87,6 +87,7 @@ def inline_images(doc, app=False):
 def payload(doc, app, katex=None, saved=None, pdf=None):
     data = {k: doc[k] for k in ("meta", "atoms", "units", "chunks", "blocks", "bib", "edges", "alias")}
     data["app"] = app
+    data["langs"] = langs.natives()   # every language the text could be read in, by its own name (the menus)
     data["katex"] = katex   # where the reader finds KaTeX: a folder, "inside" the page, or nowhere (math stays as written)
     if pdf:   # a gallery's page: its PDF and PDF.js beside it ({"file", "pdfjs"}, relative to the page)
         data["pdfAt"] = pdf
@@ -113,7 +114,7 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
         if not assets and (_has_tex(doc) or (saved and saved.get("notes"))):   # (an answer's formulas need it too)
             head += _katex_inside()
             katex = "inside"
-    return (t.replace("{{TITLE}}", escape(doc["meta"]["title"])).replace("{{HEAD}}", head).replace("{{CLASS}}", cls)
+    return (t.replace("{{TITLE}}", escape(doc["meta"].get("name") or doc["meta"]["title"])).replace("{{HEAD}}", head).replace("{{CLASS}}", cls)
              .replace("{{SIDEBAR}}", side).replace("{{SCRIPTS}}", scripts).replace("{{DATA}}", payload(doc, app, katex, saved, pdf)))
 
 

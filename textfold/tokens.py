@@ -47,27 +47,33 @@ def tokenize_text(text, font=None, out=None):
 
 def split_sentences(toks):
     """Sentence ranges [start, end) over a token list."""
+    cjk_stops = {"。", "！", "？"}
+    stops = {".", "?", "!"} | cjk_stops
+    closers = {")", "]", "}", "）", "］", "｝", "】", "〕", "〉", "》", "」", "』", "”", '"', "’", "'"}
+    tails = stops | closers
     bounds, start, n = [], 0, len(toks)
     for i, tk in enumerate(toks):
         t = tk.get("t")
-        if t not in (".", "?", "!") or i + 1 >= n:
-            continue
-        end = i
-        # a closing bracket or quote glued to the stop belongs to this sentence
-        if not tk.get("s") and toks[i + 1].get("t") in (")", "]", "”", '"', "’") and toks[i + 1].get("s"):
-            end = i + 1
-        elif not tk.get("s"):
-            continue
-        if end + 1 >= n:
+        if i < start or t not in stops:
             continue
         prev = (toks[i - 1].get("t") or "") if i > 0 else ""
         if t == "." and (prev.lower() in ABBREV or re.fullmatch(r"[A-Z]", prev)):
             continue
-        nxt = toks[end + 1]
+        end = i + 1
+        # Keep a run of stops and any closing quotes/brackets with the sentence it ends.
+        while end < n and not toks[end - 1].get("s") and toks[end].get("t") in tails:
+            end += 1
+        if end >= n:
+            break
+        nxt = toks[end]
         head = nxt.get("t") or ""
-        if "a" in nxt or re.match(r"[A-Z0-9(\[“\"‘]", head):
-            bounds.append((start, end + 1))
-            start = end + 1
+        # CJK sentences have neither spaces nor capital letters. They may also use ASCII stops.
+        cjk = any(toks[j].get("t") in cjk_stops for j in range(i, end)) or is_cjk(prev) or is_cjk(head)
+        if cjk and t == "." and i == start + 1 and prev.isdigit():
+            cjk = False   # "1.研究背景": a number and its stop open a heading or a list item, they end no sentence
+        if cjk or (toks[end - 1].get("s") and ("a" in nxt or re.match(r"[A-Z0-9(\[“\"‘]", head))):
+            bounds.append((start, end))
+            start = end
     if start < n:
         bounds.append((start, n))
     return bounds

@@ -46,7 +46,8 @@ more than one way, so it can be found again when the text around it changes.
     can also be on a section itself: then `unit` is null, `section` is the section, and `on` says where, `summary` (the
     section's one-line summary, written by the model; `tokens` count its words) or `title`. A conversation about the
     whole paper (the reader's chat) has `on: "paper"`, `unit` and `section` null, and an empty quote; it is listed
-    first, under "The whole paper".
+    first, under "The whole paper". So does a note of the reader's own on the whole paper, not on a passage (`kind:
+    "note"` with its `text`, written from the notes menu): it is shown by the paper's title, at every level.
   - `lang`, `level`: the language and zoom level (4 Full, 3 Brief, 2 Key, 1 Takeaway, 0 Topic; the numbers are what is stored, the names are the reader's) it was made at.
   - `tokens`: first and last token, inclusive, in the unit's full text in `lang`. A selection in a written level
     (Key, Takeaway) maps back to the words of the full text the model's words came from; `null` when the selection

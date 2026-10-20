@@ -6,13 +6,21 @@
 
 export const LEVELS = ['Full', 'Brief', 'Points', 'Outline', 'Gist'] as const
 
-type Kind = 'heading' | 'code' | 'list' | 'table' | 'quote' | 'para' | 'rule'
+type Kind = 'heading' | 'code' | 'list' | 'table' | 'quote' | 'para' | 'rule' | 'art'
 type Block = { kind: Kind; lines: string[] }
 
 const FENCE = /^\s*(`{3,}|~{3,})/
 const HEADING = /^\s{0,3}#{1,6}\s/
 const ITEM = /^(\s*)([-*+]|\d+[.)])\s+/
 const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
+const DELIM = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+
+/** A GFM table starts at a row with a pipe followed by its delimiter row, with or without leading pipes, and
+ *  may come straight after a paragraph. The delimiter needs a pipe, or `Title` over `---` would be one.
+ *  shortcut: the header's cell count is not matched against the delimiter's, as GFM asks; add it if a reply ever
+ *  folds a paragraph that only looks like a table. */
+const tableAt = (lines: string[], i: number) =>
+  (lines[i] ?? '').includes('|') && (lines[i + 1] ?? '').includes('|') && DELIM.test(lines[i + 1] ?? '')
 
 /** A markdown text as blocks: headings, code, lists, tables, quotes, paragraphs. */
 export function blocks(md: string): Block[] {
@@ -49,20 +57,24 @@ export function blocks(md: string): Block[] {
       i++
       continue
     }
-    const kind: Kind = /^\s*\|/.test(line) ? 'table' : /^\s*>/.test(line) ? 'quote' : ITEM.test(line) ? 'list' : 'para'
+    const kind: Kind = /^\s*\|/.test(line) || tableAt(lines, i) ? 'table' : /^\s*>/.test(line) ? 'quote' : ITEM.test(line) ? 'list' : 'para'
     const buf = [line]
     i++
     while (i < lines.length) {
       const l = lines[i] ?? ''
       if (!l.trim() || FENCE.test(l) || HEADING.test(l)) break
-      if (kind === 'para' && ITEM.test(l)) break   // a paragraph that runs into a list
+      if (kind === 'para' && (ITEM.test(l) || tableAt(lines, i))) break   // a paragraph that runs into a list or a table
       buf.push(l)
       i++
     }
-    out.push({ kind, lines: buf })
+    const art = kind === 'para' && buf.length > 1 && buf.slice(0, -1).every((l) => ART_ROW.test(l))
+    out.push({ kind: art ? 'art' : kind, lines: buf })
   }
   return out
 }
+
+// A row of a drawing, as Pi draws a mermaid block before the fold sees it: one inline code span, then a hard break.
+const ART_ROW = /^(`+).*\1 {2}$/
 
 const ABBREV = /\b(?:e\.g|i\.e|etc|vs|cf|al|approx|Dr|Mr|Ms|Fig|Eq|No)\.$/i
 
@@ -162,17 +174,21 @@ export function fold(md: string, level: number): { text: string; total: number; 
     switch (b.kind) {
       case 'rule':
         break
+      case 'art':
+        if (level <= 3) out.push(b.lines.join('\n'))   // a picture: kept whole, never joined into one line
+        break
       case 'heading':
         if (level <= 4) out.push(b.lines[0] ?? '')
         underHeading = true
         break
       case 'code':
-      case 'table': {
-        const rows = b.lines.length - 2   // less the fences, or the header and its rule
-        if (level === 2 && b.lines.length <= 8) out.push(b.lines.join('\n'))
-        else if (level <= 3) out.push(b.kind === 'code' ? `\`⋯ ${Math.max(rows, 1)} lines of code\`` : `\`⋯ a table of ${Math.max(rows, 1)} rows\``)
+      case 'table':
+        if (level > 3) break
+        // a table is kept whole like a list's items: its rows are already short, and it is often the answer;
+        // code is kept up to Brief's 6 lines, the command a reply is about, and a longer listing folds to its line
+        if (b.kind === 'table' || b.lines.length <= 8) out.push(b.lines.join('\n'))
+        else out.push(`\`⋯ ${b.lines.length - 2} lines of code\``)   // less the fences
         break
-      }
       case 'list': {
         const its = items(b).filter((it) => level === 2 || it.indent === 0)
         if (level <= 3) {
