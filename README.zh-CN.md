@@ -20,7 +20,7 @@
 </picture>
 
 **粘贴链接：** 任意网页 · arXiv · PubMed Central · bioRxiv · medRxiv · 维基百科 · GitHub<br>
-**拖入文件：** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · 图片 · Markdown · 纯文本
+**拖入文件（一个或多个）：** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · 图片 · Markdown · 纯文本
 
 **[试用演示 →](https://chenxiachan.github.io/textfold/gallery/)** 或者 **[下载软件 ↓](#开始使用)** · [最新 ↓](#最新)
 
@@ -238,6 +238,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 20 日：一次拖入多个文件。** 一次拖入或选择多个文件，它们会一个接一个读取并生成层级，你可以接着读别的，侧栏里能看到每一个的进度。
 - **2026 年 10 月 20 日：TextFold 和 Obsidian。** Obsidian 插件 [TextFold Bridge](https://github.com/adalach/obsidian-textfold-bridge) 让笔记里的链接直接指到 TextFold 里的某一段、某一节或某条标注。把阅读器里的段落、整节或选中的文字拖进笔记，会带上回到原处的链接。你自己的笔记也能在 Obsidian 里按五个层级折叠，改过之后原地重新折叠，标注会在新文字里找回原来的位置。感谢 [@adalach](https://github.com/adalach)。
 - **2026 年 10 月 20 日：Pi 的思考过程也能折叠了。** 在 Pi 里，模型的思考过程和回答一起折叠，很长的一轮编程对话几行就能读完。点一下级别行就能折叠，接着上次的会话时级别不变，用 `/fold calibrate` 教一次按键，任何键盘都能用。感谢 [@jlamweil](https://github.com/jlamweil)。
 - **2026 年 10 月 19 日：更多阅读语言。** 新增瑞典语、丹麦语、挪威语、芬兰语、荷兰语、波兰语、捷克语、乌克兰语、土耳其语、印尼语和越南语。界面没有这种语言时显示英文。感谢 [@Kullenej](https://github.com/Kullenej)。
