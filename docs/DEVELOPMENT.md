@@ -158,7 +158,7 @@ Notes: select text anywhere (a paragraph at any level, a section's summary or it
 or ask the model about it (the answer, in the reading language, cites the paragraphs it rests on; a cite opens that
 paragraph to its full text in place). The reader's own notes sit in the left margin, the conversations with the model
 and the links in the right. Full and Brief show whole cards, Key shows them compact, and Takeaway and Topic show only a
-mark, with the notes on hover. Highlights zoom with the words. `#n=<note id>` opens the reader at a note.
+mark, with the notes on hover. Highlights zoom with the words. `#n=<note id>` opens the reader at a note, `#u=<id>` at a paragraph, `#s=<id>` at a section (with `#level=`, at a level). A paragraph, a heading, a section's summary or a chip (by the handle beside it on hover), a note's card or a selection, dragged into another app, carries its words and a `textfold://` link back to it ([drag-format.md](drag-format.md)).
 
 What the model is given for a question (`textfold/notes.py`, `prompt`): the title, the abstract and a line per section
 (with where the reader is); the level they read at and whose words it shows (at Key and below, a warning that the

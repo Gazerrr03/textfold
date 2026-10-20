@@ -2306,6 +2306,7 @@
     const card = (n) => {
       const c = h('button', `ncard${n.kind === 'ask' ? ' ask' : ''}`);
       c.type = 'button';
+      c.draggable = true;   // (into another app, with a link back: the drags, below)
       c.dataset.note = n.id;
       const turns = turnsOf(n), last = turns[turns.length - 1] || {}, said = [...turns].reverse().find((x) => x.a);
       c.innerHTML = n.kind === 'ask'
@@ -2342,7 +2343,7 @@
     return list.filter(holds).sort((x, y) => (y.updated || '').localeCompare(x.updated || ''))[0] || list[list.length - 1];
   }
 
-  // ── links to a note (#n=), and from the address to one ──
+  // ── links to a note (#n=), a paragraph (#u=) or a section (#s=), and from the address to one ──
   function noteLink(n) {
     const base = D.app ? `${location.origin}/p/${D.meta.id}?lang=${encodeURIComponent(lang)}` : location.href.split('#')[0];
     return `${base}#n=${n.id}`;
@@ -2350,13 +2351,144 @@
   function openFromHash() {
     const m = /[#&]n=([\w-]+)/.exec(location.hash), n = m && notes.find((x) => x.id === m[1]);
     const u = n ? n.anchor.unit : (/[#&]u=([^&]+)/.exec(location.hash) || [])[1];
-    const el = n && !n.anchor.unit ? targetEl(n.anchor) : u && unitEl.get(decodeURIComponent(u));
+    const s = !n && !u && (/[#&]s=([^&]+)/.exec(location.hash) || [])[1], sc = s && secs.get(decodeURIComponent(s));
+    const el = n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(decodeURIComponent(u)) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null;
     if (!el) return;
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
     flash(el);
     if (n) setTimeout(() => openNote(n), 300);
   }
+
+  // ── dragged into another app (a notes app, an editor): what was dragged, as it reads, with a textfold:// link back to
+  //    exactly there (docs/drag-format.md). A paragraph, a heading, a section's summary or a chip on the map shows a
+  //    handle while the pointer is on it, so its text stays selectable; a note's card and a selection are dragged as
+  //    they are. One listener for every drag; the handle is outside the column, so the zoom's copies never hold it ──
+  const LEVEL_NAMES = ['topic', 'takeaway', 'key', 'brief', 'full'];
+  const handle = h('div', 'draghandle');
+  handle.draggable = true;
+  handle.hidden = true;
+  const dragImg = h('div', 'dragimg');   // what the pointer carries: a line of what goes, not the whole paragraph
+  document.body.append(handle, dragImg);
+  let handleFor = null, handleTimer = 0;
+  const HANDLED = '.u, .hd, .stake';
+  function placeHandle(el) {
+    clearTimeout(handleTimer);
+    if (el === handleFor && !handle.hidden) return;
+    const r = el.getBoundingClientRect();
+    if (!r.height) return;
+    handleFor = el;
+    handle.style.left = `${Math.max(2, r.left - 22) + scrollX}px`;
+    handle.style.top = `${r.top + scrollY + (el.dataset.l === '0' ? (r.height - 18) / 2 : 2)}px`;
+    handle.hidden = false;
+  }
+  function hideHandle(now) {
+    clearTimeout(handleTimer);
+    if (now) { handle.hidden = true; handleFor = null; } else handleTimer = setTimeout(() => hideHandle(true), 220);
+  }
+  // (on a move, not on entering: a pointer that rested on a paragraph through a zoom gets its handle once it moves)
+  docEl.addEventListener('mousemove', (e) => {
+    if (busy || stage || (!handle.hidden && handleFor && handleFor.contains(e.target))) return;
+    const el = e.target.closest(HANDLED);
+    if (el && !el.hidden) placeHandle(el);
+  }, { passive: true });
+  docEl.addEventListener('mouseout', (e) => {
+    const el = e.target.closest(HANDLED);
+    if (el && el === handleFor && !el.contains(e.relatedTarget) && e.relatedTarget !== handle) hideHandle();
+  });
+  handle.addEventListener('mouseenter', () => clearTimeout(handleTimer));
+  handle.addEventListener('mouseleave', () => hideHandle());
+  // a zoom, a scroll or a key moves what it stood by: it comes back with the pointer
+  for (const ev of ['wheel', 'keydown', 'resize']) addEventListener(ev, () => { if (!handle.hidden) hideHandle(true); }, { passive: true });
+  addEventListener('pointerdown', (e) => { if (e.target !== handle && !handle.hidden) hideHandle(true); }, { passive: true });
+
+  // pieces as plain text: a formula as $LaTeX$, a gap as … (a CJK document's word may be a bare string)
+  const piecesText = (pcs) => pcs.map((p, n) => (p.gap ? '…' : typeof p.tok === 'string' ? p.tok : tokPlain(p.tok)) + (n < pcs.length - 1 && (p.gap || p.tok.s || pcs[n + 1].gap) ? ' ' : '')).join('').replace(/\s+/g, ' ').trim();
+  const secTitle = (c) => ((trOf(c) && trOf(c).title) || c.title || '').replace(/\s+/g, ' ').trim();
+  const secOfEl = (el) => [...secs.values()].find((x) => x.hd === el || x.st === el);
+  // the selection's words as they read: a formula of the paper as $LaTeX$, one the model wrote as its source, never the
+  // hidden source the page also holds
+  function selectionText(range) {
+    const f = range.cloneContents();
+    for (const at of f.querySelectorAll('[data-id*="@"]')) { const k = at.dataset.id.split('@')[1].split('#')[0]; if (A[k]) at.replaceWith(tokPlain({ a: k })); }
+    for (const k of f.querySelectorAll('.katex')) { const src = k.querySelector('annotation'); k.replaceWith(src ? `$${src.textContent}$` : k.textContent); }
+    for (const x of f.querySelectorAll('math')) x.replaceWith(x.getAttribute('alttext') ? `$${x.getAttribute('alttext')}$` : x.textContent);
+    return f.textContent.replace(/[\u200b\s]+/g, ' ').trim();
+  }
+  // what a handle's paragraph, heading, summary or chip gives
+  function itemDrag(el) {
+    if (el.classList.contains('u')) {
+      const uid = el.dataset.u, L = levelOf(uid);
+      return { kind: el.dataset.l === '0' ? 'chip' : 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2 };
+    }
+    const sc = secOfEl(el);
+    if (!sc) return null;
+    const c = sc.c, lad = (trOf(c) && trOf(c).lad) || c.lad;
+    if (el === sc.st) return { kind: 'summary', c, L: level, text: lad && lad.take.length ? toksText(lad.take, 0, lad.take.length - 1) : '', written: true };
+    return { kind: 'section', c, L: level, text: `${c.num || ''} ${secTitle(c)}`.trim(), written: false };
+  }
+  // a note's card, or its row in the notes list: a highlight or a note (its quote, and the reader's words), or a
+  // conversation (the reader's question, and the model's answer in one sentence)
+  function noteDrag(n) {
+    const a = n.anchor || {}, quote = (a.quote && a.quote.exact) || '', c = a.section ? (secs.get(a.section) || {}).c || null : null;
+    if (n.kind === 'ask') {
+      const turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
+      return { kind: 'ask', note: n, c, L: level, text: said ? said.takeaway || '' : '', written: !!said, quote, comment: (turns[0] || {}).q || '' };
+    }
+    const comment = (n.text || '').trim();
+    return { kind: 'note', note: n, c, L: level, text: comment || quote, written: !comment && a.on === 'summary', quote, comment };
+  }
+  // a selection: the paragraph it starts in (or the section, when it starts on a heading or a summary)
+  function selectionDrag(range) {
+    const text = selectionText(range);
+    if (!text) return null;
+    const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+    const el = start && start.closest(HANDLED);
+    let uid = el && el.classList.contains('u') ? el.dataset.u : null, sc = !uid && el ? secOfEl(el) : null;
+    if (!uid && !sc) uid = [...unitEl.keys()].find((x) => range.intersectsNode(unitEl.get(x)._tx)) || null;
+    if (!uid && !sc) return null;
+    const L = uid ? levelOf(uid) : level;
+    return { kind: 'selection', uid, c: uid ? chunkOf[uid] || null : sc.c, L, text, written: L <= 2 || (!!sc && el === sc.st), quote: text };
+  }
+  function dragData(d) {
+    const m = D.meta, title = m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title, c = d.c;
+    const q = new URLSearchParams({ paper: m.id });
+    if (d.note) q.set('n', d.note.id); else if (d.uid) q.set('u', d.uid); else if (c) q.set('s', c.id);
+    if (!d.note) q.set('level', LEVEL_NAMES[d.L]);
+    q.set('lang', lang);
+    const link = `textfold://open?${q}`, citekey = m.zotero && m.zotero.citekey;
+    const json = { format: 'textfold/drag', version: 1, paper: m.id, title, authors: m.authors || [], ...(citekey ? { citekey } : {}),
+      section: c ? { id: c.id, num: c.num || '', title: secTitle(c) } : null, kind: d.kind, level: LEVEL_NAMES[d.L], lang,
+      text: d.text, written: d.written, ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
+    const where = c ? `${title} › ${`${c.num || ''} ${secTitle(c)}`.trim()}` : title;
+    // after the quote: a note's text, or a conversation's question (in bold) and its answer
+    const said = (d.kind === 'ask' ? [[d.comment, true], [d.text]] : d.kind === 'note' ? [[d.comment]] : []).filter(([x]) => x);
+    const shown = d.kind === 'note' || d.kind === 'ask' ? d.quote : d.text;
+    const md = [shown ? shown.split('\n').map((l) => `> ${l}`).join('\n') : '', ...said.map(([x, b]) => (b ? `**${x}**` : x)),
+      `— [${where.replace(/([[\]])/g, '\\$1')}](${link})`].filter(Boolean).join('\n\n');
+    const para = (x, b) => `<p>${b ? '<strong>' : ''}${esc(x).replace(/\n/g, '<br>')}${b ? '</strong>' : ''}</p>`;
+    const html = `<div data-textfold="${esc(JSON.stringify(json))}">${shown ? `<blockquote>${para(shown)}</blockquote>` : ''}` +
+      `${said.map(([x, b]) => para(x, b)).join('')}<p>— <a href="${esc(link)}">${esc(where)}</a></p></div>`;
+    return { md, html, link, json: JSON.stringify(json), label: (shown || d.text || where).slice(0, 90) };
+  }
+  document.addEventListener('dragstart', (e) => {
+    const t = e.target.nodeType === 1 ? e.target : e.target.parentElement, sel = getSelection();
+    let d = null;
+    if (e.target === handle) d = handleFor && itemDrag(handleFor);
+    else if (t && t.closest('.ncard[data-note], .nl-item[data-note]')) {
+      const id = t.closest('[data-note]').dataset.note, n = notes.find((x) => x.id === id);
+      d = n && noteDrag(n);
+    } else if (t && docEl.contains(t) && sel.rangeCount && !sel.isCollapsed && sel.getRangeAt(0).intersectsNode(e.target)) d = selectionDrag(sel.getRangeAt(0));
+    if (!d) return;
+    const out = dragData(d), dt = e.dataTransfer;
+    dt.clearData();
+    dt.setData('text/plain', out.md);
+    dt.setData('text/uri-list', out.link);
+    dt.setData('text/html', out.html);
+    dt.setData('application/x-textfold+json', out.json);
+    dt.effectAllowed = 'copy';
+    if (e.target === handle) { dragImg.textContent = out.label; dt.setDragImage(dragImg, 12, 12); }
+  });
 
   // ── the notes button: how many, and the exports ──
   const nbtn = h('button', 'notesbtn');
@@ -2412,7 +2544,7 @@
         : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span>${a.quote.exact ? `<span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>` : ''}`
         : `<span class="nl-hl">${texLite(clipTex(a.quote.exact, 150))}</span>`;
       const sure = nmSure === n.id;
-      items += `<div class="nl-item ${k}" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
+      items += `<div class="nl-item ${k}" draggable="true" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
         `<button type="button" class="nl-del${sure ? ' sure' : ''}" title="${esc(sure ? t.n_del_sure : t.n_delete)}">${sure ? esc(t.n_del_sure) : '×'}</button></div>`;
     }
     const tab = (f, label) => `<button type="button" class="nl-tab${nmFilter === f ? ' on' : ''}" data-f="${f}">${esc(label)}<em>${count[f]}</em></button>`;

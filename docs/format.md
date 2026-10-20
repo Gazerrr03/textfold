@@ -8,6 +8,9 @@ to know which lines a model wrote and what they rest on.
 section as Markdown. Version 0 may still change: fields will be added without a new version, and a field renamed or
 removed will come with version 1.
 
+A part of a text dragged out of the reader into another app carries its words and a link back to it:
+[drag-format.md](drag-format.md).
+
 ## The contract
 
 Two kinds of text, never mixed:
