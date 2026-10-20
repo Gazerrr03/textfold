@@ -1,6 +1,6 @@
 {
   "name": "textfold",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Read Claude Code's replies at the level you need, from every word to the answer in one sentence, with one key",
   "author": { "name": "Xia Chen" },
   "homepage": "https://github.com/chenxiachan/textfold/tree/main/plugins/textfold",
