@@ -234,6 +234,18 @@ is never rewritten, since its layers belong to the text they were made from. `py
 from the command line (images found beside the file); the landing sends the file's text (`POST /api/import`), so
 images given by a relative path are left out there and shown by name.
 
+A program that keeps the text where it is written (a note app's plugin) can fold it again after an edit without losing
+the document: `POST /api/import` with the document's `id` replaces its text in place (`local.replace_text`), and
+`/api/generate` with `force` folds it again. The id, the folder, the notes and the model's replies stay. A Markdown
+document's paragraphs are named by their words (`p-<hash>`, `"unit_ids": "text"` in its meta; one stored before keeps
+`u<n>` until its text is replaced), so an edit leaves every other paragraph's id, and a link to it (`#u=`), as it was;
+the notes are found again in the new text (notes-format.md, "When the text changes"). The old text and its levels go
+to `previous/` (the last one replaced only), and the levels are made again from the replies kept in `llm-cache/`: the
+model is asked only for the sections whose prompts changed (a section's text; the title, the opening or a heading
+changes them all), and for the argument links when a takeaway changed. A translation's prompt numbers the atoms of the
+whole text, so a section after a formula or a link added or taken out is translated again too. A text being generated
+is not replaced (409).
+
 JATS XML (`jats.py`), the format of PubMed Central, Europe PMC, bioRxiv and medRxiv, PLOS and eLife: sections keep
 their titles (and their markup), figures and tables their labels and captions, formulas the MathML the publisher wrote
 (its TeX, where given, as alttext), citations and cross-references link to their targets, the reference list becomes the

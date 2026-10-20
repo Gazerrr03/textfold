@@ -9,7 +9,11 @@
                               return (what they wrote is kept in the cache, so starting it again goes on from there)
   POST /api/generate          {paper, lang, force}: queue a generation; one runs at a time. paper: an arXiv id or
                               link, a PMC or PPR id, a DOI (Europe PMC, epmc.py), or a stored document's id
-  POST /api/import            {name, text}: store a Markdown file as a paper (local.py); its id, to generate
+  POST /api/import            {name, text, id?}: store a Markdown file as a paper (local.py); its id, to generate. With
+                              id (a Markdown document stored before, md-…): its text replaced by this one under the same
+                              id, its notes found again in it and its levels set aside ({paper, title, replaced: true};
+                              not while it is being generated); then /api/generate with force folds it again, asking the
+                              model only for the sections that changed
   GET  /api/models            saved configuration and the last model discovery results (no service probes); its "lang", the
                               reader's language as the page last told it (null until it has), for other programs
   GET  /api/langs             the languages a text can be read in: [{code, name}], each by its own name (langs.py)
@@ -719,6 +723,18 @@ def make_handler(jobs):
                     text, name = str(body.get("text") or ""), str(body.get("name") or "document.md")[:200]
                     if not text.strip():
                         return self.json({"error": "empty"}, 400)
+                    if body.get("id"):   # an edited text in place of the one stored (a note folded again where it is written)
+                        pid = str(body["id"])
+                        if any(j["pid"] == pid and j["status"] in ("queued", "running") for j in jobs.list()):
+                            return self.json({"error": "busy"}, 409)
+                        try:
+                            title = local.replace_text(pid, text, name if body.get("name") else None)
+                        except LookupError:
+                            return self.json({"error": "no such document"}, 404)
+                        except ValueError:
+                            return self.json({"error": "not-markdown"}, 400)
+                        PAGES.pop(pid, None)
+                        return self.json({"paper": pid, "title": title, "replaced": True})
                     try:
                         pid = local.import_text(text, name)
                     except ValueError:

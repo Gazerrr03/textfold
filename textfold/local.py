@@ -3,19 +3,26 @@ parse.py reads), the file as it came (source.md), meta.json, and img/ with the i
 
 A document's id is its title and a hash of its text: the same file opened twice is one paper, and an edited file is a
 new one, since the stored layers belong to the text they were made from. A document already stored is not written
-again: its source stays the one its layers were made from.
+again: its source stays the one its layers were made from. Unless it is replaced by name (replace_text: a note edited
+where it lives, folded again): then it keeps its id, its notes and its folder, and its levels are made again.
+
+Its paragraphs are named by their words ("unit_ids": "text", parse.py), so an edit leaves every other paragraph's id,
+and the notes and links on it, as they were. (Documents stored before keep the ids they were read with, u<n>, until
+their text is replaced.)
 """
 import base64
 import hashlib
 import json
 import re
 import shutil
+import threading
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import markdown, semantic, store
+from . import markdown, notes, semantic, store
 from .fetch import UA
+from .parse import parse
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 MAX_IMG = 15_000_000
@@ -104,18 +111,71 @@ def prefetch(srcs, workers=6):
         return {src: got for src, got in ex.map(one, web) if got and got[0]}
 
 
-def import_text(text, name="document.md", base=None):
-    """Store a document given as text (base: the folder its relative image paths start from, if known). Returns its id."""
+def _read_md(text, name):
+    """A Markdown text as (its title, its semantic HTML, the meta it is stored with but its id)."""
     kind = KINDS.get(Path(name).suffix.lower())
     if kind is None:
         raise ValueError(f"not a Markdown file: {name}")
     html, fm = markdown.to_html(text)
     title, html = markdown.take_title(html, fm, name)
-    pid = make_id(title, text)
-    meta = {"id": pid, "version": "", "title": title, "authors": fm["authors"], "date": fm["date"],
+    meta = {"version": "", "title": title, "authors": fm["authors"], "date": fm["date"],
             "abs_url": "", "html_url": "", "license": fm["license"] if re.match(r"https?://", fm["license"]) else "",
-            "source": {"kind": kind, "name": Path(name).name}, "label": Path(name).name}
-    return store_doc(pid, html, meta, "source.md", text, lambda folder: Images(folder, base).resolve, sizes=True)
+            "source": {"kind": kind, "name": Path(name).name}, "label": Path(name).name, "unit_ids": "text"}
+    return title, html, meta
+
+
+def import_text(text, name="document.md", base=None):
+    """Store a document given as text (base: the folder its relative image paths start from, if known). Returns its id."""
+    title, html, meta = _read_md(text, name)
+    pid = make_id(title, text)
+    return store_doc(pid, html, {"id": pid, **meta}, "source.md", text, lambda folder: Images(folder, base).resolve, sizes=True)
+
+
+# what a replaced text takes with it to previous/: the text, what was read from it, and the levels made from it
+REPLACED = ("source.md", "source.html", "meta.json", "img", "layers")
+_REPLACING = threading.Lock()   # one replace at a time (the server answers on several threads; a note saved twice)
+
+
+def replace_text(pid, text, name=None, base=None):
+    """A stored Markdown document's text replaced by an edited one, under the same id. Its notes, its folder and the
+    model's replies (llm-cache) stay; its notes are found again in the new text (notes.reanchor). Its levels belonged
+    to the old text: they go to previous/ with it (the one replaced last, notes as they were included), and the next
+    generation makes them again from the replies kept, so the model is asked only for the sections whose text changed
+    (pipeline.py). Returns the new title. LookupError: no such Markdown document."""
+    with _REPLACING:
+        return _replace(pid, text, name, base)
+
+
+def _replace(pid, text, name, base):
+    d = store.pdir(pid)
+    if not (pid.startswith("md-") and store.valid_id(pid) and (d / "meta.json").exists() and (d / "source.html").exists()):
+        raise LookupError(pid)
+    was = json.loads(store.read_text(d / "meta.json"))
+    title, html, meta = _read_md(text, name or (was.get("source") or {}).get("name") or "document.md")
+    meta = {**was, **meta, "id": pid, "replaced": store.stamp()}
+    old = store.parsed(pid)
+    tmp = d.with_name(d.name + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    try:
+        (tmp / "source.html").write_text(semantic.normalize(html, resolve_img=Images(tmp / "img", base).resolve, sizes=True), encoding="utf-8")
+        (tmp / "source.md").write_text(text, encoding="utf-8")
+        (tmp / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+        new = parse(store.read_text(tmp / "source.html"), meta)
+        prev = d / "previous"
+        shutil.rmtree(prev, ignore_errors=True)
+        prev.mkdir()
+        if (d / "notes.json").exists():
+            shutil.copy2(d / "notes.json", prev / "notes.json")
+        for f in REPLACED:   # each moved by a rename: a page opened meanwhile reads a file old or new, never half of one
+            if (d / f).exists():
+                (d / f).rename(prev / f)
+            if (tmp / f).exists():
+                (tmp / f).rename(d / f)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    notes.reanchor(pid, old, new)
+    return title
 
 
 def store_doc(pid, html, meta, raw_name, raw, resolver, sizes=False):
