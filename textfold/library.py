@@ -208,9 +208,25 @@ def opened(pid):
 
 
 def forget(pid):
-    """A document deleted from the library: out of its folder, its dates and name gone (read again, it comes in anew)."""
+    """A document deleted from the library: out of its folder, its dates and name gone (read again, it comes in anew).
+    What it had, to remember it by: {"of": folder, "names": name, "added": time, "opened": time}, those it had."""
     with _lock:
         d = load()
-        gone = [d[k].pop(pid, None) is not None for k in ("of", "names", "added", "opened")]
-        if any(gone):
+        gone = {k: d[k].pop(pid) for k in ("of", "names", "added", "opened") if pid in d[k]}
+        if gone:
             _save(d)
+        return gone
+
+
+def remember(pid, kept):
+    """A deleted document back (its Undo): in its folder if that is still there, with its name and dates."""
+    if not store.valid_id(pid) or not isinstance(kept, dict):
+        return
+    with _lock:
+        d = load()
+        ids = {f["id"] for f in d["folders"]}
+        for k, ok in (("of", lambda v: v in ids), ("names", lambda v: isinstance(v, str) and v.strip()),
+                      ("added", lambda v: isinstance(v, (int, float))), ("opened", lambda v: isinstance(v, (int, float)))):
+            if k in kept and ok(kept[k]):
+                d[k][pid] = kept[k]
+        _save(d)

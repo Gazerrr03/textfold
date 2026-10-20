@@ -1,5 +1,6 @@
 """The library's routes on a server of its own (its own HOME and data folder, no model): a document named in the
-library is listed and shown under that name (its page's title and head), and a folder goes inside another.
+library is listed and shown under that name (its page's title and head), a folder goes inside another, and several
+documents deleted at once come back with the sidebar's Undo, in their folder and under their name.
 
 Run from the repo root:
     python3 -m unittest discover tests
@@ -83,6 +84,30 @@ class LibraryRoutes(unittest.TestCase):
         code, f = self.call("/api/folders", {"op": "new", "name": "Chapter 2", "parent": top})
         self.assertEqual((code, f["folders"][-1]["parent"]), (200, top))
         self.assertEqual(self.call("/api/folders", {"op": "nest", "id": top, "parent": f["folders"][-1]["id"]})[0], 400)
+
+    def test_several_deleted_and_back(self):
+        ids = [self.call("/api/import", {"name": f"undo-{k}.md", "text": f"# Undo {k}\n\nParagraph {k}.\n"})[1]["paper"] for k in range(3)]
+        code, f = self.call("/api/folders", {"op": "new", "name": "Undo box", "papers": ids[:2]})
+        box = f["folders"][-1]["id"]
+        self.call("/api/papers/name", {"paper": ids[0], "name": "First, renamed"})
+        code, r = self.call("/api/papers/delete", {"papers": [ids[0], ids[1], "md-none-0000"]})
+        self.assertEqual((code, r["deleted"], r["busy"]), (200, ids[:2], []))
+        self.assertEqual({p["id"] for p in r["papers"]} & set(ids), {ids[2]})
+        self.assertNotIn(ids[0], self.call("/api/folders")[1]["of"])
+        trash = self.data / "papers" / ".trash"
+        self.assertEqual(len([d for d in trash.iterdir() if d.name.startswith(ids[0])]), 1)
+        code, r = self.call("/api/papers/restore", {"papers": ids[:2]})
+        self.assertEqual((code, r["restored"]), (200, ids[:2]))
+        rows = {p["id"]: p for p in r["papers"]}
+        self.assertEqual((rows[ids[0]].get("name"), rows[ids[1]].get("name")), ("First, renamed", None))
+        self.assertEqual((r["folders"]["of"][ids[0]], r["folders"]["of"][ids[1]]), (box, box))
+        self.assertFalse((self.data / "papers" / ids[0] / "library.json").exists())
+        self.assertEqual(self.call("/api/papers/restore", {"papers": ids[:2]})[1]["restored"], [])   # (nothing left there)
+        # one alone, as before: the list, or why not
+        code, listed = self.call("/api/papers/delete", {"paper": ids[2]})
+        self.assertEqual((code, ids[2] in {p["id"] for p in listed}), (200, False))
+        self.assertEqual(self.call("/api/papers/delete", {"paper": ids[2]})[0], 404)
+        self.assertEqual(self.call("/api/papers/restore", {"papers": [ids[2]]})[1]["restored"], [ids[2]])
 
 
 if __name__ == "__main__":

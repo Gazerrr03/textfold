@@ -3,7 +3,8 @@
   papers/<id>/source.html, meta.json     the arXiv HTML, fetched once (or a document from this computer, local.py)
   papers/<id>/layers/en.json             the English ladder and the argument links
   papers/<id>/layers/tr-<lang>.json      one translation, stamped with the English version it was built on
-  papers/.trash/<id>-<time>/             a paper the reader deleted (moved there whole, notes included; not listed)
+  papers/.trash/<id>-<time>/             a paper the reader deleted (moved there whole, notes included; not listed), with
+                                         library.json: its place in the library, for the reader's Undo (untrash)
 
 A model samples differently on every run, so the same paper does not come out the same twice.
 The layers are what makes a paper read the same every time it is opened: a reader is assembled
@@ -264,10 +265,31 @@ def papers():
     return sorted(out, key=lambda p: -p["updated"])
 
 
-def trash(pid):
+def trash(pid, kept=None):
     """Delete a paper from the list: its folder (source, layers, model replies, notes) moves to papers/.trash, from
-    where it can be moved back by hand. Nothing is erased."""
+    where it can be moved back (untrash, or by hand). Nothing is erased. kept: its place in the library, kept with it."""
     to = DATA / "papers" / ".trash" / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
     to.parent.mkdir(parents=True, exist_ok=True)
     pdir(pid).rename(to)
+    if kept:
+        (to / "library.json").write_text(json.dumps(kept, ensure_ascii=False), encoding="utf-8")
     return to
+
+
+def untrash(pid):
+    """A paper deleted last back in the list, as it was (its latest time in papers/.trash), and its place in the
+    library as trash kept it ({} when none); None when there is none there, or a paper of that id is listed again."""
+    if not valid_id(pid) or pdir(pid).exists():
+        return None
+    at = re.compile(re.escape(pid) + r"-\d{8}-\d{6}")
+    gone = sorted(d for d in (DATA / "papers" / ".trash").glob(f"{pid}-*") if at.fullmatch(d.name) and (d / "meta.json").exists())
+    if not gone:
+        return None
+    kept_f = gone[-1] / "library.json"
+    try:
+        kept = json.loads(read_text(kept_f)) if kept_f.exists() else {}
+    except (OSError, ValueError):
+        kept = {}
+    gone[-1].rename(pdir(pid))
+    (pdir(pid) / "library.json").unlink(missing_ok=True)
+    return kept if isinstance(kept, dict) else {}

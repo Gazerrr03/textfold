@@ -38,7 +38,10 @@
                               with PDF.js, for the side-by-side view
   POST /api/ask               {paper, id, question, req}: the model answers a note's question; the answer is stored in it
   POST /api/ask/stop          {req}: that question stopped: its answer, when it comes, is not stored
-  POST /api/papers/delete     {paper}: move a paper to papers/.trash (not while it is being generated)
+  POST /api/papers/delete     {paper}: move a paper to papers/.trash (not while it is being generated); the list. Or
+                              {papers: [ids]}: each that can go; {papers: the list, deleted: [ids], busy: [ids]}
+  POST /api/papers/restore    {papers: [ids]}: those deleted last back from papers/.trash, in their folders (the
+                              reader's Undo); {papers: the list, folders, restored: [ids]}
   POST /api/papers/name       {paper, name}: what the reader calls it in the library ("": its own title again); the list
   GET  /api/folders           the reader's folders (inside one another) and which document is in which (library.py)
   POST /api/folders           {op: new | rename | delete | nest | move, ...}: one change; the folders after it
@@ -780,15 +783,30 @@ def make_handler(jobs):
                     callback = f"http://{self.headers.get('Host') or 'localhost:3017'}/oauth/openrouter"
                     return self.json({"url": bridges.openrouter_start(callback, str(body.get("back") or "/"), bool(body.get("desktop")))})
                 if u.path == "/api/papers/delete":
-                    pid = str(body.get("paper", ""))
-                    if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
+                    many = isinstance(body.get("papers"), list)
+                    pids = [str(p) for p in body["papers"]] if many else [str(body.get("paper", ""))]
+                    there = [p for p in dict.fromkeys(pids) if store.valid_id(p) and (store.pdir(p) / "meta.json").exists()]
+                    live = {j["pid"] for j in jobs.list() if j["status"] in ("queued", "running")}
+                    if not many and not there:
                         return self.json({"error": "no such paper"}, 404)
-                    if any(j["pid"] == pid and j["status"] in ("queued", "running") for j in jobs.list()):
+                    if not many and there[0] in live:
                         return self.json({"error": "busy"}, 409)
-                    store.trash(pid)
-                    library.forget(pid)
-                    PAGES.pop(pid, None)
-                    return self.json(listed())
+                    deleted = [p for p in there if p not in live]
+                    for pid in deleted:   # (its place in the library goes with it, for an Undo)
+                        store.trash(pid, library.forget(pid))
+                        PAGES.pop(pid, None)
+                    if not many:
+                        return self.json(listed())
+                    return self.json({"papers": listed(), "deleted": deleted, "busy": [p for p in there if p in live]})
+                if u.path == "/api/papers/restore":
+                    pids = body.get("papers") if isinstance(body.get("papers"), list) else []
+                    restored = []
+                    for pid in dict.fromkeys(str(p) for p in pids):
+                        kept = store.untrash(pid)
+                        if kept is not None:
+                            library.remember(pid, kept)
+                            restored.append(pid)
+                    return self.json({"papers": listed(), "folders": library.folders(), "restored": restored})
                 if u.path == "/api/papers/name":
                     pid = str(body.get("paper", ""))
                     if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
