@@ -25,6 +25,7 @@ beforeEach(() => {
 });
 
 type TestTheme = { fg: (_kind: string, s: string) => string; bold: (s: string) => string; dim: (s: string) => string };
+type Transformer = (markdown: string, context: { messageType: string }) => string;
 type MouseLike = { type: string; button: string; x: number; y?: number };
 type WidgetFactory = (tui: unknown, theme: TestTheme) => {
 	render: (width: number) => string[];
@@ -39,6 +40,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 	const entries: { type: string; payload: unknown }[] = [];
 	const notifications: string[] = [];
 	const widgets = new Map<string, { factory?: WidgetFactory; content?: string[]; opts?: unknown }>();
+	const transformers: Transformer[] = [];
 	const customCaptures: ((tui: unknown, theme: unknown, kb: unknown, done: () => void) => unknown)[] = [];
 	let customDone: (() => void) | undefined;
 	const calls: string[] = [];
@@ -69,7 +71,8 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 			commands.set(name, command);
 			calls.push(`command:${name}`);
 		},
-		registerMarkdownTransformer: () => {
+		registerMarkdownTransformer: (t: Transformer) => {
+			transformers.push(t);
 			calls.push("markdownTransformer");
 		},
 		registerFlag: (name: string, flag: { type: string; default?: unknown; description?: string }) => {
@@ -142,6 +145,7 @@ function makePi(opts: { branch?: unknown[]; appendEntryThrows?: boolean; digitsF
 		ctx: ctx as never,
 		screen,
 		editorWrites,
+		transformers,
 	};
 	// The factory-based capture path needs resolve on done: kept where the tests use it.
 }
@@ -400,6 +404,53 @@ describe("the preview panel shows the fold before any reply and with it", () => 
 		expect(mk.widgets.has("textfold")).toBe(true);
 		expect(mk.widgets.has("textfold-preview")).toBe(true);
 		expect(mk.render("textfold").join(" ")).toContain("1 Full");
+	});
+});
+
+describe("reasoning folds at the level too", () => {
+	// A coding turn is mostly thinking: thousands of words of it around a few hundred words
+	// of reply. The transformer sees it too, as messageType "assistant-thinking".
+	const thinking = Array.from({ length: 8 }, (_, i) =>
+		`Step ${i} checks one thing before the next. It then says what it found and moves on.`,
+	).join("\n\n");
+
+	test("a folded reply and folded reasoning both carry the level marker", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.press("alt+3");
+		const t = mk.transformers[0]!;
+		const reply = t(thinking, { messageType: "assistant" });
+		const reason = t(thinking, { messageType: "assistant-thinking" });
+		expect(reply).toContain("Points · ");
+		expect(reason).toContain("Points · ");
+		expect(reason).toContain("Alt+1 unfolds");
+		expect(reason.length).toBeLessThan(thinking.length); // it really is folded, not passed through
+	});
+
+	test("the reader's own message is never transformed", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.press("alt+5");
+		expect(mk.transformers[0]!(thinking, { messageType: "user" })).toBe(thinking);
+	});
+
+	test("at Full nothing folds, reasoning included", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		expect(mk.transformers[0]!(thinking, { messageType: "assistant-thinking" })).toBe(thinking);
+		expect(mk.transformers[0]!(thinking, { messageType: "assistant" })).toBe(thinking);
+	});
+
+	test("reasoning too short to gain from a fold is left as written", async () => {
+		const textfold = await load();
+		const mk = makePi({ branch: [] });
+		textfold(mk.pi);
+		mk.press("alt+3");
+		const short = "Look at the parser first. Then the tests.";
+		expect(mk.transformers[0]!(short, { messageType: "assistant-thinking" })).toBe(short);
 	});
 });
 

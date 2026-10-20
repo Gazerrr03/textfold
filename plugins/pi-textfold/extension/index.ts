@@ -75,8 +75,11 @@ export default function textfoldFold(pi: ExtensionAPI) {
 	});
 
 	// Each reply folded as Pi draws it, on the screen only: what the model sees is never changed.
+	// Reasoning folds at the same level. In a coding turn it is where almost all the words are
+	// (thousands of words of thinking around a few hundred of reply), so folding the reply alone
+	// would leave the reader scrolling past exactly the part the fold exists to spare them.
 	pi.registerMarkdownTransformer((markdown, context) => {
-		if (context.messageType !== "assistant" || level === 1) return markdown;
+		if (context.messageType === "user" || level === 1) return markdown;
 		const f = fold(markdown, level);
 		if (!worthFolding(markdown, f.text)) return markdown;
 		return `${f.text || "…"}\n\n*${levelName(level)} · ${f.shown} of ${f.total} words · Alt+1 unfolds*`;
