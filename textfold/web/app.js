@@ -62,11 +62,14 @@
     document.dispatchEvent(new Event('tf-lang'));   // (what else speaks it: the app's update)
   }
   let papers = BOOT.papers || [];
-  let folders = BOOT.folders || { folders: [], of: {} };   // the reader's folders, and which document is in which (folders.py)
+  let folders = BOOT.folders || { folders: [], of: {} };   // the reader's folders (each in its parent, or at the top), and which document is in which (library.py)
   let sbQuery = '';        // the sidebar's search, as typed
   let editing = null;      // a folder's name being written: 'new', or the folder's id
   let dragging = null;     // the document being dragged to a folder
+  let draggingFolder = null;   // the folder being dragged into another, or to the top
   let moving = null;       // the document a new folder is being named for (its menu's New folder…)
+  let within = null;       // the folder a new one is being named inside (its menu's New subfolder…); none: at the top
+  let renaming = null;     // the document whose name in the library is being written
   let menu = null;         // a folder's or a document's menu, while it is open
   let stale = false;       // the list as polled while a menu was open: drawn when it closes
   const FOLDED = 'textfold.folded';   // the folders shut, kept for next time
@@ -114,7 +117,11 @@
     const pending = jobs.filter((j) => !listed.has(j.pid) && live(j));
     const item = (p) => {
       const j = jobFor(p.id);
-      const title = (p.titles && p.titles[readLang]) || p.title;
+      const own = (p.titles && p.titles[readLang]) || p.title, title = p.name || own;
+      if (renaming === p.id) {
+        return `<div class="sb-row" data-pid="${p.id}" data-q="${esc(hay(p))}"><input class="sb-dname-in" value="${esc(title)}" placeholder="${esc(own)}" ` +
+          `aria-label="${esc(T.d_name)}" title="${esc(T.d_name)}" maxlength="200" spellcheck="false"></div>`;
+      }
       const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${SHORT[l] || l.toUpperCase()}</span>`).join('');
       const active = PAPER && PAPER.id === p.id;
       const unfinished = !j && !p.langs.length;   // stopped (or failed) before its first language: a click goes on with it
@@ -130,7 +137,7 @@
     // folders too; by kind, in the server's order (the latest layer first)
     const order = sortOrder(), when = (p) => (order === 'opened' ? p.opened || p.added : p.added) || p.updated;
     const docs = order === 'kind' ? papers : [...papers].sort((a, b) => when(b) - when(a));
-    // the reader's folders first (one level; a document in one at most), then the documents in none
+    // the reader's folders first (inside one another; a document in one at most), then the documents in none
     const fs = folders.folders, loose = docs.filter((p) => !folders.of[p.id]);
     const today = new Date().setHours(0, 0, 0, 0);
     const since = (p) => { const at = when(p) * 1000; return at >= today ? 0 : Date.now() - at < 7 * 864e5 ? 1 : Date.now() - at < 30 * 864e5 ? 2 : 3; };
@@ -138,19 +145,23 @@
       : [['paper', T.papers], ['wiki', T.g_wiki], ['gh', 'GitHub'], ['web', T.g_web], ['doc', T.g_docs]].map(([k, name]) => [name, loose.filter((p) => kindOf(p) === k)]))
       .filter(([, ps]) => ps.length);
     const named = (value) => `<input class="sb-fname-in" value="${esc(value)}" placeholder="${esc(T.f_name)}" aria-label="${esc(T.f_name)}" maxlength="80" spellcheck="false">`;
+    const fresh = (parent) => (editing === 'new' && within === parent ? `<div class="sb-folder"><div class="sb-frow">${named('')}</div></div>` : '');
+    // a folder: its folders, then its documents; its count, the documents in it and in the folders inside it
     const folder = (f) => {
-      const ps = docs.filter((p) => folders.of[p.id] === f.id), shut = folded.has(f.id);
+      const ps = docs.filter((p) => folders.of[p.id] === f.id), subs = kidsOf(f.id), shut = folded.has(f.id), under = inside(f.id);
       const head = editing === f.id ? named(f.name)
-        : `<button type="button" class="sb-fhead" aria-expanded="${!shut}">${CHEV}${FOLDER}<span class="sb-fname">${esc(f.name)}</span><span class="sb-fn">${ps.length}</span></button>` +
+        : `<button type="button" class="sb-fhead" aria-expanded="${!shut}">${CHEV}${FOLDER}<span class="sb-fname">${esc(f.name)}</span>` +
+          `<span class="sb-fn">${docs.filter((p) => under.has(folders.of[p.id])).length}</span></button>` +
           `<button type="button" class="sb-fmenu" aria-label="${esc(T.f_actions)}" title="${esc(T.f_actions)}">⋯</button>`;
-      return `<div class="sb-folder${shut ? ' shut' : ''}" data-folder="${f.id}"><div class="sb-frow">${head}</div>` +
-        `<div class="sb-fitems">${ps.map(item).join('') || `<div class="sb-fempty">${esc(T.f_empty)}</div>`}</div></div>`;
+      const inner = fresh(f.id) + subs.map(folder).join('') + ps.map(item).join('');
+      return `<div class="sb-folder${shut ? ' shut' : ''}" data-folder="${f.id}"><div class="sb-frow"${editing === f.id ? '' : ' draggable="true"'}>${head}</div>` +
+        `<div class="sb-fitems">${inner || `<div class="sb-fempty">${esc(T.f_empty)}</div>`}</div></div>`;
     };
     const kinds = groups.length > 1 || fs.length
       ? groups.map(([name, ps]) => `<div class="sb-group">${esc(name)}</div>${ps.map(item).join('')}`).join('')
       : loose.map(item).join('');
     const listed_ = papers.length || fs.length || editing
-      ? (editing === 'new' ? `<div class="sb-folder"><div class="sb-frow">${named('')}</div></div>` : '') + fs.map(folder).join('') +
+      ? fresh(null) + kidsOf(null).map(folder).join('') +
         (fs.length ? `<div class="sb-out">${esc(T.f_out)}</div>` : '') + `<div class="sb-loose">${kinds}</div><div class="sb-nomatch" hidden>${esc(T.sb_nomatch)}</div>`
       : '';
     const pend = (j) => `<div class="sb-row" data-q="${esc(fold(`${jobName(j, T)} ${j.pid}`))}"><div class="sb-item pending"><span class="sb-t">${esc(jobName(j, T))}</span>` +
@@ -175,11 +186,11 @@
       <div class="sb-resize" role="separator" aria-orientation="vertical" tabindex="0" title="${esc(T.sb_resize)}" aria-label="${esc(T.sb_resize)}"></div>`;
     // polled every second while something generates: drawn again only when it changed, and where it was scrolled to
     const busy = jobs.some(live);
-    if (dragging) return;   // (drawn again after the drop: the row being dragged stays where the drag began)
+    if (dragging || draggingFolder) return;   // (drawn again after the drop: the row being dragged stays where the drag began)
     if (html === lastSidebar) { side.querySelector('.rail-open').classList.toggle('busy', busy); return; }
     const scrolled = side.querySelector('.sb-list') ? side.querySelector('.sb-list').scrollTop : 0;
-    const act = document.activeElement, typing = act && side.contains(act) && act.matches('.sb-q, .sb-fname-in')
-      ? { sel: act.matches('.sb-q') ? '.sb-q' : '.sb-fname-in', value: act.value, a: act.selectionStart, b: act.selectionEnd } : null;
+    const act = document.activeElement, typing = act && side.contains(act) && act.matches('.sb-q, .sb-fname-in, .sb-dname-in')
+      ? { sel: ['.sb-q', '.sb-fname-in', '.sb-dname-in'].find((s) => act.matches(s)), value: act.value, a: act.selectionStart, b: act.selectionEnd } : null;
     closeMenu();
     side.innerHTML = html;
     lastSidebar = html;
@@ -218,7 +229,7 @@
   async function deletePaper(pid) {
     const T = t(), p = papers.find((x) => x.id === pid);
     if (!p) return;
-    const title = (p.titles && p.titles[readLang]) || p.title;
+    const title = p.name || (p.titles && p.titles[readLang]) || p.title;
     if (!confirm(T.del_confirm.replace('{title}', title).replace('{n}', p.notes || 0))) return;
     try { papers = await api('/api/papers/delete', { paper: pid }); }
     catch (err) { alert(err.message === 'busy' ? T.del_busy : err.message); return; }
@@ -276,7 +287,17 @@
   // ── the library's search and folders ────────────────────────────────
   // a search narrows the list as it is typed: every word, in a title (any language's), an author or an id, accents aside
   function fold(s) { return String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase(); }
-  function hay(p) { return fold([p.title, ...Object.values(p.titles || {}), ...(p.authors || []), p.id].join(' ')); }
+  function hay(p) { return fold([p.name || '', p.title, ...Object.values(p.titles || {}), ...(p.authors || []), p.id].join(' ')); }
+  // the folders inside a folder (null: at the top), in the order they were made; and a folder with all inside it
+  function kidsOf(id) { return folders.folders.filter((f) => (f.parent || null) === id); }
+  function inside(id) {
+    const out = new Set([id]);
+    for (let more = true; more;) {
+      more = false;
+      for (const f of folders.folders) if (out.has(f.parent) && !out.has(f.id)) { out.add(f.id); more = true; }
+    }
+    return out;
+  }
   function applySearch() {
     const list = side.querySelector('.sb-list');
     if (!list) return;
@@ -329,7 +350,10 @@
       }
     } else if (e.target.matches('.sb-fname-in')) {
       if (e.key === 'Enter') { e.preventDefault(); saveName(e.target.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); editing = null; moving = null; renderSidebar(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); editing = null; moving = null; within = null; renderSidebar(); }
+    } else if (e.target.matches('.sb-dname-in')) {
+      if (e.key === 'Enter') { e.preventDefault(); saveDocName(e.target.value); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); renaming = null; renderSidebar(); }
     } else if (e.target.matches('.sb-list .sb-item') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       const all = [...side.querySelectorAll('.sb-list .sb-row:not([hidden]) .sb-item')].filter((a) => a.offsetParent);
       const n = all.indexOf(e.target) + (e.key === 'ArrowDown' ? 1 : -1);
@@ -339,20 +363,51 @@
   });
   side.addEventListener('focusout', (e) => {   // a name left: kept when it has one
     if (e.target.matches('.sb-fname-in') && editing !== null) saveName(e.target.value);
+    else if (e.target.matches('.sb-dname-in') && renaming !== null) saveDocName(e.target.value);
   });
-  function editName(id, pid = null) {
-    editing = id; moving = pid;
+  // a folder's name written in place: a new one's (inside `parent`, which opens for it), or the folder's own
+  function editName(id, pid = null, parent = null) {
+    editing = id; moving = pid; within = parent;
+    if (parent && folded.delete(parent)) store.set(FOLDED, [...folded].join(' '));
     renderSidebar();
     const f = side.querySelector('.sb-fname-in');
     if (f) { f.focus(); f.select(); }
   }
   async function saveName(value) {
-    const id = editing, name = value.trim(), papers = moving ? [moving] : [];
-    editing = null; moving = null;
+    const id = editing, name = value.trim(), papers = moving ? [moving] : [], parent = within;
+    editing = null; moving = null; within = null;
     if (name && id) {
-      try { folders = await api('/api/folders', id === 'new' ? { op: 'new', name, papers } : { op: 'rename', id, name }); }
+      try { folders = await api('/api/folders', id === 'new' ? { op: 'new', name, papers, parent } : { op: 'rename', id, name }); }
       catch (err) { alert(err.message); }
     }
+    renderSidebar();
+  }
+  // a document's name in the library, written in its row: what the reader calls it (its own title stays its own;
+  // written back, or emptied, the name goes)
+  function editDocName(pid) {
+    renaming = pid;
+    renderSidebar();
+    const f = side.querySelector('.sb-dname-in');
+    if (f) { f.focus(); f.select(); }
+  }
+  async function saveDocName(value) {
+    const pid = renaming, p = papers.find((x) => x.id === pid), name = value.trim();
+    renaming = null;
+    if (!p || name === (p.name || '')) { renderSidebar(); return; }
+    const own = [p.title, ...Object.values(p.titles || {})].includes(name);
+    if (!p.name && (own || !name)) { renderSidebar(); return; }
+    await nameDoc(pid, own ? '' : name);
+  }
+  async function nameDoc(pid, name) {
+    try { papers = await api('/api/papers/name', { paper: pid, name }); }
+    catch (err) { alert(err.message); }
+    renderSidebar();
+    const p = papers.find((x) => x.id === pid);
+    if (PAPER && PAPER.id === pid && p && window.__reader && window.__reader.rename) window.__reader.rename(p.name || '');
+  }
+  async function nestFolder(id, parent) {
+    try { folders = await api('/api/folders', { op: 'nest', id, parent }); }
+    catch (err) { alert(err.message); }
     renderSidebar();
   }
   async function moveTo(pid, folder) {
@@ -375,24 +430,39 @@
     side.querySelectorAll('.menu-on').forEach((x) => x.classList.remove('menu-on'));
     if (stale) renderSidebar();
   }
+  // a folder's: a folder inside it, its name, up out of the folder it is in, deleted
   function folderMenu(btn, id, at) {
-    const T = t();
-    showMenu(btn, `<button type="button" role="menuitem" data-act="rename">${esc(T.f_rename)}</button>` +
+    const T = t(), f = folders.folders.find((x) => x.id === id), up = f && f.parent ? folders.folders.find((x) => x.id === f.parent) : null;
+    showMenu(btn, `<button type="button" role="menuitem" data-act="sub">${FOLDER_NEW}<span class="sb-mname">${esc(T.f_new_sub)}…</span></button>` +
+      `<button type="button" role="menuitem" data-act="rename">${esc(T.f_rename)}</button>` +
+      (up ? `<button type="button" role="menuitem" data-act="up">${esc(T.f_up)}</button>` : '') +
       `<button type="button" role="menuitem" class="danger" data-act="delete">${esc(T.f_delete)}</button>`,
-    (a) => { if (a.dataset.act === 'rename') editName(id); else deleteFolder(id); }, at);
+    (a) => {
+      const act = a.dataset.act;
+      if (act === 'sub') editName('new', null, id);
+      else if (act === 'rename') editName(id);
+      else if (act === 'up') nestFolder(id, up.parent || null);
+      else deleteFolder(id);
+    }, at);
   }
-  // a document's, at a right click on it: into a folder (however far down the list it is), out of its own, into a new
-  // one named there, or deleted
+  // the folders as a tree, each with how deep it is: [folder, depth], in the order the sidebar shows them
+  function tree(id = null, depth = 0) { return kidsOf(id).flatMap((f) => [[f, depth], ...tree(f.id, depth + 1)]); }
+  // a document's, at a right click on it: into a folder (however far down the list it is, however deep), out of its
+  // own, into a new one named there; its name in the library; or deleted
   function docMenu(btn, pid, at) {
-    const T = t(), here = folders.of[pid] || null;
-    const fs = folders.folders.map((f) => `<button type="button" role="menuitemradio" aria-checked="${f.id === here}" data-to="${f.id}">` +
+    const T = t(), here = folders.of[pid] || null, p = papers.find((x) => x.id === pid);
+    const fs = tree().map(([f, depth]) => `<button type="button" role="menuitemradio" aria-checked="${f.id === here}" data-to="${f.id}" style="--d:${depth}">` +
       `${FOLDER}<span class="sb-mname">${esc(f.name)}</span></button>`).join('');
     showMenu(btn, (fs ? `<div class="sb-mlabel">${esc(T.f_move_to)}</div>${fs}` : '') +
       (here ? `<button type="button" role="menuitem" data-to="">${esc(T.f_take_out)}</button>` : '') +
       `<button type="button" role="menuitem" data-act="new">${FOLDER_NEW}<span class="sb-mname">${esc(T.f_new)}…</span></button>` +
-      `<div class="sb-msep" role="separator"></div><button type="button" role="menuitem" class="danger" data-act="delete">${esc(T.del_paper)}</button>`,
+      `<div class="sb-msep" role="separator"></div><button type="button" role="menuitem" data-act="rename">${esc(T.f_rename)}</button>` +
+      (p && p.name ? `<button type="button" role="menuitem" data-act="unname">${esc(T.d_unname)}</button>` : '') +
+      `<button type="button" role="menuitem" class="danger" data-act="delete">${esc(T.del_paper)}</button>`,
     (a) => {
       if (a.dataset.act === 'new') editName('new', pid);
+      else if (a.dataset.act === 'rename') editDocName(pid);
+      else if (a.dataset.act === 'unname') nameDoc(pid, '');
       else if (a.dataset.act === 'delete') deletePaper(pid);
       else if ((a.dataset.to || null) !== here) moveTo(pid, a.dataset.to || null);
     }, at);
@@ -430,7 +500,7 @@
   document.addEventListener('click', (e) => { if (menu && !menu.contains(e.target) && !e.target.closest('.sb-fmenu')) closeMenu(); });
   side.addEventListener('contextmenu', (e) => {
     const row = e.target.closest('.sb-row[data-pid]'), head = !row && e.target.closest('.sb-folder[data-folder] > .sb-frow');
-    if (!row && !(head && head.querySelector('.sb-fmenu'))) { closeMenu(); return; }   // (a name being written: the field's own)
+    if ((!row || !row.querySelector('.sb-item')) && !(head && head.querySelector('.sb-fmenu'))) { closeMenu(); return; }   // (a name being written: the field's own)
     e.preventDefault();
     const at = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null;   // (none from the keyboard: by the row)
     if (row) docMenu(row.querySelector('.sb-item'), row.dataset.pid, at);
@@ -452,8 +522,16 @@
       if (menu) closeMenu(); else folderMenu(b, b.closest('.sb-folder').dataset.folder);
     }
   });
-  // a document dragged into a folder (onto its name, or into it), or out of any (onto the rest of the list)
+  // a document dragged into a folder (onto its name, or into it), or out of any (onto the rest of the list); a folder
+  // dragged into another (not into itself, nor into one inside it), or to the top the same way
   const dropOn = (e) => e.target.closest && (e.target.closest('.sb-folder[data-folder]') || e.target.closest('.sb-out, .sb-loose'));
+  const parentOf = (id) => ((folders.folders.find((f) => f.id === id) || {}).parent || null);
+  // where the thing dragged may go: the folder (null: out of any, to the top); undefined where it is already, or cannot
+  function dropTo(at) {
+    const to = at.matches('.sb-folder') ? at.dataset.folder : null;
+    if (draggingFolder) return parentOf(draggingFolder) === to || (to && inside(draggingFolder).has(to)) ? undefined : to;
+    return (folders.of[dragging] || null) === to ? undefined : to;
+  }
   // held near the list's top or bottom (or over the search above it), the list scrolls, the faster the nearer its edge:
   // a document far down reaches the folders at the top
   const EDGE = 48;
@@ -465,7 +543,7 @@
     edgeAt = performance.now();
     if (!edgeStep || edgeRaf) return;
     const step = () => {   // (until the drag ends, leaves the sidebar or stops near the edge)
-      if (!dragging || !edgeStep || performance.now() - edgeAt > 700) { edgeRaf = 0; return; }
+      if (!(dragging || draggingFolder) || !edgeStep || performance.now() - edgeAt > 700) { edgeRaf = 0; return; }
       list.scrollTop += edgeStep;
       edgeRaf = requestAnimationFrame(step);
     };
@@ -473,6 +551,15 @@
   }
   side.addEventListener('dragstart', (e) => {
     const row = e.target.closest && e.target.closest('.sb-row[data-pid]');
+    const head = !row && e.target.closest && e.target.closest('.sb-folder[data-folder] > .sb-frow');
+    if (head) {
+      draggingFolder = head.parentElement.dataset.folder;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-textfold-folder', draggingFolder);
+      side.classList.add('dragging');
+      side.classList.toggle('from-folder', !!parentOf(draggingFolder));
+      return;
+    }
     if (!row) return;
     dragging = row.dataset.pid;
     e.dataTransfer.effectAllowed = 'move';
@@ -481,17 +568,15 @@
     side.classList.toggle('from-folder', !!folders.of[dragging]);
   });
   side.addEventListener('dragend', () => {
-    dragging = null; edgeStep = 0;
+    dragging = null; draggingFolder = null; edgeStep = 0;
     side.classList.remove('dragging', 'from-folder');
     side.querySelectorAll('.drop').forEach((x) => x.classList.remove('drop'));
   });
   side.addEventListener('dragover', (e) => {
-    if (dragging) edgeScroll(e);
-    const at = dragging && dropOn(e);
+    if (dragging || draggingFolder) edgeScroll(e);
+    const at = (dragging || draggingFolder) && dropOn(e);
     side.querySelectorAll('.drop').forEach((x) => { if (x !== at) x.classList.remove('drop'); });
-    if (!at) return;
-    const to = at.matches('.sb-folder') ? at.dataset.folder : null;
-    if ((folders.of[dragging] || null) === to) return;   // (where it is already)
+    if (!at || dropTo(at) === undefined) return;   // (where it is already)
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     at.classList.add('drop');
@@ -502,12 +587,13 @@
     if (at && !at.contains(e.relatedTarget)) at.classList.remove('drop');
   });
   side.addEventListener('drop', (e) => {
-    const at = dragging && dropOn(e);
+    const at = (dragging || draggingFolder) && dropOn(e);
     if (!at) return;
     e.preventDefault();
-    const pid = dragging, to = at.matches('.sb-folder') ? at.dataset.folder : null;
-    dragging = null;
-    if ((folders.of[pid] || null) !== to) moveTo(pid, to);
+    const pid = dragging, fid = draggingFolder, to = dropTo(at);
+    dragging = null; draggingFolder = null;
+    if (to === undefined) return;
+    if (fid) nestFolder(fid, to); else moveTo(pid, to);
   });
 
   // ── jobs ─────────────────────────────────────────────────────────────
@@ -735,10 +821,25 @@
         catch (x) { update.fail(x); acc.disabled = false; }
       };
     }
+    // A translation stored with paragraphs it has none for (PAPER.gaps: a call that failed, a paragraph the model left
+    // out; or made before TextFold asked for them again): they are asked for as it is opened, with the model in use, the
+    // rest kept. Once a visit for as many as there are, so one that will not translate is not asked for at every
+    // opening; the language menu asks again (asked).
+    function fillGaps(lang, asked) {
+      const n = (PAPER.gaps || {})[lang], key = `tf-gaps:${PAPER.id}:${lang}`;
+      if (!n || jobFor(PAPER.id) || !modelName) return;
+      let tried = null;
+      try { tried = sessionStorage.getItem(key); } catch { /* private window */ }
+      if (!asked && tried === String(n)) return;
+      try { sessionStorage.setItem(key, String(n)); } catch { /* private window */ }
+      const update = toastFor(lang, t().gaps_filling.replace('{n}', n));
+      submit(PAPER.id, lang, false, update).catch(update.fail);
+    }
     window.DRApp = {
       onLang(lang, readerLang) {   // (readerLang: the reader's language, which a switch of the paper's moves)
         if (readerLang && readerLang !== readLang && READ[readerLang]) { readLang = readerLang; uiLang = I18N.uiFor(readerLang); }
         renderSidebar();
+        fillGaps(lang);
       },
       generate(lang, force) {
         const T = t(), name = nameOf(lang);
@@ -746,8 +847,9 @@
         const update = toastFor(lang);
         submit(PAPER.id, lang, force, update).catch(update.fail);
       },
+      fill(lang) { fillGaps(lang, true); },
     };
-    api('/api/models').then((d) => { modelData = d; modelName = d.selectedName || ''; askName = d.askName || ''; renderSidebar(); }).catch(() => {});
+    const modelsIn = api('/api/models').then((d) => { modelData = d; modelName = d.selectedName || ''; askName = d.askName || ''; renderSidebar(); }).catch(() => {});
     api('/api/papers').then((p) => { papers = p; renderSidebar(); }).catch(() => {});
     api('/api/folders').then((f) => { folders = f; renderSidebar(); }).catch(() => {});
     api('/api/jobs').then((j) => {
@@ -759,7 +861,7 @@
         const update = toastFor(mine.lang, t().read_first);
         watchers.set(mine.id, (x) => { update(x); if (!live(x)) watchers.delete(x.id); });
         update(mine);
-      }
+      } else modelsIn.then(() => fillGaps((window.__reader && window.__reader.lang) || new URLSearchParams(location.search).get('lang') || 'en'));
       if (j.some(live)) startPolling();
     }).catch(() => {});
   }
