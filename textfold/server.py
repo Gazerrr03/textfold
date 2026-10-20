@@ -18,6 +18,8 @@
   POST /api/providers/save    {key?, preset, name, base, api_key?, models}  ·  POST /api/providers/remove {key}
   POST /api/settings          {use_thoughtdag_env}  ·  POST /api/settings/test {model?} or {task: "ask"}: one tiny call
   GET  /api/notes/<id>        the reader's notes on a paper (docs/notes-format.md)
+  GET  /api/doc/<id>?lang=xx  the document in the TextFold format (docs/format.md), as `textfold get --json` writes it,
+                              from its layers alone: nothing is generated, no model is called
   POST /api/files             a file dropped on the landing, its bytes (X-Name, X-Lang): a PDF (X-Refs: the papers it
                               names), or a Word, PowerPoint, Excel, EPUB, HTML file or picture: through the PDF engine
   GET  /api/pdf/<id>          the paper's original PDF (arXiv, PubMed Central, bioRxiv), fetched once and kept (pdf.py)
@@ -65,7 +67,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import agents, bridges, build, engine, fetch, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
+from . import agents, bridges, build, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
 
 STATIC = {"app.js": "text/javascript", "app.css": "text/css", "reader.js": "text/javascript",
           "reader.css": "text/css", "i18n.js": "text/javascript", "tutorial.js": "text/javascript"}
@@ -602,6 +604,14 @@ def make_handler(jobs):
                 m = re.fullmatch(r"/api/notes/([\w.-]+)", u.path)
                 if m and store.valid_id(m.group(1)) and (store.pdir(m.group(1)) / "meta.json").exists():
                     return self.json(notes.read(m.group(1)))
+                m = re.fullmatch(r"/api/doc/([\w.-]+)", u.path)   # (a document not folded yet: its local levels, said so)
+                if m:
+                    pid, lang = m.group(1), (parse_qs(u.query).get("lang") or ["en"])[0]
+                    if not (store.valid_id(pid) and (store.pdir(pid) / "meta.json").exists() and (store.pdir(pid) / "source.html").exists()):
+                        return self.json({"error": "no such paper"}, 404)
+                    if lang not in langs.LANGS:
+                        return self.json({"error": f"unknown language {lang}"}, 400)
+                    return self.json(fold.document(pid, lang))
                 m = re.fullmatch(r"/api/pdf/([\w.-]+)", u.path)
                 if m and store.valid_id(m.group(1)) and (store.pdir(m.group(1)) / "meta.json").exists():
                     f = pdf.path(m.group(1)) if pdf.has_source(m.group(1)) else None

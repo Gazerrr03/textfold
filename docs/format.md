@@ -5,7 +5,8 @@ write: a reader app, an agent that wants the gist before it spends its context o
 to know which lines a model wrote and what they rest on.
 
 `python3 -m textfold get <link or file> --json` writes it; `python3 -m textfold get <link> --level key --section 3` writes one level of one
-section as Markdown. Version 0 may still change: fields will be added without a new version, and a field renamed or
+section as Markdown. A running server gives it too, from what is stored and without calling a model:
+`GET /api/doc/<id>?lang=<code>`. Version 0 may still change: fields will be added without a new version, and a field renamed or
 removed will come with version 1.
 
 ## The contract
