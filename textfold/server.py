@@ -2,7 +2,8 @@
 
   GET  /                      landing: paste a link, pick a language, the list of papers
   GET  /p/<id>?lang=xx        a paper in the reader
-  GET  /api/papers            the papers on disk, each with when it came in and was last opened (library.py)
+  GET  /api/papers            the papers on disk, each with when it came in and was last opened (library.py), and its
+                              citekey when it was read from a Zotero item that has one (zotero.citekeys)
   GET  /api/jobs              generation jobs (queued, running, recently finished)
   POST /api/jobs/stop         {id}: stop a job: a queued one is dropped; a running one ends once the model calls under way
                               return (what they wrote is kept in the cache, so starting it again goes on from there)
@@ -475,8 +476,14 @@ def reader_page(pid):
 
 
 def listed():
-    """The papers for the list: those on disk, with when each came in and was last opened."""
-    return library.stamp(store.papers())
+    """The papers for the list: those on disk, with when each came in and was last opened, and the citekey of each one
+    read from a Zotero item that has one."""
+    rows = library.stamp(store.papers())
+    keys = zotero.citekeys()
+    for p in rows:
+        if keys.get(p["id"]):
+            p["citekey"] = keys[p["id"]]
+    return rows
 
 
 def landing_page(jobs):
@@ -660,7 +667,7 @@ def make_handler(jobs):
                         got = zotero.read(lib, key)
                         if "ref" in got:   # generated as a pasted link is (from the page, which asks for a model first)
                             pid = store.resolve(got["ref"])
-                            zotero.link(lib, key, pid, got["title"])
+                            zotero.link(lib, key, pid, got["title"], got["record"])
                             return self.json({"ref": pid, "title": got["title"]})
                     except zotero.Off as e:
                         return self.json({"error": str(e)}, 503)
