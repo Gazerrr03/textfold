@@ -2356,9 +2356,24 @@
     if (!el) return;
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
-    flash(el);
+    // all that the link names, flashed together: a run of paragraphs (#u=<first>&to=<last>), a section with the
+    // subsections under it (#s=)
+    const to = !n && u && (/[#&]to=([^&]+)/.exec(location.hash) || [])[1];
+    const all = to ? unitsBetween(decodeURIComponent(u), decodeURIComponent(to)).map((x) => unitEl.get(x)) : sc ? sectionWith(sc.c).map((x) => secs.get(x.id).sec) : [el];
+    for (const x of all) { if (x._stale) renderUnit(x.dataset.u, true); flash(x); }
     const tm = n && /[#&]t=(\d{1,3})(?:&|$)/.exec(location.hash);
     if (n) setTimeout(() => { openNote(n); if (tm) showTurn(n, +tm[1]); }, 300);
+  }
+  // the paragraphs from one to another, in reading order (either way round; the first alone when the other is not here)
+  function unitsBetween(a, b) {
+    const i = order.get(a), j = order.has(b) ? order.get(b) : i;
+    return i === undefined ? [] : IDS.slice(Math.min(i, j), Math.max(i, j) + 1);
+  }
+  // a section and the subsections under it, in order (the page keeps them side by side: a deeper one follows its own)
+  function sectionWith(c) {
+    const out = [c];
+    for (let j = D.chunks.indexOf(c) + 1; j < D.chunks.length && (D.chunks[j].level || 2) > (c.level || 2); j++) out.push(D.chunks[j]);
+    return out;
   }
   // one turn of a conversation, in the chat or in the note's window, brought into view (#n=<id>&t=<turn>)
   function showTurn(n, k) {
@@ -2457,19 +2472,37 @@
     for (const x of f.querySelectorAll('math')) x.replaceWith(x.getAttribute('alttext') ? `$${x.getAttribute('alttext')}$` : x.textContent);
     for (const x of f.querySelectorAll('.np-cite.in, .np-inf')) x.replaceWith(` (${x.textContent.trim()})`);
     for (const x of f.querySelectorAll('.np-cite.bad, .np-tdel, .np-next, .ch-try')) x.remove();
+    for (const x of f.querySelectorAll('.num')) x.after(' ');   // (a heading's number, set apart by its margin)
     return f.textContent.replace(/[\u200b\s]+/g, ' ').trim();
   }
-  // what a handle's paragraph, heading or summary gives
+  const headingOf = (c) => `${c.num || ''} ${secTitle(c)}`.trim();
+  const summaryOf = (c) => { const lad = (trOf(c) && trOf(c).lad) || c.lad; return lad && lad.take.length ? toksText(lad.take, 0, lad.take.length - 1) : ''; };
+  // what a handle's paragraph, heading or summary gives (a heading: its whole section)
   function itemDrag(el) {
     if (el.classList.contains('u')) {
       const uid = el.dataset.u, L = levelOf(uid);
-      return { kind: 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2 };
+      return { kind: 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2, units: [uid] };
     }
     const sc = secOfEl(el);
     if (!sc) return null;
-    const c = sc.c, lad = (trOf(c) && trOf(c).lad) || c.lad;
-    if (el === sc.st) return { kind: 'summary', c, L: level, text: lad && lad.take.length ? toksText(lad.take, 0, lad.take.length - 1) : '', written: true };
-    return { kind: 'section', c, L: level, text: `${c.num || ''} ${secTitle(c)}`.trim(), written: false };
+    if (el === sc.st) return { kind: 'summary', c: sc.c, L: level, text: summaryOf(sc.c), written: true };
+    return sectionDrag(sc.c);
+  }
+  // a section as it reads at the level shown: its summary (where the level shows it, Key and Takeaway), then its
+  // paragraphs, a bullet each at the written levels, a paragraph each at Brief and Full; and so through the subsections
+  // under it, each after its own heading
+  function sectionDrag(c) {
+    const written = level <= 2, blocks = [], units = [];
+    for (const x of sectionWith(c)) {
+      const head = [x === c ? '' : headingOf(x), level >= 1 && written ? summaryOf(x) : ''].filter(Boolean), paras = [];
+      for (const uid of x.units) {
+        const t = unitEl.has(uid) ? piecesText(pieces(uid, levelOf(uid))) : '';
+        if (t) { paras.push(t); units.push(uid); }
+      }
+      if (written) blocks.push([...head, ...paras.map((t) => `- ${t}`)].join('\n'));
+      else blocks.push(...head, ...paras);
+    }
+    return { kind: 'section', c, L: level, heading: headingOf(c), text: blocks.filter(Boolean).join('\n\n'), written, units };
   }
   // a section's card on the Topic map: its topic, then the topics of its paragraphs (its chips), as the map reads
   function cardDrag(card) {
@@ -2477,8 +2510,9 @@
     if (!sc) return null;
     const c = sc.c, lad = (trOf(c) && trOf(c).lad) || c.lad;
     const topic = lad && lad.topic ? lad.topic.filter((i) => lad.take[i]).map((i) => tokPlain(lad.take[i]) + (lad.take[i].s ? ' ' : '')).join('').trim() : '';
-    const chips = c.units.filter((uid) => unitEl.has(uid)).map((uid) => piecesText(pieces(uid, 0))).filter(Boolean);
-    return { kind: 'section', c, L: 0, text: [topic, chips.join(' · ')].filter(Boolean).join('\n'), written: true };
+    const units = c.units.filter((uid) => unitEl.has(uid) && piecesText(pieces(uid, 0)));
+    const chips = units.map((uid) => piecesText(pieces(uid, 0)));
+    return { kind: 'section', c, L: 0, heading: headingOf(c), text: [topic, chips.join(' · ')].filter(Boolean).join('\n'), written: true, units };
   }
   // a note's card, or its row in the notes list: a highlight or a note (its quote, and the reader's words), or a
   // conversation (the reader's question, and the model's answer in one sentence)
@@ -2503,38 +2537,52 @@
     return { kind: 'ask', note: n, turn: k, part: answer ? 'a' : 'q', c: secOfNote(n), L: level, text: words || (answer ? answerText(x.a).trim() : x.q),
       written: answer, quote: (a.quote && a.quote.exact) || '', comment: answer ? x.q : '' };
   }
-  // a selection: the paragraph it starts in (or the section, when it starts on a heading or a summary)
+  // a selection: its words, a paragraph each (a heading or a summary it crosses too), and every paragraph it touches;
+  // the link names them from the first to the last (in one paragraph, that paragraph; in headings alone, the section)
   function selectionDrag(range) {
-    const text = selectionText(range);
-    if (!text) return null;
-    const start = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-    const el = start && start.closest(HANDLED);
-    let uid = el && el.classList.contains('u') ? el.dataset.u : null, sc = !uid && el ? secOfEl(el) : null;
-    if (!uid && !sc) uid = [...unitEl.keys()].find((x) => range.intersectsNode(unitEl.get(x)._tx)) || null;
-    if (!uid && !sc) return null;
-    const L = uid ? levelOf(uid) : level;
-    return { kind: 'selection', uid, c: uid ? chunkOf[uid] || null : sc.c, L, text, written: L <= 2 || (!!sc && el === sc.st), quote: text };
+    const parts = [];
+    for (const el of docEl.querySelectorAll('.hd, .stake, .u')) {
+      const box = el.classList.contains('u') ? el._tx : el;
+      if (!box || el.hidden || !range.intersectsNode(box) || !box.getClientRects().length) continue;   // (a summary the level does not show)
+      const r = range.cloneRange();
+      if (!box.contains(range.startContainer)) r.setStart(box, 0);
+      if (!box.contains(range.endContainer)) r.setEnd(box, box.childNodes.length);
+      const text = selectionText(r);
+      if (text) parts.push({ el, uid: el.classList.contains('u') ? el.dataset.u : null, text });
+    }
+    if (!parts.length) return null;
+    const units = parts.filter((x) => x.uid).map((x) => x.uid), text = parts.map((x) => x.text).join('\n\n');
+    const sc = units.length ? null : secOfEl(parts[0].el);
+    if (!units.length && !sc) return null;
+    const L = units.length ? levelOf(units[0]) : level;
+    return { kind: 'selection', uid: units[0] || null, to: units.length > 1 ? units[units.length - 1] : null, c: units.length ? chunkOf[units[0]] || null : sc.c, L, text,
+      written: units.some((x) => levelOf(x) <= 2) || parts.some((x) => x.el.classList.contains('stake')), quote: text, units };
   }
   function dragData(d) {
     const m = D.meta, title = m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title, c = d.c;
     const q = new URLSearchParams({ paper: m.id });
-    if (d.note) { q.set('n', d.note.id); if (d.turn !== undefined) q.set('t', d.turn); } else if (d.uid) q.set('u', d.uid); else if (c) q.set('s', c.id);
+    if (d.note) { q.set('n', d.note.id); if (d.turn !== undefined) q.set('t', d.turn); } else if (d.uid) { q.set('u', d.uid); if (d.to) q.set('to', d.to); } else if (c) q.set('s', c.id);
     if (!d.note) q.set('level', LEVEL_NAMES[d.L]);
     q.set('lang', lang);
     const link = `textfold://open?${q}`, citekey = m.zotero && m.zotero.citekey;
     const json = { format: 'textfold/drag', version: 1, paper: m.id, title, authors: m.authors || [], ...(citekey ? { citekey } : {}),
-      section: c ? { id: c.id, num: c.num || '', title: secTitle(c) } : null, kind: d.kind, level: LEVEL_NAMES[d.L], lang,
-      text: d.text, written: d.written, ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
+      section: c ? { id: c.id, num: c.num || '', title: secTitle(c) } : null, ...(d.heading ? { heading: d.heading } : {}), kind: d.kind, level: LEVEL_NAMES[d.L], lang,
+      text: d.text, written: d.written, ...(d.units ? { units: d.units } : {}), ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
     const where = c ? `${title} › ${`${c.num || ''} ${secTitle(c)}`.trim()}` : title;
     // after the quote: a note's text, or a conversation's question (in bold) and its answer (Markdown, the model's)
     const said = (d.part === 'q' ? [[d.text, true]] : d.kind === 'ask' ? [[d.comment, true], [d.text, false, true]] : d.kind === 'note' ? [[d.comment]] : []).filter(([x]) => x);
     const shown = d.kind === 'note' || d.kind === 'ask' ? d.quote : d.text;
-    const md = [shown ? shown.split('\n').map((l) => `> ${l}`).join('\n>\n') : '', ...said.map(([x, b]) => (b ? `**${x}**` : x)),
+    // the quote: each line a paragraph of it, bullets that follow one another one list
+    const bullet = (l) => l.startsWith('- ');
+    const quoted = (x) => x.split('\n').map((l, i, a) => (i && l && a[i - 1] && !(bullet(l) && bullet(a[i - 1])) ? '>\n' : '') + (l ? `> ${l}` : '>')).join('\n');
+    const md = [shown ? quoted(shown) : '', ...said.map(([x, b]) => (b ? `**${x}**` : x)),
       `— [${where.replace(/([[\]])/g, '\\$1')}](${link})`].filter(Boolean).join('\n\n');
     const para = (x, b, md) => (md ? mdLite(x) : `<p>${b ? '<strong>' : ''}${esc(x).replace(/\n/g, '<br>')}${b ? '</strong>' : ''}</p>`);
-    const html = `<div data-textfold="${esc(JSON.stringify(json))}">${shown ? `<blockquote>${para(shown)}</blockquote>` : ''}` +
+    const blocks = (x) => x.split(/\n{2,}/).map((blk) => blk.split('\n').reduce((h, l) => (bullet(l)
+      ? (h.endsWith('</ul>') ? h.slice(0, -5) : `${h}<ul>`) + `<li>${esc(l.slice(2))}</li></ul>` : `${h}<p>${esc(l)}</p>`), '')).join('');
+    const html = `<div data-textfold="${esc(JSON.stringify(json))}">${shown ? `<blockquote>${blocks(shown)}</blockquote>` : ''}` +
       `${said.map(([x, b, md]) => para(x, b, md)).join('')}<p>— <a href="${esc(link)}">${esc(where)}</a></p></div>`;
-    return { md, html, link, json: JSON.stringify(json), label: (d.text || shown || where).replace(/\s+/g, ' ').slice(0, 90) };
+    return { md, html, link, json: JSON.stringify(json), label: (d.heading || d.text || shown || where).replace(/\s+/g, ' ').slice(0, 90) };
   }
   document.addEventListener('dragstart', (e) => {
     const t = e.target.nodeType === 1 ? e.target : e.target.parentElement, sel = getSelection();
