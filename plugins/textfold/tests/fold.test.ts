@@ -49,12 +49,11 @@ describe('folding', () => {
     expect(t).toContain('def key(pid, lang="en"):')
   })
 
-  test('Points keeps one sentence a paragraph and item, and folds code to a line', async () => {
+  test('Points keeps one sentence a paragraph and item, and short code', async () => {
     const t = fold(REPLY, 3).text
     expect(t).toContain('The bug was in the cache key, and it is fixed. …')
     expect(t).toContain('- Updated `store.key()` to take a language. …')
-    expect(t).toContain('`⋯ 2 lines of code`')
-    expect(t).not.toContain('def key')
+    expect(t).toContain('def key(pid, lang="en"):')
   })
 
   test('Outline keeps the headings and the first sentence under each', async () => {
@@ -83,6 +82,26 @@ describe('folding', () => {
     const counts = [1, 2, 3, 4, 5].map((n) => fold(REPLY, n).shown)
     for (let i = 1; i < counts.length; i++) expect(counts[i]!).toBeLessThan(counts[i - 1]!)
     expect(words('缓存键 cache key')).toBe(5)
+  })
+})
+
+describe('tables and code', () => {
+  const table = ['| Option | Cost |', '| --- | --- |', ...Array.from({ length: 10 }, (_, i) => `| ${i} | ${i}/mo |`)].join('\n')
+  const md = `The options compare like this. The cheapest is not the best.\n\n${table}\n\nPick the second one. It is the best value.`
+
+  test('a table is whole at Brief and Points, and gone at Outline and Gist', async () => {
+    expect(fold(md, 2).text).toContain(table)
+    expect(fold(md, 3).text).toContain(table)
+    expect(fold(md, 4).text).not.toContain('| Option')
+    expect(fold(md, 5).text).not.toContain('| Option')
+  })
+
+  test('code over Brief\'s 6 lines folds to its line at Brief and Points', async () => {
+    const code = ['```sh', ...Array.from({ length: 10 }, (_, i) => `echo ${i}`), '```'].join('\n')
+    const long = `Run this to see it. It prints ten lines.\n\n${code}`
+    expect(fold(long, 2).text).toContain('`⋯ 10 lines of code`')
+    expect(fold(long, 3).text).toContain('`⋯ 10 lines of code`')
+    expect(fold(long, 3).text).not.toContain('echo 9')
   })
 })
 
