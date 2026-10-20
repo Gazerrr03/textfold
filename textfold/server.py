@@ -9,14 +9,17 @@
   POST /api/generate          {paper, lang, force}: queue a generation; one runs at a time. paper: an arXiv id or
                               link, a PMC or PPR id, a DOI (Europe PMC, epmc.py), or a stored document's id
   POST /api/import            {name, text}: store a Markdown file as a paper (local.py); its id, to generate
-  GET  /api/models            saved configuration and the last model discovery results (no service probes)
+  GET  /api/models            saved configuration and the last model discovery results (no service probes); its "lang", the
+                              reader's language as the page last told it (null until it has), for other programs
+  GET  /api/langs             the languages a text can be read in: [{code, name}], each by its own name (langs.py)
   POST /api/models/refresh    refresh local model services in the background; GET /api/models reports progress/errors
   POST /api/models/select     {model, effort}: the model generations use; {task: "ask", model, effort}: the one questions
                               are answered with (none: the same) and its reasoning level (none: the default)
   POST /api/agents/scan       look for agents again (also done at startup)
   POST /api/providers/probe   {base, api_key | key, preset}: a provider's /models
   POST /api/providers/save    {key?, preset, name, base, api_key?, models}  ·  POST /api/providers/remove {key}
-  POST /api/settings          {use_thoughtdag_env}  ·  POST /api/settings/test {model?} or {task: "ask"}: one tiny call
+  POST /api/settings          {use_thoughtdag_env}, {pdf_tier}, {lang} (one of langs.py; else 400)  ·  POST /api/settings/test
+                              {model?} or {task: "ask"}: one tiny call
   GET  /api/notes/<id>        the reader's notes on a paper (docs/notes-format.md)
   POST /api/files             a file dropped on the landing, its bytes (X-Name, X-Lang): a PDF (X-Refs: the papers it
                               names), or a Word, PowerPoint, Excel, EPUB, HTML file or picture: through the PDF engine
@@ -148,6 +151,7 @@ def models_payload():
         "presets": providers.PRESETS[:-1] + [models.ANTHROPIC_PRESET, providers.PRESETS[-1]],
         "useThoughtdagEnv": s.get("use_thoughtdag_env", True), "thoughtdagEnv": providers.THOUGHTDAG_ENV.exists(),
         "pdfTier": s.get("pdf_tier") or "fast", "engine": engine.status(),
+        "lang": s.get("lang") if s.get("lang") in langs.LANGS else None,
     }
 
 
@@ -572,6 +576,8 @@ def make_handler(jobs):
                     return self.json(listed())
                 if u.path == "/api/folders":
                     return self.json(library.folders())
+                if u.path == "/api/langs":
+                    return self.json([{"code": code, "name": name} for code, name in langs.natives().items()])
                 if u.path == "/api/jobs":
                     return self.json(jobs.list())
                 if u.path in ("/api/models", "/api/settings"):
@@ -837,6 +843,10 @@ def make_handler(jobs):
                     models.save_settings(s)
                     return self.json(models_payload())
                 if u.path == "/api/settings":
+                    if "lang" in body:   # the reader's language, which the page keeps itself: for other programs to read
+                        if body["lang"] not in langs.LANGS:
+                            return self.json({"error": f"unknown language {body['lang']}"}, 400)
+                        s["lang"] = body["lang"]
                     if "use_thoughtdag_env" in body:
                         s["use_thoughtdag_env"] = bool(body["use_thoughtdag_env"])
                     if body.get("pdf_tier") in engine.TIERS:

@@ -33,7 +33,8 @@ file (the dashed box under the bar, or dropped anywhere on the page), and a lang
 the sources it reads; the sidebar lists every paper generated so far. In a paper,
 the language menu switches between generated languages, generates a new one, or regenerates the current one.
 One language, the reader's, any of `textfold/langs.py`: the browser's, or the one last chosen (kept in the browser,
-`pf-ui-lang`). A paper is read in it: its text, and the names of its own parts (figures, tables, theorems, references,
+`pf-ui-lang`; the page tells the server too, the settings' `lang`, which `GET /api/models` reports for other programs,
+and `GET /api/langs` lists the languages). A paper is read in it: its text, and the names of its own parts (figures, tables, theorems, references,
 equations). The interface speaks it when `web/i18n.js` has its words (English, 简体中文, 繁體中文, 日本語, 한국어, Español,
 Français, Deutsch, Português, Italiano, Русский, हिन्दी), and English otherwise, as are then the names of the paper's
 parts. A switch of either is a switch of both: the paper's menu at the top right, a language generated there, Settings,
