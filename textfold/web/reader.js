@@ -2357,13 +2357,23 @@
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
     flash(el);
-    if (n) setTimeout(() => openNote(n), 300);
+    const tm = n && /[#&]t=(\d{1,3})(?:&|$)/.exec(location.hash);
+    if (n) setTimeout(() => { openNote(n); if (tm) showTurn(n, +tm[1]); }, 300);
+  }
+  // one turn of a conversation, in the chat or in the note's window, brought into view (#n=<id>&t=<turn>)
+  function showTurn(n, k) {
+    const box = !chat.hidden && chatNote === n ? chat.querySelector('.ch-body') : popNote === n ? npop : null;
+    const turn = box && box.querySelectorAll(':scope > .np-turn')[k];
+    if (!turn) return;
+    box.scrollTop += turn.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+    flash(turn);
   }
 
   // ── dragged into another app (a notes app, an editor): what was dragged, as it reads, with a textfold:// link back to
-  //    exactly there (docs/drag-format.md). A paragraph, a heading, a section's summary or a chip on the map shows a
-  //    handle while the pointer is on it, so its text stays selectable; a note's card and a selection are dragged as
-  //    they are. One listener for every drag; the handle is outside the column, so the zoom's copies never hold it ──
+  //    exactly there (docs/drag-format.md). A paragraph, a heading or a section's summary shows a handle while the
+  //    pointer is on it, so its text stays selectable, and so does each message of a conversation (the chat, a note's
+  //    window); on the Topic map a section's card is dragged whole; a note's card and a selection are dragged as they
+  //    are. One listener for every drag; the handle is outside the column, so the zoom's copies never hold it ──
   const LEVEL_NAMES = ['topic', 'takeaway', 'key', 'brief', 'full'];
   const handle = h('div', 'draghandle');
   handle.draggable = true;
@@ -2371,55 +2381,89 @@
   const dragImg = h('div', 'dragimg');   // what the pointer carries: a line of what goes, not the whole paragraph
   document.body.append(handle, dragImg);
   let handleFor = null, handleTimer = 0;
-  const HANDLED = '.u, .hd, .stake';
-  function placeHandle(el) {
+  const HANDLED = '.u, .hd, .stake', SAID = '.np-q, .np-a';   // in the column; in a conversation
+  function placeHandle(el, again = false) {
     clearTimeout(handleTimer);
-    if (el === handleFor && !handle.hidden) return;
+    if (el === handleFor && !handle.hidden && !again) return;
     const r = el.getBoundingClientRect();
     if (!r.height) return;
+    const said = el.matches(SAID);
     handleFor = el;
-    handle.style.left = `${Math.max(2, r.left - 22) + scrollX}px`;
-    handle.style.top = `${r.top + scrollY + (el.dataset.l === '0' ? (r.height - 18) / 2 : 2)}px`;
+    handle.classList.toggle('slim', said);   // (in a conversation's margin, which is narrow)
+    handle.style.left = `${Math.max(2, r.left - (said ? 12 : 22))}px`;
+    handle.style.top = `${r.top + 2}px`;
     handle.hidden = false;
   }
   function hideHandle(now) {
     clearTimeout(handleTimer);
     if (now) { handle.hidden = true; handleFor = null; } else handleTimer = setTimeout(() => hideHandle(true), 220);
   }
-  // (on a move, not on entering: a pointer that rested on a paragraph through a zoom gets its handle once it moves)
+  // (on a move, not on entering: a pointer that rested on a paragraph through a zoom gets its handle once it moves; on
+  // the Topic map, none: its cards are dragged whole)
   docEl.addEventListener('mousemove', (e) => {
-    if (busy || stage || (!handle.hidden && handleFor && handleFor.contains(e.target))) return;
+    if (level === 0 || busy || stage || (!handle.hidden && handleFor && handleFor.contains(e.target))) return;
     const el = e.target.closest(HANDLED);
     if (el && !el.hidden) placeHandle(el);
   }, { passive: true });
-  docEl.addEventListener('mouseout', (e) => {
-    const el = e.target.closest(HANDLED);
+  for (const box of [chat, npop]) box.addEventListener('mousemove', (e) => {
+    if (!handle.hidden && handleFor && handleFor.contains(e.target)) return;
+    const el = e.target.closest(SAID);
+    if (el) placeHandle(el);
+  }, { passive: true });
+  for (const box of [docEl, chat, npop]) box.addEventListener('mouseout', (e) => {
+    const el = e.target.closest(box === docEl ? HANDLED : SAID);
     if (el && el === handleFor && !el.contains(e.relatedTarget) && e.relatedTarget !== handle) hideHandle();
   });
   handle.addEventListener('mouseenter', () => clearTimeout(handleTimer));
   handle.addEventListener('mouseleave', () => hideHandle());
-  // a zoom, a scroll or a key moves what it stood by: it comes back with the pointer
-  for (const ev of ['wheel', 'keydown', 'resize']) addEventListener(ev, () => { if (!handle.hidden) hideHandle(true); }, { passive: true });
-  addEventListener('pointerdown', (e) => { if (e.target !== handle && !handle.hidden) hideHandle(true); }, { passive: true });
+  // a zoom or a key moves what it stood by: it comes back with the pointer; a scroll (the page's, the chat's) takes it
+  // along, once a frame, while no zoom runs
+  const hideNow = () => { if (!handle.hidden) hideHandle(true); };
+  for (const ev of ['wheel', 'keydown', 'resize']) addEventListener(ev, hideNow, { passive: true });
+  let follow = false;
+  addEventListener('scroll', () => {
+    if (handle.hidden || follow) return;
+    follow = true;
+    requestAnimationFrame(() => { follow = false; if (handle.hidden) return; if (busy || stage || !handleFor || !handleFor.isConnected) hideNow(); else placeHandle(handleFor, true); });
+  }, { passive: true, capture: true });
+  addEventListener('pointerdown', (e) => { if (e.target !== handle) hideNow(); }, { passive: true });
+
+  // the Topic map: a section's card is dragged whole, grabbed anywhere (a click on a chip still opens it). It is made
+  // draggable as it is pressed, and only then, so the words of a paragraph opened in it stay selectable
+  let pressed = null;
+  docEl.addEventListener('mousedown', (e) => {
+    if (level !== 0 || e.button !== 0 || busy || stage) return;
+    const card = e.target.closest('section.chunk'), u = e.target.closest('.u');
+    if (!card || (u && u.dataset.l !== '0') || e.target.closest('a, button, details')) return;
+    card.draggable = true;
+    pressed = card;
+  });
+  const unpress = () => { if (pressed) { pressed.removeAttribute('draggable'); pressed = null; } };
+  addEventListener('mouseup', unpress);
+  addEventListener('dragend', unpress);
 
   // pieces as plain text: a formula as $LaTeX$, a gap as … (a CJK document's word may be a bare string)
   const piecesText = (pcs) => pcs.map((p, n) => (p.gap ? '…' : typeof p.tok === 'string' ? p.tok : tokPlain(p.tok)) + (n < pcs.length - 1 && (p.gap || p.tok.s || pcs[n + 1].gap) ? ' ' : '')).join('').replace(/\s+/g, ' ').trim();
   const secTitle = (c) => ((trOf(c) && trOf(c).title) || c.title || '').replace(/\s+/g, ' ').trim();
   const secOfEl = (el) => [...secs.values()].find((x) => x.hd === el || x.st === el);
+  const secOfNote = (n) => (n.anchor && n.anchor.section ? (secs.get(n.anchor.section) || {}).c || null : null);
   // the selection's words as they read: a formula of the paper as $LaTeX$, one the model wrote as its source, never the
-  // hidden source the page also holds
+  // hidden source the page also holds; in a conversation, a citation as its label in brackets, as the exports write it,
+  // and none of the buttons around the words
   function selectionText(range) {
     const f = range.cloneContents();
     for (const at of f.querySelectorAll('[data-id*="@"]')) { const k = at.dataset.id.split('@')[1].split('#')[0]; if (A[k]) at.replaceWith(tokPlain({ a: k })); }
     for (const k of f.querySelectorAll('.katex')) { const src = k.querySelector('annotation'); k.replaceWith(src ? `$${src.textContent}$` : k.textContent); }
     for (const x of f.querySelectorAll('math')) x.replaceWith(x.getAttribute('alttext') ? `$${x.getAttribute('alttext')}$` : x.textContent);
+    for (const x of f.querySelectorAll('.np-cite.in, .np-inf')) x.replaceWith(` (${x.textContent.trim()})`);
+    for (const x of f.querySelectorAll('.np-cite.bad, .np-tdel, .np-next, .ch-try')) x.remove();
     return f.textContent.replace(/[\u200b\s]+/g, ' ').trim();
   }
-  // what a handle's paragraph, heading, summary or chip gives
+  // what a handle's paragraph, heading or summary gives
   function itemDrag(el) {
     if (el.classList.contains('u')) {
       const uid = el.dataset.u, L = levelOf(uid);
-      return { kind: el.dataset.l === '0' ? 'chip' : 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2 };
+      return { kind: 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2 };
     }
     const sc = secOfEl(el);
     if (!sc) return null;
@@ -2427,16 +2471,37 @@
     if (el === sc.st) return { kind: 'summary', c, L: level, text: lad && lad.take.length ? toksText(lad.take, 0, lad.take.length - 1) : '', written: true };
     return { kind: 'section', c, L: level, text: `${c.num || ''} ${secTitle(c)}`.trim(), written: false };
   }
+  // a section's card on the Topic map: its topic, then the topics of its paragraphs (its chips), as the map reads
+  function cardDrag(card) {
+    const sc = secs.get(card.dataset.chunk);
+    if (!sc) return null;
+    const c = sc.c, lad = (trOf(c) && trOf(c).lad) || c.lad;
+    const topic = lad && lad.topic ? lad.topic.filter((i) => lad.take[i]).map((i) => tokPlain(lad.take[i]) + (lad.take[i].s ? ' ' : '')).join('').trim() : '';
+    const chips = c.units.filter((uid) => unitEl.has(uid)).map((uid) => piecesText(pieces(uid, 0))).filter(Boolean);
+    return { kind: 'section', c, L: 0, text: [topic, chips.join(' · ')].filter(Boolean).join('\n'), written: true };
+  }
   // a note's card, or its row in the notes list: a highlight or a note (its quote, and the reader's words), or a
   // conversation (the reader's question, and the model's answer in one sentence)
   function noteDrag(n) {
-    const a = n.anchor || {}, quote = (a.quote && a.quote.exact) || '', c = a.section ? (secs.get(a.section) || {}).c || null : null;
+    const a = n.anchor || {}, quote = (a.quote && a.quote.exact) || '', c = secOfNote(n);
     if (n.kind === 'ask') {
       const turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
       return { kind: 'ask', note: n, c, L: level, text: said ? said.takeaway || '' : '', written: !!said, quote, comment: (turns[0] || {}).q || '' };
     }
     const comment = (n.text || '').trim();
     return { kind: 'note', note: n, c, L: level, text: comment || quote, written: !comment && a.on === 'summary', quote, comment };
+  }
+  // one message of a conversation, in the chat or a note's window: its question, or its answer (its Markdown, a
+  // citation as its label), or words selected in it; with the turn, so the link opens there
+  function turnDrag(el, words = '') {
+    const inChat = chat.contains(el), n = inChat ? chatNote : popNote, turnEl = el && el.closest('.np-turn');
+    if (!n) return null;
+    if (!turnEl || n.kind !== 'ask') return inChat ? null : noteDrag(n);   // (the passage over a note's window)
+    const k = [...turnEl.parentElement.querySelectorAll(':scope > .np-turn')].indexOf(turnEl), x = turnsOf(n)[k];
+    if (!x) return null;
+    const answer = !!el.closest('.np-a'), a = n.anchor || {};
+    return { kind: 'ask', note: n, turn: k, part: answer ? 'a' : 'q', c: secOfNote(n), L: level, text: words || (answer ? answerText(x.a).trim() : x.q),
+      written: answer, quote: (a.quote && a.quote.exact) || '', comment: answer ? x.q : '' };
   }
   // a selection: the paragraph it starts in (or the section, when it starts on a heading or a summary)
   function selectionDrag(range) {
@@ -2453,7 +2518,7 @@
   function dragData(d) {
     const m = D.meta, title = m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title, c = d.c;
     const q = new URLSearchParams({ paper: m.id });
-    if (d.note) q.set('n', d.note.id); else if (d.uid) q.set('u', d.uid); else if (c) q.set('s', c.id);
+    if (d.note) { q.set('n', d.note.id); if (d.turn !== undefined) q.set('t', d.turn); } else if (d.uid) q.set('u', d.uid); else if (c) q.set('s', c.id);
     if (!d.note) q.set('level', LEVEL_NAMES[d.L]);
     q.set('lang', lang);
     const link = `textfold://open?${q}`, citekey = m.zotero && m.zotero.citekey;
@@ -2461,24 +2526,32 @@
       section: c ? { id: c.id, num: c.num || '', title: secTitle(c) } : null, kind: d.kind, level: LEVEL_NAMES[d.L], lang,
       text: d.text, written: d.written, ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
     const where = c ? `${title} › ${`${c.num || ''} ${secTitle(c)}`.trim()}` : title;
-    // after the quote: a note's text, or a conversation's question (in bold) and its answer
-    const said = (d.kind === 'ask' ? [[d.comment, true], [d.text]] : d.kind === 'note' ? [[d.comment]] : []).filter(([x]) => x);
+    // after the quote: a note's text, or a conversation's question (in bold) and its answer (Markdown, the model's)
+    const said = (d.part === 'q' ? [[d.text, true]] : d.kind === 'ask' ? [[d.comment, true], [d.text, false, true]] : d.kind === 'note' ? [[d.comment]] : []).filter(([x]) => x);
     const shown = d.kind === 'note' || d.kind === 'ask' ? d.quote : d.text;
-    const md = [shown ? shown.split('\n').map((l) => `> ${l}`).join('\n') : '', ...said.map(([x, b]) => (b ? `**${x}**` : x)),
+    const md = [shown ? shown.split('\n').map((l) => `> ${l}`).join('\n>\n') : '', ...said.map(([x, b]) => (b ? `**${x}**` : x)),
       `— [${where.replace(/([[\]])/g, '\\$1')}](${link})`].filter(Boolean).join('\n\n');
-    const para = (x, b) => `<p>${b ? '<strong>' : ''}${esc(x).replace(/\n/g, '<br>')}${b ? '</strong>' : ''}</p>`;
+    const para = (x, b, md) => (md ? mdLite(x) : `<p>${b ? '<strong>' : ''}${esc(x).replace(/\n/g, '<br>')}${b ? '</strong>' : ''}</p>`);
     const html = `<div data-textfold="${esc(JSON.stringify(json))}">${shown ? `<blockquote>${para(shown)}</blockquote>` : ''}` +
-      `${said.map(([x, b]) => para(x, b)).join('')}<p>— <a href="${esc(link)}">${esc(where)}</a></p></div>`;
-    return { md, html, link, json: JSON.stringify(json), label: (shown || d.text || where).slice(0, 90) };
+      `${said.map(([x, b, md]) => para(x, b, md)).join('')}<p>— <a href="${esc(link)}">${esc(where)}</a></p></div>`;
+    return { md, html, link, json: JSON.stringify(json), label: (d.text || shown || where).replace(/\s+/g, ' ').slice(0, 90) };
   }
   document.addEventListener('dragstart', (e) => {
     const t = e.target.nodeType === 1 ? e.target : e.target.parentElement, sel = getSelection();
+    const range = sel.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
     let d = null;
-    if (e.target === handle) d = handleFor && itemDrag(handleFor);
+    if (e.target === handle) d = handleFor && handleFor.isConnected ? (handleFor.matches(SAID) ? turnDrag(handleFor) : itemDrag(handleFor)) : null;
+    else if (t && t === pressed) d = cardDrag(t);
     else if (t && t.closest('.ncard[data-note], .nl-item[data-note]')) {
       const id = t.closest('[data-note]').dataset.note, n = notes.find((x) => x.id === id);
       d = n && noteDrag(n);
-    } else if (t && docEl.contains(t) && sel.rangeCount && !sel.isCollapsed && sel.getRangeAt(0).intersectsNode(e.target)) d = selectionDrag(sel.getRangeAt(0));
+    } else if (t && range && range.intersectsNode(e.target)) {
+      if (docEl.contains(t)) d = selectionDrag(range);
+      else if (chat.contains(t) || npop.contains(t)) {   // (words of a conversation: the message they start in)
+        const s0 = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+        d = turnDrag(s0.closest('.np-turn') ? s0 : t, selectionText(range));
+      }
+    }
     if (!d) return;
     const out = dragData(d), dt = e.dataTransfer;
     dt.clearData();
