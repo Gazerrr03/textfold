@@ -3,11 +3,13 @@
 One file per paper, papers/<id>/notes.json, in the format of docs/notes-format.md (the contract for every export).
 The notes are the reader's own: they are kept apart from the generated layers, and nothing here rewrites a layer.
 """
+import difflib
 import json
 import math
 import re
 import threading
 import time
+from collections import Counter
 
 from . import kinds, langs, llm, store
 from .tokens import plain
@@ -314,3 +316,234 @@ def ask(pid, nid, question, spec, timeout=300, ui=None, req=None):
             raise Stopped(req)
         put(pid, note)
     return note
+
+
+# ── after the text changed (a Markdown document replaced by its edited text, local.replace_text) ───────
+
+def reanchor(pid, old, new):
+    """Every note found again in the new text (new, parsed) of a paper whose old text was old. A paragraph still there,
+    word for word, keeps its notes as they were (only its id may be another: one read before ids were made from words).
+    A note on an edited or moved paragraph is found by its quote: its words where the words around them fit best, else
+    what now stands between the words that were around them. A note whose passage is gone is kept, marked "lost" with
+    where it was: on the edited paragraph it was on if that is still there, else on its section's title, so that the
+    reader lists and shows it; the next replace looks for it again. A conversation's citations follow the paragraphs."""
+    with _LOCK:
+        if not _file(pid).exists():
+            return None
+        data = read(pid)
+        moves = Moves(old, new)
+        data["notes"] = [moves.note(n) for n in data["notes"]]
+        data["paper"] = {**data.get("paper", {}), "title": new["meta"].get("title", "")}
+        _write(pid, data)
+    return data
+
+
+def _order(doc):
+    first = [uid for c in doc["chunks"] for uid in c["units"] if uid in doc["units"]]
+    return first + [uid for uid in doc["units"] if uid not in set(first)]
+
+
+def _piece(tk, atoms):
+    """A token as the reader quotes it (reader.js, tokPlain): a formula as $LaTeX$, another atom as its text."""
+    if "a" in tk:
+        at = atoms.get(tk["a"], {})
+        return f"${at.get('alt', '')}$" if at.get("kind") == "math" else (at.get("text") or "")
+    return f"${tk['x']}$" if "x" in tk else tk.get("t", "")
+
+
+def _quoted(toks, atoms, a, b, after=False, before=False):
+    """Tokens a..b as the reader quotes them (reader.js, toksText), with their spaces."""
+    s = ""
+    for i in range(a, b + 1):
+        s += _piece(toks[i], atoms) + (" " if toks[i].get("s") and (i < b or after) else "")
+    return (" " if before and 0 < a <= len(toks) and toks[a - 1].get("s") else "") + s
+
+
+def _spans(toks, atoms):
+    """A unit's text as the reader quotes it, and where each token lies in it."""
+    s, spans = "", []
+    for i, tk in enumerate(toks):
+        piece = _piece(tk, atoms)
+        spans.append((len(s), len(s) + len(piece)))
+        s += piece + (" " if tk.get("s") and i < len(toks) - 1 else "")
+    return s, spans
+
+
+def _at(doc, uid, start, end):
+    """The anchor of characters [start, end) of a unit's text, as the reader makes one: tokens, sentences, quote."""
+    u, A = doc["units"][uid], doc["atoms"]
+    toks = u["toks"]
+    inside = [i for i, (a, b) in enumerate(_spans(toks, A)[1]) if b > start and a < end]
+    if not inside:
+        return None
+    t0, t1 = inside[0], inside[-1]
+    return {"unit": uid, "section": u.get("chunk"), "tokens": [t0, t1],
+            "sents": [k for k, (a, b) in enumerate(u["sents"]) if b > t0 and a <= t1],
+            "quote": {"exact": _quoted(toks, A, t0, t1), "prefix": _quoted(toks, A, max(0, t0 - 12), t0 - 1, after=True)[-40:],
+                      "suffix": _quoted(toks, A, t1 + 1, min(len(toks) - 1, t1 + 12), before=True)[:40]}}
+
+
+def _sentences(doc, uid, sents):
+    """The quote of a unit's sentences (first to last) in the text's own words: what a note made in a translation is
+    found again by, since its tokens and its quote are the translation's, which is made again."""
+    u = doc["units"].get(uid)
+    if not u or not sents or max(sents) >= len(u["sents"]):
+        return None
+    spans = _spans(u["toks"], doc["atoms"])[1]
+    got = _at(doc, uid, spans[u["sents"][min(sents)][0]][0], spans[u["sents"][max(sents)][1] - 1][1])
+    return got and got["quote"]
+
+
+def _common(a, b):
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
+EDGE = 20   # what a passage at the start (or end) of its paragraph scores there, when it was at the start before too
+FIT = 8     # of several places with the same words, the words around one must fit this far to be chosen (a word or two)
+
+
+class Moves:
+    """Where the old text's paragraphs are in the new one, found by aligning the two in reading order: the paragraphs
+    still there word for word (same: a paragraph that repeats another is told apart by its place among the rest), the
+    ones edited (near: the most alike, at least half, of the new ones in their place), and where each one is or was among
+    the new paragraphs (at)."""
+
+    def __init__(self, old, new):
+        self.old, self.new = old, new
+        a, self.order = _order(old), _order(new)
+        ta = [plain(old["units"][u]["toks"], old["atoms"]) for u in a]
+        tb = [plain(new["units"][u]["toks"], new["atoms"]) for u in self.order]
+        self.texts = {uid: _spans(new["units"][uid]["toks"], new["atoms"])[0] for uid in self.order}
+        self.same, self.near, self.at = {}, {}, {}
+        for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, ta, tb, autojunk=False).get_opcodes():
+            for i in range(i1, i2):
+                self.at[a[i]] = j1 + (i - i1 if op == "equal" else 0)
+                if op == "equal":
+                    self.same[a[i]] = self.order[j1 + i - i1]
+            if op != "replace":
+                continue
+            free = set(range(j1, j2))
+            for i in range(i1, i2):
+                best, score = None, 0.5
+                for j in sorted(free, key=lambda j: abs(j - j1 - (i - i1)))[:12]:   # (the nearest: a long rewrite stays quick)
+                    m = difflib.SequenceMatcher(None, ta[i], tb[j], autojunk=False)
+                    if m.real_quick_ratio() > score and m.quick_ratio() > score and m.ratio() > score:
+                        best, score = j, m.ratio()
+                if best is not None:
+                    self.near[a[i]] = self.order[best]
+                    free.discard(best)
+
+    def chunk(self, uid):
+        return self.new["units"][uid].get("chunk")
+
+    def note(self, n):
+        a = dict(n.get("anchor") or {})
+        n = {**n, "anchor": a}
+        self.recite(n)
+        if a.get("on") == "paper":
+            return n
+        lost = a.get("lost")
+        was = lost or a   # where its passage was: the note's anchor, or (lost before) where it was when it was lost
+        if not was.get("unit"):   # a section's summary or title
+            olds = next((c["units"] for c in self.old["chunks"] if c["id"] == a.get("section")), [])
+            a["section"] = self.section(a.get("section"), olds)
+            return n
+        uid = was["unit"]
+        if not lost and uid in self.same:
+            a.update(unit=self.same[uid], section=self.chunk(self.same[uid]))
+            return n
+        got = self.passage(a, lost)
+        if got:
+            a.pop("lost", None)
+            a.pop("on", None)
+            a.update(got)
+            return n
+        if not lost:
+            lost = {"unit": uid, "section": a.get("section"), "tokens": a.get("tokens"), "sents": a.get("sents"), "since": now()}
+            if a.get("lang", "en") != "en":   # (its quote is the translation's: the text's own words, to look for next time)
+                lost["quote"] = _sentences(self.old, uid, a.get("sents"))
+        here = a.get("unit") and (self.same.get(a["unit"]) or self.near.get(a["unit"]))   # its paragraph, edited, still there
+        if here:
+            a.pop("on", None)
+            a.update(unit=here, section=self.chunk(here), tokens=None, sents=None, lost=lost)
+        else:
+            a.update(unit=None, section=self.section(a.get("section"), [uid]), on="title", tokens=None, sents=None, lost=lost)
+        return n
+
+    def passage(self, a, lost=None):
+        """A note's passage in the new text, as anchor fields, or None (lost: where it was when it was lost before).
+        Words the model wrote (no tokens) are not in the text: such a note goes with its paragraph, edited."""
+        was = lost or a
+        near, at = self.near.get(was["unit"]), self.at.get(was["unit"])
+        if was.get("tokens") is None:
+            return {"unit": near, "section": self.chunk(near), "tokens": None, "sents": None} if near else None
+        en = a.get("lang", "en") == "en"
+        q = (a.get("quote") or {}) if en else ((lost or {}).get("quote") or _sentences(self.old, was["unit"], was.get("sents")))
+        hit = q and self.found(q, near, at)
+        got = hit and _at(self.new, *hit)
+        if not got or en:
+            return got
+        return {"unit": got["unit"], "section": got["section"], "tokens": None, "sents": got["sents"]}
+
+    def found(self, quote, near=None, at=None):
+        """Where a quoted passage is in the new text: (unit, start, end) of its words, or None. Each place its exact words
+        are is scored by how much of the words before and after it fits (the paragraph it was on, edited, wins a tie,
+        then the place nearest its old one); one place alone is taken, but of several, one whose surroundings do not
+        fit is not guessed at. With the words themselves edited: what stands between the old words before and after
+        them, where those fit in one place only (or in the paragraph it was on)."""
+        exact, pre, suf = quote.get("exact") or "", quote.get("prefix") or "", quote.get("suffix") or ""
+        if not exact.strip():
+            return None
+        hits = []
+        for k, uid in enumerate(self.order):
+            text = self.texts[uid]
+            i = text.find(exact)
+            while i >= 0:
+                j = i + len(exact)
+                fit = ((_common(text[:i][::-1], pre[::-1]) if pre else EDGE * (i == 0))
+                       + (_common(text[j:], suf) if suf else EDGE * (j == len(text))))
+                hits.append((fit, uid == near, -abs(k - at) if at is not None else 0, uid, i, j))
+                i = text.find(exact, i + 1)
+        if hits:
+            top = max(hits, key=lambda h: h[:3])
+            return top[3:] if len(hits) == 1 or top[0] >= FIT or top[1] else None
+        if len(pre) + len(suf) < 12:   # too little around it to tell where it was
+            return None
+        gaps = []
+        for uid in self.order:
+            text = self.texts[uid]
+            for s in ([m.end() for m in re.finditer(re.escape(pre), text)] if pre else [0]):
+                e = text.find(suf, s) if suf else len(text)
+                gap = text[s:e] if e >= 0 else ""
+                if gap.strip() and len(gap) <= 2 * len(exact) + 40:
+                    gaps.append((uid, s + len(gap) - len(gap.lstrip()), e - len(gap) + len(gap.rstrip())))
+        mine = [g for g in gaps if g[0] == near]
+        return mine[0] if mine else gaps[0] if len(gaps) == 1 else None
+
+    def section(self, sid, units):
+        """Where a note goes in the new text when it has no paragraph: its section, if that is still there; else the one
+        most of the given paragraphs are in now; else the one before the place they were; else the first."""
+        new = self.new
+        if any(c["id"] == sid for c in new["chunks"]):
+            return sid
+        now_in = [self.chunk(m) for u in units if (m := self.same.get(u) or self.near.get(u)) and self.chunk(m)]
+        if now_in:
+            return Counter(now_in).most_common(1)[0][0]
+        places = [self.at[u] for u in units if u in self.at]
+        if self.order and places:
+            return self.chunk(self.order[max(0, min(min(places), len(self.order)) - 1)])
+        return next((c["id"] for c in new["chunks"] if c["units"]), new["chunks"][0]["id"] if new["chunks"] else None)
+
+    def recite(self, n):
+        """A conversation's citations, following the paragraphs they name."""
+        moved = {**self.near, **self.same}
+        for t in turns(n):
+            if t.get("cites"):
+                t["cites"] = list(dict.fromkeys(moved.get(c, c) for c in t["cites"]))
+            if t.get("a"):
+                t["a"] = CITE.sub(lambda m: f"[[{moved.get(m.group(1), m.group(1))}]]", t["a"])

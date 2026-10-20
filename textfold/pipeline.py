@@ -3,6 +3,14 @@
 Every step reports through `progress(stage, done, total)`; the server turns that into a progress bar. A set `stop`
 (a threading.Event) ends it with llm.Stopped at the next step: what the model has already written stays in the cache,
 so the same generation started again goes on from there.
+
+`force` asks the model again for every section (a new sample), with one exception: a document whose text was replaced
+in place (local.replace_text) has no layers until it is folded again, and those are made from the replies kept for it,
+so only the sections whose prompts changed are asked. A section's prompt holds the title, the opening, the outline and
+its own text: an edit in one section asks for that section alone (and the argument links, one call over every
+paragraph's takeaway, when a takeaway came back changed); an edit to the title, the opening or a heading asks for every
+section. A translation's prompt also numbers the formulas, links and other atoms of the whole text in order, so a
+section after an atom added or taken out is translated again too.
 """
 import urllib.error
 
@@ -50,12 +58,14 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
         # fetched and parsed, so it can be read as written; its levels need a model
         raise RuntimeError("No model is available: install Claude Code, Codex, Pi or WorkBuddy, or add an API provider in the settings")
     model = llm.label(cfg) if cfg else ""
+    replaced = bool(doc["meta"].get("replaced"))   # its text replaced in place: a missing layer is made from the replies kept
     if en is None or (force and lang == "en"):
         check()
-        ladder.build(doc, task(cfg, "ladder"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("ladder", a, b), force=force, stop=stop)
+        again = force and not (replaced and en is None)
+        ladder.build(doc, task(cfg, "ladder"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("ladder", a, b), force=again, stop=stop)
         check()
         progress("links", 0, 1)
-        links.build(doc, task(cfg, "links"), cache, log=log, force=force)
+        links.build(doc, task(cfg, "links"), cache, log=log, force=again)
         store.save_en(doc, model)
         en = store.read(pid, "en")
     else:
@@ -64,7 +74,8 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
         tr = store.read(pid, f"tr-{lang}")
         if force or tr is None or tr.get("base") != en["version"]:
             check()
-            translate.build(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), force=force, stop=stop)
+            again = force and not (replaced and tr is None)
+            translate.build(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), force=again, stop=stop)
             store.save_tr(doc, lang, en["version"], model)
         elif cfg is not None:
             store.apply_tr(doc, lang, tr)

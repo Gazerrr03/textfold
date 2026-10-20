@@ -5,13 +5,20 @@ token stream split into sentences; units get a ladder later. Everything
 else (display equations, figure bodies, tables) is kept as the HTML
 LaTeXML wrote. Headings open chunks: the unit of one model call and one
 card on the map.
+
+A unit's id is the page's own (arXiv's S2.p3), else its place (u12). A
+document stored with "unit_ids": "text" in its meta (a Markdown file,
+local.py) names each unit by its words instead (p-<hash>), so that a
+paragraph keeps its id, and the notes and links on it, when the text
+around it is edited.
 """
+import hashlib
 import re
 
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from .latexml_safe import make_safe
-from .tokens import split_sentences, tokenize_text
+from .tokens import plain, split_sentences, tokenize_text
 
 SECTION_LEVEL = {
     "ltx_section": 2, "ltx_appendix": 2, "ltx_subsection": 3,
@@ -36,6 +43,14 @@ class Doc:
         # every id a cross-reference may point at -> {"k": unit|fig|eq|chunk|bib, "id": what the reader calls it}
         self.targets, self.edges = {}, []
         self.env = None  # the theorem, definition or proof the walk is inside of
+        self.by_text, self.seen = meta.get("unit_ids") == "text", {}
+
+    def text_id(self, toks):
+        """A unit's id made from its words: the same paragraph has it wherever it moves, whatever changes around it.
+        A paragraph that repeats one before it word for word is told apart by its count, in reading order (p-…-2)."""
+        h = "p-" + hashlib.sha1(plain(toks, self.atoms).encode("utf-8")).hexdigest()[:8]
+        self.seen[h] = self.seen.get(h, 0) + 1
+        return h if self.seen[h] == 1 else f"{h}-{self.seen[h]}"
 
     def target(self, el, kind, tid):
         for e in [el] + [d for d in el.find_all(id=True) if not d.find_parent("math") and d.name != "math"]:
@@ -169,7 +184,7 @@ def add_units(doc, el, role, uid=None, split=True, **extra):
     base = uid or el.get("id") or f"u{len(doc.units)}"
     ids = []
     for n, (a, b, ss) in enumerate(parts):
-        u = base if n == 0 else f"{base}~{n + 1}"
+        u = doc.text_id(toks[a:b]) if doc.by_text else base if n == 0 else f"{base}~{n + 1}"
         while u in doc.units:
             u += "'"
         home = doc.home()

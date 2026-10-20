@@ -55,7 +55,13 @@ more than one way, so it can be found again when the text around it changes.
   - `sents`: the sentences of the unit the passage lies in. Translation is sentence by sentence, so these hold in every
     language: a note made in Chinese is shown on the same sentences in English.
   - `quote`: the selected text exactly, with up to 40 characters before and after (W3C `TextQuoteSelector`). This is
-    what finds the passage again when ids and token numbers no longer fit (a new arXiv version of the paper).
+    what finds the passage again when ids and token numbers no longer fit (a Markdown text replaced by its edited
+    version, below; a new arXiv version of the paper).
+  - `lost`, only on a note whose passage was not found again after the text changed: where it was, `{ "unit",
+    "section", "tokens", "sents", "since" }` (and, for a note made in a translation, `quote`: its sentences in the
+    text's own words, to look for). The note is kept where the reader still lists and shows it: on the paragraph it was
+    on, when that is still there edited (`tokens` and `sents` null), else on its section's title (`unit` null, `on:
+    "title"`). Its own `quote` stays as it was.
 - **text**: the reader's own note, plain text with line breaks.
 - **thread**: the turns of an `ask` note, in order, each `{ "q", "a", "takeaway", "cites", "next", "model", "lang", "at" }`:
   the question, the answer (Markdown), the answer in one sentence, the units of the paper the answer rests on (in the
@@ -92,8 +98,28 @@ more than one way, so it can be found again when the text around it changes.
 - A conversation keeps the level it was started at (`anchor.level`), shown with it: what was selected may not be on
   screen at another level.
 
+## When the text changes
+
+A Markdown document can be replaced by its edited text under the same id (`POST /api/import` with `id`); its notes are
+then found again in the new text (`notes.reanchor`), before its levels are made again:
+
+- A paragraph still there word for word keeps its notes as they are. Its id is made from its words (`p-<hash>`, the
+  second of two alike `p-<hash>-2`), so it is the same id, however the text around it changed.
+- A note on a paragraph edited or moved is found by its `quote`: the places with its exact words, scored by how much of
+  `prefix` and `suffix` fits around them (of several, the paragraph it was on wins a tie, then the place nearest the old
+  one; one whose surroundings do not fit is not guessed at); else, when its own words were edited, what now stands
+  between its `prefix` and `suffix`. `unit`, `section`, `tokens`, `sents` and `quote` are then those of the place found.
+- A note made in a translation (`lang` not the text's own) is found by the sentences it lies in, in the text's own
+  words: `sents` is set again and `tokens` is null, since the translation is made again.
+- A note on words the model wrote (`tokens` null) goes with its paragraph when that is still there, edited.
+- A note found nowhere is kept and marked `lost` (above); the next replace looks for it again, and a note found again
+  loses the mark.
+- A note on a section keeps it while the section is there (a section's id is its heading's words); a heading renamed,
+  it follows the section's paragraphs. The cites of a conversation (`thread[].cites`, `[[id]]` in an answer) follow the
+  paragraphs they name.
+
 ## Not yet
 
-- Finding a passage again by its quote after the paper's text changed (a regenerated summary, a new arXiv version):
-  the quote is stored for it.
+- Finding a passage again by its quote in a regenerated summary (a note on a section's summary), or in a new arXiv
+  version: the quote is stored for it.
 - Handwriting. When it comes it will be a body of its own (strokes) on the same anchors.
