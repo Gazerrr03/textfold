@@ -9,6 +9,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test links.test.js",
     "payload": "node scripts/prepare-payload.mjs",
     "dist:mac": "node scripts/prepare-payload.mjs darwin arm64 && electron-builder --mac dmg zip --arm64 --publish never",
     "dist:mac:x64": "node scripts/prepare-payload.mjs darwin x64 && electron-builder --mac dmg zip --x64 --publish never",
@@ -28,6 +29,7 @@
     },
     "files": [
       "main.js",
+      "links.js",
       "preload.js",
       "splash.html",
       "package.json"
@@ -36,6 +38,15 @@
       {
         "from": "payload",
         "to": "payload"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "TextFold link",
+        "schemes": [
+          "textfold"
+        ],
+        "role": "Viewer"
       }
     ],
     "mac": {
