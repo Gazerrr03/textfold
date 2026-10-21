@@ -416,6 +416,7 @@
       } else if (b.k === 'eq' || b.k === 'raw') {
         list = null;
         const e = h('div', b.k, b.html); e.dataset.id = `${b.k}:${b.id || Math.random().toString(36).slice(2)}`;
+        if (b.k === 'eq') { e.dataset.eq = b.id; e.dataset.chunk = b.chunk; }
         e.dataset.l = level; lvBlocks.push(e);
         target.append(e);
       }
