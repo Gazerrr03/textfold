@@ -79,7 +79,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, agents, bridges, build, docsite, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
+from . import __version__, agents, bridges, build, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
 
 STATIC = {"app.js": "text/javascript", "app.css": "text/css", "reader.js": "text/javascript",
           "reader.css": "text/css", "i18n.js": "text/javascript", "tutorial.js": "text/javascript", "webmcp.js": "text/javascript"}
@@ -196,19 +196,15 @@ class Jobs:
     def _same(self, **kw):   # the same request already waiting or running is that job
         return next((j for j in self.items.values() if j["status"] in ("queued", "running") and all(j.get(k) == v for k, v in kw.items())), None)
 
-    def submit(self, ref, lang, force, attach=None, original=False):
+    def submit(self, ref, lang, force, attach=None):
         pid = store.resolve(ref)
-        return self._same(kind="generate", pid=pid, lang=lang) or self._new(self.q, pid=pid, lang=lang, force=bool(force), attach=attach, original=bool(original))
+        return self._same(kind="generate", pid=pid, lang=lang) or self._new(self.q, pid=pid, lang=lang, force=bool(force), attach=attach)
 
     def convert(self, pid, file, name, lang, tier=None, replace=False):
         """A file through the engine (then generated): file is on disk; replace converts a stored one again."""
         tier = engine.tier_for(file, tier or models.load_settings().get("pdf_tier") or "fast")
         return self._same(kind="convert", pid=pid) or self._new(self.eq, kind="convert", pid=pid, lang=lang, file=str(file), name=name,
                                                                 title=name, tier=tier, replace=bool(replace))
-
-    def documentation(self, url="", pid="", mode="import"):
-        return self._same(kind="documentation", url=url, pid=pid, mode=mode) or self._new(
-            self.q, kind="documentation", url=url, pid=pid, mode=mode, lang="en")
 
     def wait_for_engine(self, pid, file, name, lang):
         """A file kept until the engine is installed (then converted), with a note of its name and language beside it."""
@@ -285,24 +281,12 @@ class Jobs:
             job["status"] = "running"
             stop = self.stops[job["id"]]
             try:
-                if job["kind"] == "documentation":
-                    result = docsite.import_set(job["url"], job["pid"], job["mode"], self._progress(job, stop), stop)
-                    manifest = result["documentation"]
-                    summary = {k: v for k, v in result.items() if k != "documentation"}
-                    summary.update(chapters=len(manifest["chapters"]), failed=[c for c in manifest["chapters"] if c["status"] != "ready"],
-                                   unresolved_annotations=manifest.get("unresolved_annotations", []))
-                    job.update(pid=result["paper"], result=summary, readable=result.get("readable", True))
-                    if not result["reused"] and job["readable"]:
-                        job["generation"] = self.submit(result["paper"], "en", False)["id"]
-                    job.update(status="done", finished=time.time())
-                    PAGES.pop(job["pid"], None)
-                    continue
                 try:
                     spec = models.resolve(None)  # the model chosen in the settings, resolved once per job
                     job["model"] = spec["id"]
                 except RuntimeError:   # none: the paper is still fetched and parsed, to be read as written
                     spec = None
-                pipeline.generate(job["pid"], job["lang"], spec, force=job["force"], progress=self._progress(job, stop), log=self._log(job), stop=stop, original=job.get("original", False))
+                pipeline.generate(job["pid"], job["lang"], spec, force=job["force"], progress=self._progress(job, stop), log=self._log(job), stop=stop)
                 job["status"] = "done"
             except Exception as e:  # shown in the app; the traceback stays in the job log
                 if str(e) == "no-html" and not stop.is_set():
@@ -494,16 +478,14 @@ def assembled(pid, only=None):
     return doc
 
 
-def reader_page(pid, chapter=""):
+def reader_page(pid):
     layers = store.pdir(pid) / "layers"
     sig = tuple(sorted((f.name, f.stat().st_mtime) for f in layers.glob("*.json"))) if layers.exists() else ()
-    sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template re-renders too
-    sig += tuple((f.name, f.stat().st_mtime_ns) for f in (store.pdir(pid) / "source.html", store.pdir(pid) / "documentation.json") if f.exists())
-    key = pid + (":" + chapter if chapter else "")
-    hit = PAGES.get(key)
+    sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template, or name, re-renders too
+    hit = PAGES.get(pid)
     if not hit or hit[0] != sig:
-        hit = (sig, build.page(docsite.reader_document(assembled(pid), chapter), app=True))
-        PAGES[key] = hit
+        hit = (sig, build.page(assembled(pid), app=True))
+        PAGES[pid] = hit
     return hit[1]
 
 
@@ -600,8 +582,7 @@ def make_handler(jobs):
                         self.end_headers()
                         return
                     library.opened(m.group(1))
-                    chapter = (parse_qs(u.query).get("chapter") or [""])[0]
-                    return self.send(200, reader_page(m.group(1), chapter), "text/html; charset=utf-8")
+                    return self.send(200, reader_page(m.group(1)), "text/html; charset=utf-8")
                 if u.path.startswith("/static/") and u.path[8:] in STATIC:
                     return self.send(200, (build.WEB / u.path[8:]).read_bytes(), STATIC[u.path[8:]] + "; charset=utf-8")
                 if u.path.startswith("/static/vendor/"):
@@ -616,21 +597,6 @@ def make_handler(jobs):
                     return self.json([{"code": code, "name": name} for code, name in langs.natives().items()])
                 if u.path == "/api/jobs":
                     return self.json(jobs.list())
-                if u.path == "/api/documentation":
-                    q = parse_qs(u.query)
-                    pid = (q.get("paper") or [""])[0]
-                    if not store.valid_id(pid):
-                        return self.json({"error": "no such document"}, 400)
-                    return self.json(docsite.manifest(pid))
-                if u.path == "/api/zotero/attachments":
-                    q = parse_qs(u.query)
-                    lib, _, key = (q.get("item") or [""])[0].rpartition("/")
-                    zotero._check(lib)
-                    if not zotero.KEY.fullmatch(key):
-                        return self.json({"error": "bad-item"}, 400)
-                    return self.json({"item": lib + "/" + key, "attachments": [
-                        {k: a.get(k) for k in ("key", "title", "filename", "contentType", "linkMode")}
-                        for a in zotero._attachments(lib, key)]})
                 if u.path in ("/api/models", "/api/settings"):
                     return self.json(models_payload())
                 m = re.fullmatch(r"/api/pdfmap/([\w.-]+)", u.path)   # a converted PDF's paragraphs on its pages
@@ -703,26 +669,12 @@ def make_handler(jobs):
                     return self.json({"error": "too-large"}, 413)
                 body = json.loads(self.rfile.read(size) or b"{}")
                 s = models.load_settings()
-                if u.path == "/api/documentation":
-                    mode = body.get("mode", "import")
-                    if mode not in ("preview", "import", "update", "retry"):
-                        return self.json({"error": "mode: preview, import, update or retry"}, 400)
-                    pid, url = str(body.get("paper") or ""), str(body.get("url") or "")
-                    if mode == "preview":
-                        return self.json(docsite.directory(url)[0])
-                    if mode in ("update", "retry") and (not store.valid_id(pid) or not docsite.manifest(pid)):
-                        return self.json({"error": "no such documentation set"}, 400)
-                    if mode == "import":
-                        docsite.canonical(url)
-                    if pid and any(j["pid"] == pid and j["status"] in ("queued", "running") for j in jobs.list()):
-                        return self.json({"error": "document is busy; wait for its current job"}, 409)
-                    return self.json(jobs.documentation(url, pid, mode))
                 if u.path == "/api/generate":
                     lang = body.get("lang") or "en"
                     if lang not in langs.LANGS:
                         return self.json({"error": f"unknown language {lang}"}, 400)
                     try:
-                        job = jobs.submit(body.get("paper", ""), lang, body.get("force"), original=bool(body.get("original")))
+                        job = jobs.submit(body.get("paper", ""), lang, body.get("force"))
                     except ValueError as e:   # not a paper's reference, or (a DOI) none Europe PMC can read in full
                         return self.json({"error": str(e) if str(e) in ("no-fulltext", "no-article") else "bad-ref"}, 400)
                     return self.json(job)
@@ -736,19 +688,7 @@ def make_handler(jobs):
                     lib, _, key = str(body.get("item") or "").rpartition("/")
                     lang = body.get("lang") if body.get("lang") in langs.LANGS else "en"
                     try:
-                        got = zotero.read(lib, key, str(body.get("attachment") or ""), bool(body.get("select")), cached=bool(body.get("original")))
-                        if got.get("needs") or got.get("paper"):
-                            if got.get("paper"):
-                                if body.get("original") and not got.get("reused"):
-                                    f = store.pdir(got["paper"]) / "meta.json"
-                                    meta = json.loads(f.read_text(encoding="utf-8"))
-                                    meta["reading_mode"] = "original"
-                                    docsite._write(f, meta)
-                                en = store.read(got["paper"], "en")
-                                tr = store.read(got["paper"], f"tr-{lang}") if lang != "en" else None
-                                if not (body.get("original") and got.get("reused")) and (en is None or (lang != "en" and (tr is None or tr.get("base") != en["version"]))):
-                                    got["job"] = jobs.submit(got["paper"], lang, False)
-                            return self.json(got)
+                        got = zotero.read(lib, key)
                         if "ref" in got:   # generated as a pasted link is (from the page, which asks for a model first)
                             pid = store.resolve(got["ref"])
                             zotero.link(lib, key, pid, got["title"], got["record"])

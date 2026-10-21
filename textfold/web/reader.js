@@ -2375,7 +2375,6 @@
     const u = n ? n.anchor.unit : (/[#&]u=([^&]+)/.exec(location.hash) || [])[1];
     const s = !n && !u && (/[#&]s=([^&]+)/.exec(location.hash) || [])[1], sc = s && secs.get(decodeURIComponent(s));
     const el = n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(decodeURIComponent(u)) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null;
-    if (!el && n) document.dispatchEvent(new CustomEvent('textfold-note-navigate', { detail: n, cancelable: true }));
     if (!el) return;
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
@@ -2801,7 +2800,6 @@
     afterZoom(() => openNote(n, true), 260);
   }
   function flyToNote(n) {
-    if (!document.dispatchEvent(new CustomEvent('textfold-note-navigate', { detail: n, cancelable: true }))) return;
     const a = n.anchor, from = { y: scrollY, level, from: null };
     if (whole(a) && n.kind === 'ask') { openChat(n); return; }
     if (whole(a)) { if (popNote) closeNote(); scrollTo({ top: 0, behavior: 'smooth' }); afterZoom(() => openNote(n), 260); return; }
@@ -3689,7 +3687,6 @@ math { font-size: 1.05em; }
       langMenu.append(f);
     }
     for (const code of Object.keys(NAMES)) {
-      if (D.meta.reading_mode === 'original' && code !== 'en') continue;
       const have = AVAIL.includes(code);
       if (!have && !D.app) continue;
       const b = h('button', `lm-item${code === lang ? ' on' : ''}${have ? '' : ' gen'}`);

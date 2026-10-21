@@ -259,7 +259,7 @@ def papers():
         mtimes = [f.stat().st_mtime for f in (d / "layers").glob("*.json")] if (d / "layers").exists() else []
         nf = d / "notes.json"
         out.append({"id": d.name, "title": meta["title"], "titles": titles, "authors": meta.get("authors", []),
-                    "langs": langs_, "reading_mode": meta.get("reading_mode", "translated"), "readable": (d / "source.html").is_file(), "updated": max(mtimes) if mtimes else mf.stat().st_mtime,
+                    "langs": langs_, "updated": max(mtimes) if mtimes else mf.stat().st_mtime,
                     "notes": len(json.loads(read_text(nf)).get("notes", [])) if nf.exists() else 0,
                     **({"zotero": True} if meta.get("zotero") else {})})
     return sorted(out, key=lambda p: -p["updated"])

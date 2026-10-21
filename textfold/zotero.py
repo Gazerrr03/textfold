@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import engine, pdf, pdfdoc, store, zotero_cache
+from . import engine, pdf, store
 from .fetch import UA
 
 ZOTERO = "http://localhost:23119"
@@ -45,7 +45,6 @@ READS = {"application/pdf": "pdf", "application/epub+zip": "epub",
 LABEL = {"pdf": "PDF", "epub": "EPUB", "html": "HTML", "docx": "Word", "doc": "Word", "pptx": "PowerPoint",
          "xlsx": "Excel", "odt": "ODT", "rtf": "RTF"}
 _lock = threading.Lock()
-_import_lock = threading.Lock()
 
 
 class Off(RuntimeError):
@@ -175,7 +174,7 @@ def _check(lib):
 
 # ── an item, read ─────────────────────────────────────────────────────
 
-def read(lib, key, attachment="", select=False, cached=False):
+def read(lib, key):
     """What an item is read from: {"ref", "title", "record"} for a paper online (its arXiv id, else its DOI when it has no
     file), or {"data", "name", "refs", "title", "record"} for its file, to be taken as a dropped file is.
     ValueError("no-file") when it has neither."""
@@ -184,42 +183,6 @@ def read(lib, key, attachment="", select=False, cached=False):
         raise ValueError("bad-item")
     r, _ = _get(f"{lib}/items/{key}")
     it = item_of(r)
-    pdfs = [a for a in _attachments(lib, key) if a["contentType"] == "application/pdf"] if cached or attachment or select else []
-    if pdfs and (cached or attachment or select):
-        choices = [{"key": a["key"], "name": a.get("title") or a.get("filename") or a["key"]} for a in pdfs]
-        saved = _link_data().get(f"{lib}/{key}", {})
-        picked = attachment or ("" if select else saved.get("attachment", ""))
-        if picked and picked not in {a["key"] for a in pdfs}:
-            if attachment:
-                raise ValueError("bad-attachment")
-            picked = ""
-        if len(pdfs) > 1 and not picked:
-            return {"needs": "attachment", "attachments": choices, "selected": saved.get("attachment", ""), "title": it["title"]}
-        att = next(a for a in pdfs if a["key"] == (picked or pdfs[0]["key"]))
-        file = _file(lib, att)
-        if not file:
-            raise ValueError("no-file")
-        record = record_of(r, it)
-        record["attachment"] = att["key"]
-        # Remember the choice while waiting; switching attachments must not reopen the previous PDF.
-        link(lib, key, saved.get("paper", "") if saved.get("attachment") == att["key"] else "", it["title"], record)
-        reply = {"name": file.name, "attachment": att["key"], "attachments": choices, "title": it["title"]}
-        if saved.get("attachment") == att["key"] and saved.get("paper"):
-            pid = saved["paper"]
-            if store.valid_id(pid) and (store.pdir(pid) / "source.html").exists():
-                return {**reply, "paper": pid, "reused": True}
-        cached = zotero_cache.find(lib, key, att["key"], file, settings()["data_dir"])
-        if not cached:
-            return {**reply, "needs": "zotero-cache"}
-        pid = pdfdoc.pid_of(file.read_bytes())
-        with _import_lock:
-            reused = (store.pdir(pid) / "source.html").exists()
-            zotero_cache.save(pid, cached, file, it["title"])
-        link(lib, key, pid, it["title"], record)
-        apply(pid)
-        return {**reply, "paper": pid, "reused": reused}
-    if attachment:
-        raise ValueError("bad-attachment")
     if it["arxiv"]:
         return {"ref": it["arxiv"], "title": it["title"], "record": record_of(r, it)}
     for att in _attachments(lib, key):
@@ -312,13 +275,6 @@ def citekeys():
     return out
 
 
-def _link_data():
-    try:
-        return json.loads(store.read_text(_links_file()))
-    except (OSError, ValueError, KeyError, TypeError):
-        return {}
-
-
 def link(lib, key, pid, title, record=None):
     f = _links_file()
     with _lock:
@@ -326,8 +282,7 @@ def link(lib, key, pid, title, record=None):
             data = json.loads(store.read_text(f))
         except (OSError, ValueError):
             data = {}
-        data[f"{lib}/{key}"] = {"paper": pid, "title": title, **({"record": record} if record else {}),
-                                **({"attachment": record["attachment"]} if record and record.get("attachment") else {})}
+        data[f"{lib}/{key}"] = {"paper": pid, "title": title, **({"record": record} if record else {})}
         f.parent.mkdir(parents=True, exist_ok=True)
         tmp = f.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")

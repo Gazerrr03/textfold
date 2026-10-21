@@ -139,9 +139,9 @@
         return `<div class="sb-row" data-pid="${p.id}" data-q="${esc(hay(p))}"><input class="sb-dname-in" value="${esc(title)}" placeholder="${esc(own)}" ` +
           `aria-label="${esc(T.d_name)}" title="${esc(T.d_name)}" maxlength="200" spellcheck="false"></div>`;
       }
-      const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${p.reading_mode === 'original' && l === 'en' ? 'Original' : SHORT[l] || l.toUpperCase()}</span>`).join('');
+      const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${SHORT[l] || l.toUpperCase()}</span>`).join('');
       const active = PAPER && PAPER.id === p.id;
-      const unfinished = !j && !p.langs.length && !p.readable;   // stopped (or failed) before its first language: a click goes on with it
+      const unfinished = !j && !p.langs.length;   // stopped (or failed) before its first language: a click goes on with it
       return `<div class="sb-row${chosen.has(p.id) ? ' chosen' : ''}" data-pid="${p.id}" data-q="${esc(hay(p))}"><a class="sb-item${active ? ' active' : ''}${unfinished ? ' unfinished' : ''}" href="${unfinished ? '#' : `/p/${p.id}?lang=${pick(p)}`}"${unfinished ? ` data-resume="${p.id}"` : ''} title="${esc(p.title)}">
         <span class="sb-t">${esc(title)}</span><span class="sb-m"><span class="sb-id">${p.id}</span><span class="sb-langs">${langs}</span></span>
         ${j ? progress(j, T) : unfinished ? `<span class="sb-stage">${esc(T.unfinished)}</span>` : ''}</a>` +
@@ -1020,9 +1020,7 @@
       }
       try { if (u) sessionStorage.setItem('pf-keep', JSON.stringify({ pid: PAPER.id, uid: u.dataset.u, top: u.getBoundingClientRect().top, level: R && R.level })); } catch { /* private window */ }
       if (R && lang !== R.lang) { store.set(UI_KEY, lang); tellLang(lang); }   // a language just made: the reader's goes with it
-      const q = new URLSearchParams({ lang });
-      if (PAPER.active_chapter) q.set('chapter', PAPER.active_chapter);
-      location.href = `/p/${PAPER.id}?${q}`;
+      location.href = `/p/${PAPER.id}?lang=${encodeURIComponent(lang)}`;
     }
     const src = PAPER.source || {};
     if ((src.kind === 'pdf' && src.tier !== 'accurate') || (src.kind === 'file' && src.tier === 'fast')) {
