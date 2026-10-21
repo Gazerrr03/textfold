@@ -173,6 +173,8 @@ A document not folded yet is folded first, with the model you connected. Every l
 
 A running TextFold (the app, or `python3 -m textfold serve`) says where it is in `server.json`, in its data folder (`~/Library/Application Support/TextFold` on a Mac, `%LOCALAPPDATA%\TextFold` on Windows, `~/.local/share/textfold` on Linux, the clone when run from one): `{"format": "textfold/server", "version": 1, "url": "http://127.0.0.1:<port>", "port": <port>, "pid": <pid>, "textfold": "<version>", "started": "<UTC time>"}`. The file goes when the server stops; one left behind (a server ended outright) names an address that answers nothing.
 
+An agent in a browser that offers WebMCP, a draft web standard (tried in Codex's own browser), finds TextFold's own operations on its pages as tools: it reads the passage you are reading or selected, and, when you ask, saves a note on an exact passage, imports a file or a Zotero item, or sorts your folders. Nothing changes in a browser without it. [docs/webmcp.md](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md) lists the tools. Contributed by [@peitianyi23-sudo](https://github.com/peitianyi23-sudo).
+
 ## Save a page
 
 **Save**, at the top of the reader, keeps a page as one HTML file that opens anywhere without a server: its levels, the notes you choose and, if you like, its original PDF to read beside it. It can also keep the whole text as Markdown at the level you are reading, your notes under their paragraphs (at Topic, an outline that a mind-map plugin draws), or only your notes, as a page, a PDF, Markdown for Obsidian or JSON. From the command line, the page without your notes:
@@ -241,6 +243,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 
 ## What's new
 
+- **October 21, 2026: tools for an agent in your browser.** In a browser that offers WebMCP, an agent finds TextFold's own operations as tools: it reads the passage you selected and, when you ask, saves a note on it, imports a file or a Zotero item, or sorts your folders. [The tools](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md). Thanks to [@peitianyi23-sudo](https://github.com/peitianyi23-sudo).
 - **October 21, 2026: Topic as a mind map.** At Topic, **Map** beside the levels draws the sections and their topics as a mind map: click a topic to read its paragraph, click a section to fold it. Headings stand apart more clearly, **Aa** can hide the margins (the links, the AI answers, your notes), and **Save** keeps the whole text as Markdown at the level you read. On Windows, the installer asks where to install.
 - **October 20, 2026: your type, and several documents at once.** **Aa** at the top sets the text's size, the column's width and serif or sans-serif, for every text. In the sidebar, ⌘-click (Ctrl-click) or Shift-click picks several documents to move into a folder or delete together, and a delete can be undone for a few seconds.
 - **October 20, 2026: several files at once.** Drop or choose several files together: they are read, and their levels written, one after another while you go on reading, and the sidebar shows each.

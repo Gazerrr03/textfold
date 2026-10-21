@@ -173,6 +173,8 @@ python3 -m textfold get report.pdf --json                       # 整份文档�
 
 运行中的 TextFold（应用，或 `python3 -m textfold serve`）会在数据文件夹的 `server.json` 里写下自己在哪里（Mac 上是 `~/Library/Application Support/TextFold`，Windows 上是 `%LOCALAPPDATA%\TextFold`，Linux 上是 `~/.local/share/textfold`，从克隆的仓库运行时就是仓库本身）：`{"format": "textfold/server", "version": 1, "url": "http://127.0.0.1:<port>", "port": <port>, "pid": <pid>, "textfold": "<version>", "started": "<UTC time>"}`。服务器停止时这个文件随之删除；留下来的文件（服务器被直接结束时）指向的地址不会再有回应。
 
+在支持 WebMCP（一个还在起草的网页标准，已在 Codex 自带的浏览器里试过）的浏览器里，agent 能在 TextFold 的页面上找到它自己的操作，当作工具来用：读你正在读或选中的段落；在你要求时，在一段确切的原文上存笔记、导入文件或 Zotero 条目、整理文件夹。不支持的浏览器一切照旧。工具列表见 [docs/webmcp.md](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md)。由 [@peitianyi23-sudo](https://github.com/peitianyi23-sudo) 贡献。
+
 ## 保存一页
 
 阅读页顶部的 **保存** 把一页存成一个 HTML 文件，不需要服务器，在哪里都能打开：各个层级、你选的标注，还可以带上原文 PDF 在左边对照。也可以按正在读的层级把整篇存成 Markdown，标注放在各自段落下面（在主题层存就是一份大纲，导图插件能直接画出来）；或者只存你的标注，存成网页、PDF、Obsidian 用的 Markdown 或 JSON。命令行也能导出这一页，只是不带你的标注：
@@ -241,6 +243,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 21 日：给浏览器里的 agent 用的工具。** 在支持 WebMCP 的浏览器里，agent 能把 TextFold 自己的操作当作工具：读你选中的段落；在你要求时，在这段原文上存笔记、导入文件或 Zotero 条目、整理文件夹。[工具列表](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md)。感谢 [@peitianyi23-sudo](https://github.com/peitianyi23-sudo)。
 - **2026 年 10 月 21 日：主题层可以看成思维导图。** 在主题层，缩放条旁的 **导图** 把各节和主题词画成一张思维导图：点主题词读那一段，点章节可以收起。标题层级更分明了；**Aa** 可以隐藏页边内容（段落关联、AI 问答、你的笔记）；**保存** 可以按正在读的层级把整篇存成 Markdown。Windows 安装时可以选安装目录。
 - **2026 年 10 月 20 日：字号、栏宽和字体；侧栏多选。** 顶部的 **Aa** 可以调字号和栏宽，选衬线或无衬线，对所有文档都生效。在侧栏里 ⌘ 点击（Ctrl 点击）或 Shift 点击可以选中多篇，一起移进文件夹或删除；删除后几秒内可以撤销。
 - **2026 年 10 月 20 日：一次拖入多个文件。** 一次拖入或选择多个文件，它们会一个接一个读取并生成层级，你可以接着读别的，侧栏里能看到每一个的进度。
