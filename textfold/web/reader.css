@@ -426,6 +426,8 @@ html.morphing .side, html.morphing .lside { opacity: 0 !important; transition: n
 .lk .arr { color: var(--rel); flex: none; }
 .lk .rel { color: var(--rel); font-weight: 650; flex: none; }
 .lk .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* in the column (a narrow window, beside the PDF): the links' box no wider than the column, so a long label ends in … */
+.side > .side-links, .side > .side-notes { min-width: 0; max-width: 100%; }
 .lk .where, .peek .pk-where { color: var(--faint); font-weight: 600; margin-right: 2px; }
 .lk .lbl math { font-size: 1em; }
 li.u > .side { left: calc(100% + 34px); }
