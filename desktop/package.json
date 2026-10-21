@@ -77,6 +77,8 @@
       "target": "nsis"
     },
     "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "artifactName": "${productName}-win-${arch}-setup.${ext}",
       "shortcutName": "TextFold",
       "uninstallDisplayName": "TextFold"
