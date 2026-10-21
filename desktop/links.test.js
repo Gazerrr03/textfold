@@ -102,6 +102,13 @@ test('a link with any part wrong is not followed', () => {
   }
 });
 
+test('a later part of a paragraph parse.py split (u6~2) is a paragraph like any other', () => {
+  const parts = parse('textfold://open?paper=pdf-4932df23a9594286&u=u6~2&to=u85~3&level=brief');
+  assert.deepEqual(parts, { paper: 'pdf-4932df23a9594286', u: 'u6~2', to: 'u85~3', level: 'brief' });
+  assert.equal(readerUrl(BASE, parts), `${BASE}/p/pdf-4932df23a9594286#u=u6~2&to=u85~3&level=brief`);
+  assert.equal(parse('textfold://open?paper=pdf-4932df23a9594286&u=u6~2/x'), null);   // still no other character
+});
+
 test('the link among the arguments Windows and Linux start the app with', () => {
   assert.equal(fromArgv(['C:\\TextFold\\TextFold.exe', '--allow-file-access-from-files', 'textfold://open?paper=2512.23916']),
     'textfold://open?paper=2512.23916');
