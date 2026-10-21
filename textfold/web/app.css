@@ -168,6 +168,12 @@ html.app footer.zoom { left: var(--rail); }
 html.app.sb-docked { --rail: var(--sb); --colmax: calc(100vw - 540px - var(--sb)); }
 html.app.sb-docked.sb-narrow, html.app.sb-docked.compare { --colmax: 100vw; }
 html.app.sb-docked #sidebar:not(.collapsed) { box-shadow: none; }
+/* focus (reader.js): the sidebar off to the left, back while the pointer is at the edge (as a rail, or open over the
+   text); the page takes the rail's room */
+html.app.focus { --rail: 0px; }
+html.focus #sidebar { transform: translateX(-100%); opacity: 0; transition: transform .25s var(--ease), opacity .2s, width .22s var(--ease); }
+html.focus.show-left #sidebar { transform: none; opacity: 1; }
+html.app.focus #sidebar.collapsed { width: 52px; }
 html.sb-narrow .side, html.sb-narrow .lside { position: static; width: auto; flex-direction: row; flex-wrap: wrap; gap: 2px 14px; margin-top: 4px; }
 html.sb-narrow .lk, html.sb-narrow .lside .ncard { width: auto; max-width: 100%; }
 html.sb-narrow .chunk > .side, html.sb-narrow .chunk > .lside { position: static; }

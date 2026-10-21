@@ -651,6 +651,24 @@ window.DR_I18N = (() => {
     hi: pins(["पिन करें: पाठ के बगल में खुला रखें", "अनपिन करें: पाठ के ऊपर खुलेगा"]),
   };
   for (const [code, words] of Object.entries(PINS)) Object.assign(S[code], words);
+  // the reader's colours, line spacing and focus (Aa), where a text was left, and how long each level takes to read
+  const rds = (w) => ({ ty_theme: w[0], ty_auto: w[1], ty_light: w[2], ty_paper: w[3], ty_dark: w[4], ty_lead: w[5], ty_tight: w[6], ty_loose: w[7], ty_focus: w[8], focus_on: w[9], pos_back: w[10], pos_top: w[11], rt_short: w[12], rt_lt1: w[13], rt_title: w[14], rt_title_lt1: w[15] });
+  const RDS = {
+    en: rds(["Theme", "Auto", "Light", "Paper", "Dark", "Line spacing", "Tight", "Loose", "Focus", "Focus: press F or Esc to leave", "Back where you left off", "From the start", "{n} min", "<1 min", "about {n} minutes to read at this level", "under a minute to read at this level"]),
+    zh: rds(["主题", "跟随系统", "浅色", "纸张", "深色", "行距", "紧凑", "宽松", "专注模式", "专注模式：按 F 或 Esc 退出", "回到了上次读到的地方", "从头读", "{n}分", "<1分", "这一层约 {n} 分钟读完", "这一层不到 1 分钟就能读完"]),
+    "zh-Hant": rds(["主題", "跟隨系統", "淺色", "紙張", "深色", "行距", "緊湊", "寬鬆", "專注模式", "專注模式：按 F 或 Esc 退出", "回到了上次讀到的地方", "從頭讀", "{n}分", "<1分", "這一層約 {n} 分鐘讀完", "這一層不到 1 分鐘就能讀完"]),
+    ja: rds(["テーマ", "システムに合わせる", "ライト", "紙", "ダーク", "行間", "狭い", "広い", "集中モード", "集中モード：F か Esc で終了", "前回読んでいた場所に戻りました", "最初から", "{n}分", "<1分", "この階層は約 {n} 分で読めます", "この階層は 1 分以内で読めます"]),
+    ko: rds(["테마", "시스템 설정", "밝게", "종이", "어둡게", "줄 간격", "좁게", "넓게", "집중 모드", "집중 모드: F 또는 Esc로 끝내기", "지난번에 읽던 곳으로 돌아왔습니다", "처음부터", "{n}분", "<1분", "이 단계는 약 {n}분이면 읽습니다", "이 단계는 1분이 안 걸립니다"]),
+    es: rds(["Tema", "Sistema", "Claro", "Papel", "Oscuro", "Interlineado", "Compacto", "Amplio", "Modo concentración", "Modo concentración: pulsa F o Esc para salir", "Has vuelto a donde lo dejaste", "Desde el principio", "{n} min", "<1 min", "unos {n} minutos de lectura en este nivel", "menos de un minuto de lectura en este nivel"]),
+    fr: rds(["Thème", "Système", "Clair", "Papier", "Sombre", "Interligne", "Serré", "Aéré", "Mode concentration", "Mode concentration : F ou Échap pour quitter", "Vous reprenez là où vous en étiez", "Depuis le début", "{n} min", "<1 min", "environ {n} minutes de lecture à ce niveau", "moins d’une minute de lecture à ce niveau"]),
+    de: rds(["Farben", "System", "Hell", "Papier", "Dunkel", "Zeilenabstand", "Eng", "Weit", "Fokusmodus", "Fokusmodus: F oder Esc beendet ihn", "Zurück, wo du aufgehört hast", "Von vorn", "{n} Min.", "<1 Min.", "etwa {n} Minuten Lesezeit auf dieser Ebene", "unter einer Minute Lesezeit auf dieser Ebene"]),
+    pt: rds(["Tema", "Sistema", "Claro", "Papel", "Escuro", "Entrelinha", "Compacta", "Ampla", "Modo foco", "Modo foco: F ou Esc para sair", "De volta aonde você parou", "Do início", "{n} min", "<1 min", "cerca de {n} minutos de leitura neste nível", "menos de um minuto de leitura neste nível"]),
+    it: rds(["Tema", "Sistema", "Chiaro", "Carta", "Scuro", "Interlinea", "Stretta", "Ampia", "Modalità concentrazione", "Modalità concentrazione: F o Esc per uscire", "Sei tornato dove eri rimasto", "Dall’inizio", "{n} min", "<1 min", "circa {n} minuti di lettura a questo livello", "meno di un minuto di lettura a questo livello"]),
+    ru: rds(["Тема", "Как в системе", "Светлая", "Бумага", "Тёмная", "Интервал", "Плотный", "Свободный", "Режим чтения", "Режим чтения: F или Esc — выйти", "Вы вернулись туда, где остановились", "С начала", "{n} мин", "<1 мин", "около {n} мин чтения на этом уровне", "меньше минуты чтения на этом уровне"]),
+    hi: rds(["थीम", "सिस्टम जैसा", "हल्की", "कागज़", "गहरी", "पंक्ति अंतर", "सघन", "खुला", "फ़ोकस मोड", "फ़ोकस मोड: बाहर निकलने के लिए F या Esc", "आप वहीं लौट आए जहाँ छोड़ा था", "शुरू से", "{n} मि.", "<1 मि.", "इस स्तर पर पढ़ने में लगभग {n} मिनट", "इस स्तर पर पढ़ने में एक मिनट से कम"]),
+  };
+  for (const [code, words] of Object.entries(RDS)) Object.assign(S[code], words);
+  for (const [code, w] of Object.entries({"en": "Leave focus", "zh": "退出专注", "zh-Hant": "退出專注", "ja": "集中モードを終了", "ko": "집중 모드 끝내기", "es": "Salir del modo concentración", "fr": "Quitter le mode concentration", "de": "Fokusmodus beenden", "pt": "Sair do modo foco", "it": "Esci dalla concentrazione", "ru": "Выйти из режима чтения", "hi": "फ़ोकस मोड से बाहर"})) S[code].ty_focus_off = w;
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });
   const SEL = {

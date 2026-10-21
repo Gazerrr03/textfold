@@ -9,6 +9,8 @@
   const DATA = readerEl ? JSON.parse(readerEl.textContent) : null;
   const PAPER = DATA ? DATA.meta : null;   // the paper open in the reader, if any
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
+  // the colours chosen in a paper's Aa menu (reader.js, textfold.type), on the landing too
+  try { const tm = (JSON.parse(store.get('textfold.type') || 'null') || {}).theme; if (['light', 'paper', 'dark'].includes(tm)) document.documentElement.dataset.theme = tm; } catch { /* (written by hand) */ }
   const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि' };   // (any other: its code)
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -299,7 +301,7 @@
   // as well has them in the column (html.sb-narrow, as beside the PDF); the reader lays its margins out again
   function dockState() {
     const r = document.documentElement, was = `${r.classList.contains('sb-docked')}${r.classList.contains('sb-narrow')}`;
-    const on = !!PAPER && pinned && !side.classList.contains('collapsed') && innerWidth >= 720;
+    const on = !!PAPER && pinned && !side.classList.contains('collapsed') && innerWidth >= 720 && !r.classList.contains('focus');   // (focus: the text alone)
     const sb = parseFloat(getComputedStyle(r).getPropertyValue('--sb')) || 280;
     r.classList.toggle('sb-docked', on);
     r.classList.toggle('sb-narrow', on && innerWidth - sb < 1248);
