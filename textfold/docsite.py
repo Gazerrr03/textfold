@@ -209,7 +209,13 @@ def import_set(url="", pid="", mode="import", progress=lambda *args: None, stop=
         with notes._LOCK:
             if olddoc:
                 data = notes.read(pid)
+                targets = {}
+                for u in newdoc['units']:
+                    targets.setdefault((source_of(newdoc, u), text_of(newdoc, u)), []).append(u)
+                moved = {u: targets.get((source_of(olddoc, u), text_of(olddoc, u)), []) for u in olddoc['units']}
                 for note in data["notes"]:
+                    if recite(note, olddoc, targets, moved):
+                        unresolved.append(note['id'])
                     a = note["anchor"]
                     uid = a.get("unit")
                     if not uid and not a.get('unresolved'):
@@ -221,18 +227,22 @@ def import_set(url="", pid="", mode="import", progress=lambda *args: None, stop=
                         continue
                     source = a.get('source_url') or source_of(olddoc, uid)
                     exact = a.get("quote", {}).get("exact", "")
-                    original = text_of(olddoc, uid)
-                    matches = [u for u in newdoc["units"] if source_of(newdoc, u) == source and text_of(newdoc, u) == original]
+                    original = a.get('original_text') if a.get('unresolved') else text_of(olddoc, uid)
+                    matches = targets.get((source, original), [])
+                    hit = None
                     if len(matches) != 1 and exact:
-                        matches = [u for u in newdoc["units"] if source_of(newdoc, u) == source and exact in text_of(newdoc, u)]
+                        hit = quote_hit(newdoc, source, a['quote'])
+                        matches = [hit[0]] if hit else []
                     if len(matches) == 1:
                         target = matches[0]
                         a.update(unit=target, section=newdoc["units"][target]["chunk"], source_url=source)
                         if text_of(newdoc, target) != original:
-                            a.update(quote_offsets(newdoc, target, exact))
+                            a.update(quote_offsets(newdoc, target, exact, hit[1]))
                         a.pop("unresolved", None)
+                        a.pop('original_text', None)
                     else:
-                        a.update(unit=None, section=None, unresolved=True, source_url=source, original_unit=uid)
+                        a.update(unit=None, section=None, unresolved=True, source_url=source,
+                                 original_unit=a.get('original_unit', uid), original_text=original)
                         unresolved.append(note["id"])
                 notes._write(pid, data)
                 # A changed source invalidates token/atom offsets, just as a Markdown replacement does.
@@ -245,7 +255,7 @@ def import_set(url="", pid="", mode="import", progress=lambda *args: None, stop=
                         (d / "layers").rename(previous / "layers")
             (d / "source.html").write_text(html, encoding="utf-8")
             _write(d / "meta.json", meta)
-            result = {**plan, "chapters": chapters, "updated": store.stamp(), "unresolved_annotations": unresolved}
+            result = {**plan, "chapters": chapters, "updated": store.stamp(), "unresolved_annotations": list(dict.fromkeys(unresolved))}
             _write(d / "documentation.json", result)
         return {"paper": pid, "readable": True, "reused": False, "documentation": result}
 
@@ -281,10 +291,62 @@ def text_of(doc, uid):
     return plain(doc["units"].get(uid, {}).get("toks", []), doc["atoms"])
 
 
-def quote_offsets(doc, uid, exact):
+def recite(note, olddoc, targets, moved):
+    """Keep answer references on their source paragraphs; a missing source uses the reader's bad-cite marker."""
+    unresolved = False
+    for turn in notes.turns(note):
+        retained = {c['id']: c for c in turn.get('unresolved_cites', [])}
+        missing = {}
+        def move(uid):
+            if uid in retained:
+                identity = retained[uid]
+                matches = targets.get((identity['source_url'], identity['text']), [])
+            elif uid in moved:
+                identity = {'id': '!' + uid, 'source_url': source_of(olddoc, uid), 'text': text_of(olddoc, uid)}
+                matches = moved[uid]
+            else:
+                return uid   # inference and already-invalid model citations keep their existing meaning
+            if len(matches) == 1:
+                return matches[0]
+            missing[identity['id']] = identity
+            return identity['id']
+        if turn.get('cites'):
+            turn['cites'] = list(dict.fromkeys(move(c) for c in turn['cites']))
+        if turn.get('a'):
+            turn['a'] = notes.CITE.sub(lambda m: '[[' + move(m.group(1)) + ']]', turn['a'])
+        if missing:
+            turn['unresolved_cites'] = list(missing.values())
+            unresolved = True
+        else:
+            turn.pop('unresolved_cites', None)
+    return unresolved
+
+
+def quote_hit(doc, source, quote):
+    """Find an occurrence, not just a paragraph. Repeated words need a uniquely fitting saved context."""
+    exact, pre, suf = quote['exact'], quote.get('prefix', ''), quote.get('suffix', '')
+    hits = []
+    for uid in doc['units']:
+        if source_of(doc, uid) != source:
+            continue
+        text = text_of(doc, uid)
+        at = text.find(exact)
+        while at >= 0:
+            end = at + len(exact)
+            fit = notes._common(text[:at][::-1], pre[::-1]) + notes._common(text[end:], suf)
+            hits.append((fit, uid, at))
+            at = text.find(exact, at + 1)
+    if len(hits) == 1:
+        return hits[0][1:]
+    hits.sort(reverse=True)
+    if len(hits) > 1 and hits[0][0] >= notes.FIT and hits[0][0] > hits[1][0]:
+        return hits[0][1:]
+    return None
+
+
+def quote_offsets(doc, uid, exact, at):
     """A retained source quote's new token and sentence ranges, for the existing highlight renderer."""
     unit = doc['units'][uid]
-    at = text_of(doc, uid).find(exact)
     if not exact or at < 0:
         return {'tokens': None, 'sents': []}
     cursor, selected = 0, []

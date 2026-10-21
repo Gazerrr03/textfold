@@ -100,6 +100,78 @@ class DocumentationTests(unittest.TestCase):
         self.assertFalse((store.pdir(pid) / 'layers/en.json').exists())
         self.assertEqual((store.pdir(pid) / 'previous/layers/en.json').read_bytes(), before)
 
+    def test_update_moves_saved_answer_citations_and_retains_missing_sources(self):
+        pid = docsite.import_set(self.root)['paper']
+        doc = store.parsed(pid)
+        uid = next(u for u in doc['units'] if docsite.text_of(doc, u) == self.words)
+        other = next(u for u in doc['units'] if docsite.text_of(doc, u) == 'Second original passage.')
+        notes.put(pid, {'id': 'n-answer', 'kind': 'ask', 'anchor': {'on': 'paper'},
+                        'thread': [{'q': 'Why?', 'a': f'Answer [[{uid}]][[{other}]][[?]][[!12]]', 'cites': [uid, other]}]})
+        self.pages[self.root] = self.pages[self.root].replace('<p>' + self.words, '<p>Inserted first.</p><p>' + self.words)
+        docsite.import_set(pid=pid, mode='update')
+        saved = notes.read(pid)['notes'][0]['thread'][0]
+        updated = store.parsed(pid)
+        self.assertNotEqual(saved['cites'][0], uid)
+        self.assertEqual([docsite.text_of(updated, u) for u in saved['cites']], [self.words, 'Second original passage.'])
+        self.assertEqual(saved['a'], f"Answer [[{saved['cites'][0]}]][[{saved['cites'][1]}]][[?]][[!12]]")
+        self.pages[self.root] = self.pages[self.root].replace(self.words, 'Unrelated replacement.')
+        result = docsite.import_set(pid=pid, mode='update')
+        saved = notes.read(pid)['notes'][0]['thread'][0]
+        self.assertTrue(saved['cites'][0].startswith('!'))
+        self.assertIn('[[' + saved['cites'][0] + ']]', saved['a'])
+        self.assertEqual(saved['unresolved_cites'][0]['text'], self.words)
+        self.assertEqual(result['documentation']['unresolved_annotations'], ['n-answer'])
+        self.pages[self.root] = self.pages[self.root].replace('Unrelated replacement.', self.words)
+        docsite.import_set(pid=pid, mode='update')
+        saved = notes.read(pid)['notes'][0]['thread'][0]
+        self.assertEqual(docsite.text_of(store.parsed(pid), saved['cites'][0]), self.words)
+        self.assertNotIn('unresolved_cites', saved)
+
+    def test_update_duplicate_quote_is_unresolved_without_unique_context(self):
+        self.pages[self.root] = self.pages[self.root].replace(self.words, 'source passage')
+        pid = docsite.import_set(self.root)['paper']
+        doc = store.parsed(pid)
+        uid = next(u for u in doc['units'] if docsite.text_of(doc, u) == 'source passage')
+        notes.put(pid, {'id': 'n-repeat', 'anchor': {'unit': uid, 'quote': {'exact': 'source passage'}, 'tokens': [0, 1]}})
+        self.pages[self.root] = self.pages[self.root].replace('source passage', 'A source passage replaces another source passage.')
+        result = docsite.import_set(pid=pid, mode='update')
+        saved = notes.read(pid)['notes'][0]['anchor']
+        self.assertIsNone(saved['unit'])
+        self.assertTrue(saved['unresolved'])
+        self.assertEqual(saved['quote']['exact'], 'source passage')
+        self.assertEqual(result['documentation']['unresolved_annotations'], ['n-repeat'])
+
+    def test_update_does_not_retarget_citation_to_identical_words_on_another_page(self):
+        self.pages[self.root + 'second/'] = self.pages[self.root + 'second/'].replace('Second original passage.', self.words)
+        pid = docsite.import_set(self.root)['paper']
+        doc = store.parsed(pid)
+        uid = next(u for u in doc['units'] if docsite.text_of(doc, u) == self.words and docsite.source_of(doc, u) == self.root)
+        notes.put(pid, {'id': 'n-source', 'anchor': {'on': 'paper'},
+                       'ask': {'q': 'Source?', 'a': f'Source [[{uid}]]', 'cites': [uid]}})
+        self.pages[self.root] = self.pages[self.root].replace(self.words, 'Replacement on the original page.')
+        result = docsite.import_set(pid=pid, mode='update')
+        turn = notes.read(pid)['notes'][0]['ask']
+        self.assertEqual(turn['cites'], ['!' + uid])
+        self.assertEqual(turn['a'], f'Source [[!{uid}]]')
+        self.assertEqual(turn['unresolved_cites'][0]['source_url'], self.root)
+        self.assertEqual(result['documentation']['unresolved_annotations'], ['n-source'])
+
+    def test_update_quote_context_selects_second_occurrence(self):
+        self.pages[self.root] = self.pages[self.root].replace(self.words, 'another source passage ends here.')
+        pid = docsite.import_set(self.root)['paper']
+        doc = store.parsed(pid)
+        uid = next(u for u in doc['units'] if docsite.text_of(doc, u) == 'another source passage ends here.')
+        notes.put(pid, {'id': 'n-context', 'anchor': {'unit': uid, 'tokens': [1, 2],
+                    'quote': {'exact': 'source passage', 'prefix': 'another ', 'suffix': ' ends here.'}}})
+        self.pages[self.root] = self.pages[self.root].replace('another source passage ends here.', 'A source passage replaces another source passage ends here.')
+        result = docsite.import_set(pid=pid, mode='update')
+        saved = notes.read(pid)['notes'][0]['anchor']
+        updated = store.parsed(pid)
+        text = docsite.text_of(updated, saved['unit'])
+        spans = notes._spans(updated['units'][saved['unit']]['toks'], updated['atoms'])[1]
+        self.assertEqual(spans[saved['tokens'][0]][0], text.rindex('source passage'))
+        self.assertEqual(result['documentation']['unresolved_annotations'], [])
+
     def test_original_language_generation_uses_no_translation(self):
         self.pages[self.root] = self.pages[self.root].replace(self.words, '原文内容保持原来的语言。')
         pid = docsite.import_set(self.root)['paper']

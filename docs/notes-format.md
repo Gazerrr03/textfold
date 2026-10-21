@@ -118,6 +118,13 @@ then found again in the new text (`notes.reanchor`), before its levels are made 
   it follows the section's paragraphs. The cites of a conversation (`thread[].cites`, `[[id]]` in an answer) follow the
   paragraphs they name.
 
+Documentation-set updates match saved answer citations by source page and paragraph text. A citation without a
+unique match becomes `[[!id]]` (the reader's existing unresolved-citation marker); its entry in `cites` uses `!id`
+too. The turn retains `unresolved_cites`, each `{ "id", "source_url", "text" }`, so a later update can recover the
+reference without attaching it to an unrelated paragraph that reused its old id. These notes are included in the
+documentation manifest's `unresolved_annotations`. Repeated exact quotes need uniquely fitting saved context;
+otherwise the annotation keeps its quote and is reported unresolved.
+
 ## Not yet
 
 - Finding a passage again by its quote in a regenerated summary (a note on a section's summary), or in a new arXiv
