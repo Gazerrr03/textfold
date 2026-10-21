@@ -634,6 +634,23 @@ window.DR_I18N = (() => {
     hi: tvs(["विषय कैसे दिखे", "कार्ड", "माइंड मैप", "सब खोलें", "सिर्फ़ खंड", "किसी विषय पर क्लिक करें तो उसका अनुच्छेद खुलेगा · खंड पर क्लिक करें तो वह सिमटेगा"]),
   };
   for (const [code, words] of Object.entries(TV)) Object.assign(S[code], words);
+  // the sidebar's pin: open beside a paper as on the landing, or over it
+  const pins = (w) => ({ sb_pin: w[0], sb_unpin: w[1] });
+  const PINS = {
+    en: pins(["Pin: keep it open beside the text", "Unpin: open it over the text"]),
+    zh: pins(["固定在左侧：阅读时一直打开在正文旁边", "取消固定：打开时浮在正文上"]),
+    "zh-Hant": pins(["固定在左側：閱讀時一直開在正文旁邊", "取消固定：打開時浮在正文上"]),
+    ja: pins(["固定：本文の横に開いたままにする", "固定を解除：本文の上に開く"]),
+    ko: pins(["고정: 본문 옆에 열어 두기", "고정 해제: 본문 위에 열기"]),
+    es: pins(["Fijar: abierto junto al texto", "Soltar: se abre sobre el texto"]),
+    fr: pins(["Épingler : ouvert à côté du texte", "Désépingler : s’ouvre par-dessus le texte"]),
+    de: pins(["Anheften: neben dem Text offen lassen", "Lösen: öffnet sich über dem Text"]),
+    pt: pins(["Fixar: aberto ao lado do texto", "Soltar: abre por cima do texto"]),
+    it: pins(["Fissa: aperta accanto al testo", "Sblocca: si apre sopra il testo"]),
+    ru: pins(["Закрепить: держать открытой рядом с текстом", "Открепить: открывать поверх текста"]),
+    hi: pins(["पिन करें: पाठ के बगल में खुला रखें", "अनपिन करें: पाठ के ऊपर खुलेगा"]),
+  };
+  for (const [code, words] of Object.entries(PINS)) Object.assign(S[code], words);
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });
   const SEL = {

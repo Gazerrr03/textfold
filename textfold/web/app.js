@@ -104,6 +104,10 @@
   const MARK = '<svg viewBox="0 0 20 20" aria-hidden="true"><rect class="m1" x="2" y="3" width="16" height="2.4" rx="1.2"/><rect class="m2" x="2" y="8.8" width="11" height="2.4" rx="1.2"/><rect class="m3" x="2" y="14.6" width="5" height="2.4" rx="1.2"/></svg>';
   const BOOKS = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3.5h3v13H4z"/><path d="M8.5 3.5h3v13h-3z"/><path d="M13 4.2l2.8-.7 2.6 12.3-2.8.7z"/></svg>';
   const LIST = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M7.5 3.5v13"/></svg>';
+  const PIN = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"><path class="pin-head" d="M7.2 2.8h5.6l-.9 4.6 2.9 3v1.4H5.2v-1.4l2.9-3z"/><path d="M10 11.8v5.4"/></svg>';
+  // the sidebar pinned beside a paper (below: setPinned), kept in this browser
+  const PIN_KEY = 'textfold.sbpin';
+  let pinned = store.get(PIN_KEY) === '1';
   const FOLDER = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 5.5a1.5 1.5 0 0 1 1.5-1.5h3.6l1.8 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z"/></svg>';
   const FOLDER_NEW = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5a1.5 1.5 0 0 1 1.5-1.5h3.6l1.8 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M10 8.5v5M7.5 11h5"/></svg>';
   const CHEV = '<svg class="sb-chev" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l4 4-4 4"/></svg>';
@@ -186,7 +190,8 @@
       `<span class="sb-m"><span class="sb-id">${j.pid}</span></span>${progress(j, T)}</div>${stopBtn(j, T)}</div>`;
     const html = `
       <div class="sb-head"><a class="sb-brand" href="/">${MARK}<span>TextFold</span></a>
-        <button type="button" class="sb-toggle" aria-label="${esc(T.collapse)}" title="${esc(T.collapse)}">‹</button></div>
+        <span class="sb-hbtns"><button type="button" class="sb-pin" aria-pressed="${pinned}" aria-label="${esc(pinned ? T.sb_unpin : T.sb_pin)}" title="${esc(pinned ? T.sb_unpin : T.sb_pin)}">${PIN}</button>
+        <button type="button" class="sb-toggle" aria-label="${esc(T.collapse)}" title="${esc(T.collapse)}">‹</button></span></div>
       <div class="sb-rail">
         <a class="rail-btn rail-home" href="/" title="${esc(T.home)}">${MARK}</a>
         <button type="button" class="rail-btn rail-open" title="${esc(T.expand)}">${LIST}</button>
@@ -221,6 +226,7 @@
     if (field) { field.value = typing.value; field.focus(); try { field.setSelectionRange(typing.a, typing.b); } catch { /* (a search field) */ } }
     applySearch();
     side.querySelector('.sb-toggle').onclick = () => setCollapsed(true);
+    side.querySelector('.sb-pin').onclick = () => setPinned(!pinned);
     side.querySelector('.rail-open').onclick = () => setCollapsed(false);
     side.querySelectorAll('.sb-settings, .rail-settings').forEach((b) => { b.onclick = openSettings; });
     side.querySelector('.sb-zotero').onclick = () => openLibrary();
@@ -283,15 +289,36 @@
   function setCollapsed(c) {
     side.classList.toggle('collapsed', c);
     document.documentElement.classList.toggle('sb-open', !c);
-    if (!PAPER) store.set('dr-sidebar', c ? '1' : '0');
+    if (!PAPER || pinned) store.set('dr-sidebar', c ? '1' : '0');
+    dockState();
   }
-  // over a paper the sidebar folds to a rail and opens over the page; on the landing it stays open beside the form
-  if (PAPER) {
-    side.classList.add('collapsed');
-    // (by where the click was when it happened: what it hit may be drawn anew by then, a folder shut, an order picked)
-    document.addEventListener('click', (e) => { if (!side.classList.contains('collapsed') && !e.composedPath().includes(side)) setCollapsed(true); });
-  } else if (store.get('dr-sidebar') === '1' || innerWidth < 720) setCollapsed(true);
-  else document.documentElement.classList.add('sb-open');
+  // over a paper the sidebar folds to a rail and opens over the page; on the landing it stays open beside the form.
+  // Pinned (its pin, kept in this browser), it stays open beside the paper too, as on the landing, and is folded or
+  // opened as there: the page makes room for it (app.css, html.sb-docked)
+  // a paper beside the open sidebar: the page starts at its edge, and a window too narrow for the notes in the margins
+  // as well has them in the column (html.sb-narrow, as beside the PDF); the reader lays its margins out again
+  function dockState() {
+    const r = document.documentElement, was = `${r.classList.contains('sb-docked')}${r.classList.contains('sb-narrow')}`;
+    const on = !!PAPER && pinned && !side.classList.contains('collapsed') && innerWidth >= 720;
+    const sb = parseFloat(getComputedStyle(r).getPropertyValue('--sb')) || 280;
+    r.classList.toggle('sb-docked', on);
+    r.classList.toggle('sb-narrow', on && innerWidth - sb < 1248);
+    if (was !== `${r.classList.contains('sb-docked')}${r.classList.contains('sb-narrow')}`) dispatchEvent(new Event('resize'));
+  }
+  function setPinned(p) {
+    pinned = p;
+    store.set(PIN_KEY, p ? '1' : '0');
+    if (p) store.set('dr-sidebar', side.classList.contains('collapsed') ? '1' : '0');
+    const b = side.querySelector('.sb-pin'), t = I18N.t(uiLang);
+    if (b) { b.setAttribute('aria-pressed', String(p)); b.title = p ? t.sb_unpin : t.sb_pin; b.setAttribute('aria-label', b.title); }
+    dockState();
+  }
+  if (PAPER && !pinned) side.classList.add('collapsed');
+  else if (store.get('dr-sidebar') === '1' || innerWidth < 720) setCollapsed(true);
+  else setCollapsed(false);   // (a paper's page comes with its sidebar folded)
+  // (by where the click was when it happened: what it hit may be drawn anew by then, a folder shut, an order picked)
+  if (PAPER) document.addEventListener('click', (e) => { if (!pinned && !side.classList.contains('collapsed') && !e.composedPath().includes(side)) setCollapsed(true); });
+  dockState();
 
   // its width, dragged at its edge (or with the arrow keys there) and kept for next time; a double-click goes back to the default
   const SBW = 'textfold.sbw';
@@ -301,7 +328,7 @@
     document.documentElement.style.setProperty('--sb', `${sbw}px`);
   }
   if (sbw) setWidth(sbw);
-  addEventListener('resize', () => { if (+store.get(SBW)) setWidth(+store.get(SBW)); });
+  addEventListener('resize', () => { if (+store.get(SBW)) setWidth(+store.get(SBW)); dockState(); });
   side.addEventListener('pointerdown', (e) => {
     const grip = e.target.closest('.sb-resize');
     if (!grip || e.button !== 0) return;
@@ -313,6 +340,7 @@
       grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
       document.documentElement.classList.remove('sb-resizing');
       store.set(SBW, String(sbw));
+      if (document.documentElement.classList.contains('sb-docked')) dispatchEvent(new Event('resize'));   // (the page beside it is narrower or wider)
     };
     grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
   });

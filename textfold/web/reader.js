@@ -1625,7 +1625,8 @@
   function layoutSides() {
     const all = docEl.querySelectorAll('.side, .lside');
     for (const sd of all) sd.style.marginTop = '';
-    if (document.documentElement.classList.contains('compare') || !matchMedia(D.app ? '(min-width: 1300px)' : '(min-width: 1240px)').matches) return;   // beside the PDF: in the column
+    const root = document.documentElement;   // beside the PDF, or beside a pinned sidebar in a window too narrow for both: in the column
+    if (root.classList.contains('compare') || root.classList.contains('sb-narrow') || !matchMedia(D.app ? '(min-width: 1300px)' : '(min-width: 1240px)').matches) return;
     const moves = [];
     for (const col of ['.side', '.lside']) {   // the right margin, then the left: each stacks on its own
       const shown = [...docEl.querySelectorAll(col)].map((sd) => [sd, sd.getBoundingClientRect()]).filter(([, r]) => r.height)
