@@ -152,12 +152,14 @@ Your questions can go to a stronger model than the one that writes the levels: *
 | Click a figure | see it enlarged |
 | **Original**, at the top | read beside the paper's PDF |
 | **Save**, at the top | keep the page as one file, as Markdown at the level you read, or only your notes |
-| **Aa**, at the top | the text's size, the column's width, serif or sans-serif, and which margins show |
+| **Aa**, at the top | light or dark, the default or paper style, the text's size, serif or sans-serif, the line spacing, the column's width, and which margins show |
+| `F` | focus: the text alone, the bars back at the screen's edge |
 | Select text | highlight, write a note, or ask |
 | **Ask the paper**, bottom right | ask about the whole text |
 | `L` | next language |
 | `⌘K` (Ctrl+K) or `/` | search your library |
 | ⌘ / Ctrl or Shift + click in the sidebar | pick several documents, to move into a folder or delete together |
+| The pin, at the top of the sidebar | keep the sidebar open beside the text |
 
 ## For agents and scripts
 
@@ -243,6 +245,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 
 ## What's new
 
+- **October 21, 2026: a reader to stay in.** **Aa** has light or dark (or your system's) and a paper style, quieter than white, for either; and the line spacing. A text opens where you left it, with a line under the top bar for how far in you are. `F` leaves the text alone on the screen. The sidebar can be pinned beside the text.
 - **October 21, 2026: tools for an agent in your browser.** In a browser that offers WebMCP, an agent finds TextFold's own operations as tools: it reads the passage you selected and, when you ask, saves a note on it, imports a file or a Zotero item, or sorts your folders. [The tools](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md). Thanks to [@peitianyi23-sudo](https://github.com/peitianyi23-sudo).
 - **October 21, 2026: Topic as a mind map.** At Topic, **Map** beside the levels draws the sections and their topics as a mind map: click a topic to read its paragraph, click a section to fold it. Headings stand apart more clearly, **Aa** can hide the margins (the links, the AI answers, your notes), and **Save** keeps the whole text as Markdown at the level you read. On Windows, the installer asks where to install.
 - **October 20, 2026: your type, and several documents at once.** **Aa** at the top sets the text's size, the column's width and serif or sans-serif, for every text. In the sidebar, ⌘-click (Ctrl-click) or Shift-click picks several documents to move into a folder or delete together, and a delete can be undone for a few seconds.
