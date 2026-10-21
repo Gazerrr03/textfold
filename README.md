@@ -147,11 +147,12 @@ Your questions can go to a stronger model than the one that writes the levels: *
 |---|---|
 | Pinch, or ⌘ / Ctrl + scroll | zoom around the pointer |
 | `1` to `5` | jump to a level |
+| **Cards** or **Map**, beside the levels at Topic | the sections and their topics as cards, or as a mind map |
 | Click a paragraph | open just that paragraph |
 | Click a figure | see it enlarged |
 | **Original**, at the top | read beside the paper's PDF |
-| **Save**, at the top | keep the page as one file, or only your notes |
-| **Aa**, at the top | the text's size, the column's width, serif or sans-serif |
+| **Save**, at the top | keep the page as one file, as Markdown at the level you read, or only your notes |
+| **Aa**, at the top | the text's size, the column's width, serif or sans-serif, and which margins show |
 | Select text | highlight, write a note, or ask |
 | **Ask the paper**, bottom right | ask about the whole text |
 | `L` | next language |
@@ -174,7 +175,7 @@ A running TextFold (the app, or `python3 -m textfold serve`) says where it is in
 
 ## Save a page
 
-**Save**, at the top of the reader, keeps a page as one HTML file that opens anywhere without a server: its levels, the notes you choose and, if you like, its original PDF to read beside it. It can also keep only your notes, as a page, a PDF, Markdown for Obsidian or JSON. From the command line, the page without your notes:
+**Save**, at the top of the reader, keeps a page as one HTML file that opens anywhere without a server: its levels, the notes you choose and, if you like, its original PDF to read beside it. It can also keep the whole text as Markdown at the level you are reading, your notes under their paragraphs (at Topic, an outline that a mind-map plugin draws), or only your notes, as a page, a PDF, Markdown for Obsidian or JSON. From the command line, the page without your notes:
 
 ```bash
 python3 -m textfold export 2512.23916
@@ -240,6 +241,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 
 ## What's new
 
+- **October 21, 2026: Topic as a mind map.** At Topic, **Map** beside the levels draws the sections and their topics as a mind map: click a topic to read its paragraph, click a section to fold it. Headings stand apart more clearly, **Aa** can hide the margins (the links, the AI answers, your notes), and **Save** keeps the whole text as Markdown at the level you read. On Windows, the installer asks where to install.
 - **October 20, 2026: your type, and several documents at once.** **Aa** at the top sets the text's size, the column's width and serif or sans-serif, for every text. In the sidebar, ⌘-click (Ctrl-click) or Shift-click picks several documents to move into a folder or delete together, and a delete can be undone for a few seconds.
 - **October 20, 2026: several files at once.** Drop or choose several files together: they are read, and their levels written, one after another while you go on reading, and the sidebar shows each.
 - **October 20, 2026: TextFold and Obsidian.** [TextFold Bridge](https://github.com/adalach/obsidian-textfold-bridge), an Obsidian plugin, links your notes to places in TextFold: a paragraph, a section, a note. Drag a paragraph, a section or a selection from the reader into a note and it keeps a link back to where it came from. A note of your own folds at the five levels inside Obsidian, and after an edit it folds again in place, its comments found again in the new text. Thanks to [@adalach](https://github.com/adalach).
