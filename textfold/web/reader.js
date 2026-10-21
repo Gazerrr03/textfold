@@ -68,19 +68,20 @@
   // the type as this reader likes it, for every text (kept in this browser): its size, the column's width, the font
   // of the author's words, the margins hidden, the colours and the line spacing (reader.css: --fs, html[data-width],
   // html[data-font], html[data-hide]: the links and the conversations on the right, the reader's notes on the left;
-  // html[data-theme], the system's when none; --lh); set before anything is drawn, and changed from the Aa menu
-  // beside the language's
+  // html[data-theme]: light or dark, the system's when none, and html[data-style]: the colours of either, the default's
+  // when none; --lh); set before anything is drawn, and changed from the Aa menu beside the language's
   const TYPE_KEY = 'textfold.type';
   const SIZES = [0.86, 0.93, 1, 1.08, 1.16, 1.25, 1.35], WIDTHS = ['narrow', 'standard', 'wide'], MARGINS = ['links', 'asks', 'notes'];
-  const THEMES = ['auto', 'light', 'paper', 'dark'], LEADS = { tight: 0.9, standard: 1, loose: 1.15 };
-  const TYPE0 = { size: 1, width: 'standard', font: 'serif', hide: [], theme: 'auto', lead: 'standard' };
+  const MODES = ['auto', 'light', 'dark'], STYLES = ['default', 'paper', 'sage', 'graphite'], LEADS = { tight: 0.9, standard: 1, loose: 1.15 };
+  const TYPE0 = { size: 1, width: 'standard', font: 'serif', hide: [], mode: 'auto', style: 'default', lead: 'standard' };
   let type = (() => {
     let v = null;
     try { v = JSON.parse(store.get(TYPE_KEY) || 'null'); } catch { /* (written by hand) */ }
     if (!v || typeof v !== 'object') return { ...TYPE0 };
     return { size: SIZES.includes(v.size) ? v.size : 1, width: WIDTHS.includes(v.width) ? v.width : 'standard', font: v.font === 'sans' ? 'sans' : 'serif',
       hide: Array.isArray(v.hide) ? MARGINS.filter((k) => v.hide.includes(k)) : [],
-      theme: THEMES.includes(v.theme) ? v.theme : 'auto', lead: LEADS[v.lead] ? v.lead : 'standard' };
+      mode: MODES.includes(v.mode) ? v.mode : MODES.includes(v.theme) ? v.theme : 'auto',   // (theme: a demo's name for it)
+      style: STYLES.includes(v.style) ? v.style : v.theme === 'paper' ? 'paper' : 'default', lead: LEADS[v.lead] ? v.lead : 'standard' };
   })();
   function applyType() {
     const r = document.documentElement;
@@ -88,7 +89,8 @@
     if (type.width === 'standard') delete r.dataset.width; else r.dataset.width = type.width;
     if (type.font === 'serif') delete r.dataset.font; else r.dataset.font = type.font;
     if (type.hide.length) r.dataset.hide = type.hide.join(' '); else delete r.dataset.hide;
-    if (type.theme === 'auto') delete r.dataset.theme; else r.dataset.theme = type.theme;
+    if (type.mode === 'auto') delete r.dataset.theme; else r.dataset.theme = type.mode;
+    if (type.style === 'default') delete r.dataset.style; else r.dataset.style = type.style;
     if (type.lead === 'standard') r.style.removeProperty('--lh'); else r.style.setProperty('--lh', String(LEADS[type.lead]));
   }
   applyType();
@@ -475,7 +477,8 @@
     langBtn.title = t.language;
     typeBtn.title = t.ty_title; typeBtn.setAttribute('aria-label', t.ty_title);
     if (!typeMenu.hidden) renderTypeMenu();
-    labelBar();
+    bar.querySelectorAll('button').forEach((b) => { b.textContent = t.levels[+b.dataset.l]; });
+    requestAnimationFrame(() => { geom = null; placeThumb(); });
     legend.replaceChildren();
     for (const r of ROLES) if (usedRoles.has(r)) { const it = h('span', null, `<i style="background:var(--r-${r});--beat:var(--r-${r})"></i>${t.roles[r]}`); it.dataset.role = r; legend.append(it); }
     if (rolePinned) legendFocus(rolePinned, true);
@@ -958,7 +961,7 @@
   // smaller), and the stage hides the margins the page hides
   function mirrorType() {
     const r = document.documentElement;
-    for (const k of ['font', 'width', 'hide', 'theme']) { if (r.dataset[k]) zhost.dataset[k] = r.dataset[k]; else delete zhost.dataset[k]; }
+    for (const k of ['font', 'width', 'hide', 'theme', 'style']) { if (r.dataset[k]) zhost.dataset[k] = r.dataset[k]; else delete zhost.dataset[k]; }
   }
   mirrorType();
   // KaTeX's stylesheet, once the page has it (loaded, or carried inside), is wanted inside too (drawn formulas in the
@@ -2665,13 +2668,14 @@
   typeMenu.setAttribute('role', 'dialog');
   typePick.append(typeBtn, typeMenu);
   const isType0 = () => type.size === TYPE0.size && type.width === TYPE0.width && type.font === TYPE0.font && !type.hide.length
-    && type.theme === TYPE0.theme && type.lead === TYPE0.lead;
+    && type.mode === TYPE0.mode && type.style === TYPE0.style && type.lead === TYPE0.lead;
   function renderTypeMenu() {
     const t = T[ui], k = SIZES.indexOf(type.size);
     const seg = (key, vals, names) => `<div class="ty-seg" role="radiogroup" aria-label="${esc(t[`ty_${key}`])}">` +
       vals.map((v, i) => `<button type="button" role="radio" aria-checked="${type[key] === v}" data-${key}="${v}">${esc(names[i])}</button>`).join('') + '</div>';
     typeMenu.setAttribute('aria-label', t.ty_title);
-    typeMenu.innerHTML = `<div class="ty-row ty-trow"><span class="ty-l">${esc(t.ty_theme)}</span>${seg('theme', THEMES, [t.ty_auto, t.ty_light, t.ty_paper, t.ty_dark])}</div>` +
+    typeMenu.innerHTML = `<div class="ty-row"><span class="ty-l">${esc(t.ty_mode)}</span>${seg('mode', MODES, [t.ty_auto, t.ty_light, t.ty_dark])}</div>` +
+      `<div class="ty-row"><span class="ty-l">${esc(t.ty_style)}</span>${seg('style', STYLES, [t.ty_default, t.ty_paper, t.ty_sage, t.ty_graphite])}</div>` +
       `<div class="ty-row"><span class="ty-l">${esc(t.ty_size)}</span><div class="ty-size">` +
       `<button type="button" class="ty-a sm" data-step="-1" aria-label="${esc(t.ty_smaller)}" title="${esc(t.ty_smaller)}"${k === 0 ? ' disabled' : ''}>A</button>` +
       `<button type="button" class="ty-pct" data-step="0" title="${esc(t.ty_usual)}">${Math.round(type.size * 100)}%</button>` +
@@ -2707,14 +2711,15 @@
     if (b.dataset.step) setType({ size: d ? SIZES[Math.max(0, Math.min(SIZES.length - 1, k + d))] : 1 });
     else if (b.dataset.width) setType({ width: b.dataset.width });
     else if (b.dataset.font) setType({ font: b.dataset.font });
-    else if (b.dataset.theme) setType({ theme: b.dataset.theme });
+    else if (b.dataset.mode) setType({ mode: b.dataset.mode });
+    else if (b.dataset.style) setType({ style: b.dataset.style });
     else if (b.dataset.lead) setType({ lead: b.dataset.lead });
     else if (b.dataset.focus) { closeTypeMenu(); setFocus(!focusOn); return; }
     else if (b.dataset.margin) { const k = b.dataset.margin; setType({ hide: MARGINS.filter((x) => (x === k) !== type.hide.includes(x)) }); }
     else setType({ ...TYPE0 });
     // drawn anew: the key that was pressed keeps the focus (the reset, gone: the first)
     const sel = b.dataset.step ? `[data-step="${b.dataset.step}"]` : b.dataset.width ? `[data-width="${b.dataset.width}"]` : b.dataset.font ? `[data-font="${b.dataset.font}"]`
-      : b.dataset.margin ? `[data-margin="${b.dataset.margin}"]` : b.dataset.theme ? `[data-theme="${b.dataset.theme}"]` : b.dataset.lead ? `[data-lead="${b.dataset.lead}"]` : null;
+      : b.dataset.margin ? `[data-margin="${b.dataset.margin}"]` : b.dataset.mode ? `[data-mode="${b.dataset.mode}"]` : b.dataset.style ? `[data-style="${b.dataset.style}"]` : b.dataset.lead ? `[data-lead="${b.dataset.lead}"]` : null;
     renderTypeMenu();
     const again = (sel && typeMenu.querySelector(sel)) || typeMenu.querySelector('button');
     if (again && !again.disabled) again.focus(); else typeMenu.querySelector('.ty-pct').focus();
@@ -3846,35 +3851,6 @@ math { font-size: 1.05em; }
     }
     if (!pic) closeLightbox();
   });
-
-  // ── how long each level takes to read, beside its name on the bar: its words at about 230 a minute, a CJK text's
-  //    characters at about 400 (what the level shows: the paragraphs, and the sections' summaries at the written
-  //    levels). Counted once a language, when the page is idle ──
-  const RT = new Map();   // lang -> minutes, by level
-  const CJK_CH = /[぀-ヿ㐀-鿿가-힯豈-﫿]/g;
-  const minutesOf = (s) => { const c = (s.match(CJK_CH) || []).length; return c / 400 + s.replace(CJK_CH, ' ').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length / 230; };
-  function readTimes() {
-    if (RT.has(lang)) return RT.get(lang);
-    const out = [0, 1, 2, 3, 4].map((L) => {
-      let m = 0;
-      for (const uid of IDS) m += minutesOf(piecesText(pieces(uid, L)));
-      if (L <= 2) for (const c of D.chunks) m += minutesOf(summaryOf(c));
-      return m;
-    });
-    RT.set(lang, out);
-    return out;
-  }
-  const rtText = (m, t) => (m < 0.5 ? t.rt_lt1 : t.rt_short.replace('{n}', Math.round(m)));
-  function labelBar() {
-    const t = T[ui], times = RT.get(lang);
-    barButtons().forEach((b, i) => {
-      const L = +b.dataset.l;
-      b.innerHTML = esc(t.levels[L]) + (times ? `<span class="rt">${esc(rtText(times[L], t))}</span>` : '');
-      b.title = times ? `${i + 1} · ${times[L] < 0.5 ? t.rt_title_lt1 : t.rt_title.replace('{n}', Math.round(times[L]))}` : `${i + 1}`;
-    });
-    requestAnimationFrame(() => { geom = null; placeThumb(); });
-    if (!times) (window.requestIdleCallback || setTimeout)(() => { readTimes(); labelBar(); });
-  }
 
   // ── where this text was being read (kept in this browser, the last 300 texts): its level and the paragraph at the
   //    reading line, saved as the reader scrolls or zooms. Opened again (and with no place asked for in its link),

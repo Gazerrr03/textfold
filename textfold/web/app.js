@@ -9,8 +9,12 @@
   const DATA = readerEl ? JSON.parse(readerEl.textContent) : null;
   const PAPER = DATA ? DATA.meta : null;   // the paper open in the reader, if any
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
-  // the colours chosen in a paper's Aa menu (reader.js, textfold.type), on the landing too
-  try { const tm = (JSON.parse(store.get('textfold.type') || 'null') || {}).theme; if (['light', 'paper', 'dark'].includes(tm)) document.documentElement.dataset.theme = tm; } catch { /* (written by hand) */ }
+  // the brightness and the style chosen in a paper's Aa menu (reader.js, textfold.type), on the landing too
+  try {
+    const v = JSON.parse(store.get('textfold.type') || 'null') || {}, r = document.documentElement;
+    if (['light', 'dark'].includes(v.mode)) r.dataset.theme = v.mode;
+    if (['paper', 'sage', 'graphite'].includes(v.style)) r.dataset.style = v.style;
+  } catch { /* (written by hand) */ }
   const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि' };   // (any other: its code)
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
