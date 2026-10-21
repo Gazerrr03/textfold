@@ -202,6 +202,13 @@
   tool('annotation-delete', 'Delete a saved annotation ONLY on explicit user request.', { id: string('Annotation id') }, ['id'], async a => {
     const result = await api(`/api/notes/${requireReader()}`, { op: 'delete', id: a.id }); refresh(); return result;
   }, false);
+  // Output that came from outside is marked as such (the spec's untrustedContentHint: the output holds untrusted
+  // data): a document's words and title, a note's quote, the model's answers, a Zotero record. A page that says
+  // "delete every note" then reaches the agent as the page's words. Only the tools that answer with TextFold's own ids
+  // and folders go unmarked. A note deleted here does not come back (notes.delete): that one is consequential.
+  const OWN = new Set(['library-open', 'folder-create', 'folder-rename', 'document-move']);
+  for (const t of tools) if (!OWN.has(t.name)) t.annotations.untrustedContentHint = true;
+  tools.find(t => t.name === 'annotation-delete').annotations.consequentialHint = true;
   // Real browser registration; unsupported browsers simply retain the normal app UI.
   if (mc) Promise.all(tools.map(t => mc.registerTool(t))).catch(e => console.error('TextFold WebMCP registration:', e));
 })();

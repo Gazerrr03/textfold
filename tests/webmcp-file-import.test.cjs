@@ -139,6 +139,14 @@ test('catalog exposes only existing functionality through 15 tools', () => {
   ].sort());
 });
 
+test('output from outside is marked untrusted, and a delete as consequential', () => {
+  const hints = Object.fromEntries(harness().registered.map(t => [t.name, t.annotations]));
+  const own = ['library-open', 'folder-create', 'folder-rename', 'document-move'];
+  for (const [name, a] of Object.entries(hints)) assert.equal(!!a.untrustedContentHint, !own.includes(name), name);
+  assert.equal(hints['annotation-delete'].consequentialHint, true);
+  assert.equal(!!hints['annotation-create'].consequentialHint, false);
+});
+
 test('Zotero query delegates library listing and item search to existing endpoints', async () => {
   const h = harness();
   await h.runTool('zotero-query', {});
