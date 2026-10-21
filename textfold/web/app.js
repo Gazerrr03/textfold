@@ -13,7 +13,7 @@
   try {
     const v = JSON.parse(store.get('textfold.type') || 'null') || {}, r = document.documentElement;
     if (['light', 'dark'].includes(v.mode)) r.dataset.theme = v.mode;
-    if (['paper', 'sage', 'graphite'].includes(v.style)) r.dataset.style = v.style;
+    if (v.style === 'paper') r.dataset.style = v.style;
   } catch { /* (written by hand) */ }
   const SHORT = { en: 'EN', zh: '中', 'zh-Hant': '繁', ja: '日', ko: '한', es: 'ES', fr: 'FR', de: 'DE', pt: 'PT', it: 'IT', ru: 'RU', hi: 'हि' };   // (any other: its code)
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

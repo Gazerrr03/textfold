@@ -652,20 +652,20 @@ window.DR_I18N = (() => {
   };
   for (const [code, words] of Object.entries(PINS)) Object.assign(S[code], words);
   // the reader's brightness and style, line spacing and focus (Aa), and where a text was left
-  const rds = (w) => ({ ty_mode: w[0], ty_style: w[1], ty_auto: w[2], ty_light: w[3], ty_dark: w[4], ty_default: w[5], ty_paper: w[6], ty_sage: w[7], ty_graphite: w[8], ty_lead: w[9], ty_tight: w[10], ty_loose: w[11], ty_focus: w[12], focus_on: w[13], pos_back: w[14], pos_top: w[15] });
+  const rds = (w) => ({ ty_mode: w[0], ty_style: w[1], ty_auto: w[2], ty_light: w[3], ty_dark: w[4], ty_default: w[5], ty_paper: w[6], ty_lead: w[7], ty_tight: w[8], ty_loose: w[9], ty_focus: w[10], focus_on: w[11], pos_back: w[12], pos_top: w[13] });
   const RDS = {
-    en: rds(["Appearance", "Style", "Auto", "Light", "Dark", "Default", "Paper", "Sage", "Graphite", "Line spacing", "Tight", "Loose", "Focus", "Focus: press F or Esc to leave", "Back where you left off", "From the start"]),
-    zh: rds(["明暗", "风格", "跟随系统", "浅色", "深色", "默认", "纸张", "青瓷", "石墨", "行距", "紧凑", "宽松", "专注模式", "专注模式：按 F 或 Esc 退出", "回到了上次读到的地方", "从头读"]),
-    "zh-Hant": rds(["明暗", "風格", "跟隨系統", "淺色", "深色", "預設", "紙張", "青瓷", "石墨", "行距", "緊湊", "寬鬆", "專注模式", "專注模式：按 F 或 Esc 退出", "回到了上次讀到的地方", "從頭讀"]),
-    ja: rds(["明るさ", "スタイル", "システムに合わせる", "ライト", "ダーク", "標準", "紙", "青磁", "グラファイト", "行間", "狭い", "広い", "集中モード", "集中モード：F か Esc で終了", "前回読んでいた場所に戻りました", "最初から"]),
-    ko: rds(["밝기", "스타일", "시스템 설정", "밝게", "어둡게", "기본", "종이", "청자", "흑연", "줄 간격", "좁게", "넓게", "집중 모드", "집중 모드: F 또는 Esc로 끝내기", "지난번에 읽던 곳으로 돌아왔습니다", "처음부터"]),
-    es: rds(["Apariencia", "Estilo", "Sistema", "Claro", "Oscuro", "Predeterminado", "Papel", "Salvia", "Grafito", "Interlineado", "Compacto", "Amplio", "Modo concentración", "Modo concentración: pulsa F o Esc para salir", "Has vuelto a donde lo dejaste", "Desde el principio"]),
-    fr: rds(["Apparence", "Style", "Système", "Clair", "Sombre", "Par défaut", "Papier", "Sauge", "Graphite", "Interligne", "Serré", "Aéré", "Mode concentration", "Mode concentration : F ou Échap pour quitter", "Vous reprenez là où vous en étiez", "Depuis le début"]),
-    de: rds(["Erscheinung", "Stil", "System", "Hell", "Dunkel", "Standard", "Papier", "Salbei", "Graphit", "Zeilenabstand", "Eng", "Weit", "Fokusmodus", "Fokusmodus: F oder Esc beendet ihn", "Zurück, wo du aufgehört hast", "Von vorn"]),
-    pt: rds(["Aparência", "Estilo", "Sistema", "Claro", "Escuro", "Padrão", "Papel", "Sálvia", "Grafite", "Entrelinha", "Compacta", "Ampla", "Modo foco", "Modo foco: F ou Esc para sair", "De volta aonde você parou", "Do início"]),
-    it: rds(["Aspetto", "Stile", "Sistema", "Chiaro", "Scuro", "Predefinito", "Carta", "Salvia", "Grafite", "Interlinea", "Stretta", "Ampia", "Modalità concentrazione", "Modalità concentrazione: F o Esc per uscire", "Sei tornato dove eri rimasto", "Dall’inizio"]),
-    ru: rds(["Оформление", "Стиль", "Как в системе", "Светлое", "Тёмное", "Обычный", "Бумага", "Шалфей", "Графит", "Интервал", "Плотный", "Свободный", "Режим чтения", "Режим чтения: F или Esc — выйти", "Вы вернулись туда, где остановились", "С начала"]),
-    hi: rds(["रूप", "शैली", "सिस्टम जैसा", "हल्का", "गहरा", "सामान्य", "कागज़", "सेज", "ग्रेफ़ाइट", "पंक्ति अंतर", "सघन", "खुला", "फ़ोकस मोड", "फ़ोकस मोड: बाहर निकलने के लिए F या Esc", "आप वहीं लौट आए जहाँ छोड़ा था", "शुरू से"]),
+    en: rds(["Appearance", "Style", "Auto", "Light", "Dark", "Default", "Paper", "Line spacing", "Tight", "Loose", "Focus", "Focus: press F or Esc to leave", "Back where you left off", "From the start"]),
+    zh: rds(["明暗", "风格", "跟随系统", "浅色", "深色", "默认", "纸张", "行距", "紧凑", "宽松", "专注模式", "专注模式：按 F 或 Esc 退出", "回到了上次读到的地方", "从头读"]),
+    "zh-Hant": rds(["明暗", "風格", "跟隨系統", "淺色", "深色", "預設", "紙張", "行距", "緊湊", "寬鬆", "專注模式", "專注模式：按 F 或 Esc 退出", "回到了上次讀到的地方", "從頭讀"]),
+    ja: rds(["明るさ", "スタイル", "システムに合わせる", "ライト", "ダーク", "標準", "紙", "行間", "狭い", "広い", "集中モード", "集中モード：F か Esc で終了", "前回読んでいた場所に戻りました", "最初から"]),
+    ko: rds(["밝기", "스타일", "시스템 설정", "밝게", "어둡게", "기본", "종이", "줄 간격", "좁게", "넓게", "집중 모드", "집중 모드: F 또는 Esc로 끝내기", "지난번에 읽던 곳으로 돌아왔습니다", "처음부터"]),
+    es: rds(["Apariencia", "Estilo", "Sistema", "Claro", "Oscuro", "Predeterminado", "Papel", "Interlineado", "Compacto", "Amplio", "Modo concentración", "Modo concentración: pulsa F o Esc para salir", "Has vuelto a donde lo dejaste", "Desde el principio"]),
+    fr: rds(["Apparence", "Style", "Système", "Clair", "Sombre", "Par défaut", "Papier", "Interligne", "Serré", "Aéré", "Mode concentration", "Mode concentration : F ou Échap pour quitter", "Vous reprenez là où vous en étiez", "Depuis le début"]),
+    de: rds(["Erscheinung", "Stil", "System", "Hell", "Dunkel", "Standard", "Papier", "Zeilenabstand", "Eng", "Weit", "Fokusmodus", "Fokusmodus: F oder Esc beendet ihn", "Zurück, wo du aufgehört hast", "Von vorn"]),
+    pt: rds(["Aparência", "Estilo", "Sistema", "Claro", "Escuro", "Padrão", "Papel", "Entrelinha", "Compacta", "Ampla", "Modo foco", "Modo foco: F ou Esc para sair", "De volta aonde você parou", "Do início"]),
+    it: rds(["Aspetto", "Stile", "Sistema", "Chiaro", "Scuro", "Predefinito", "Carta", "Interlinea", "Stretta", "Ampia", "Modalità concentrazione", "Modalità concentrazione: F o Esc per uscire", "Sei tornato dove eri rimasto", "Dall’inizio"]),
+    ru: rds(["Оформление", "Стиль", "Как в системе", "Светлое", "Тёмное", "Обычный", "Бумага", "Интервал", "Плотный", "Свободный", "Режим чтения", "Режим чтения: F или Esc — выйти", "Вы вернулись туда, где остановились", "С начала"]),
+    hi: rds(["रूप", "शैली", "सिस्टम जैसा", "हल्का", "गहरा", "सामान्य", "कागज़", "पंक्ति अंतर", "सघन", "खुला", "फ़ोकस मोड", "फ़ोकस मोड: बाहर निकलने के लिए F या Esc", "आप वहीं लौट आए जहाँ छोड़ा था", "शुरू से"]),
   };
   for (const [code, words] of Object.entries(RDS)) Object.assign(S[code], words);
   for (const [code, w] of Object.entries({"en": "Leave focus", "zh": "退出专注", "zh-Hant": "退出專注", "ja": "集中モードを終了", "ko": "집중 모드 끝내기", "es": "Salir del modo concentración", "fr": "Quitter le mode concentration", "de": "Fokusmodus beenden", "pt": "Sair do modo foco", "it": "Esci dalla concentrazione", "ru": "Выйти из режима чтения", "hi": "फ़ोकस मोड से बाहर"})) S[code].ty_focus_off = w;

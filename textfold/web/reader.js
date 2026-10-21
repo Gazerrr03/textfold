@@ -72,7 +72,7 @@
   // when none; --lh); set before anything is drawn, and changed from the Aa menu beside the language's
   const TYPE_KEY = 'textfold.type';
   const SIZES = [0.86, 0.93, 1, 1.08, 1.16, 1.25, 1.35], WIDTHS = ['narrow', 'standard', 'wide'], MARGINS = ['links', 'asks', 'notes'];
-  const MODES = ['auto', 'light', 'dark'], STYLES = ['default', 'paper', 'sage', 'graphite'], LEADS = { tight: 0.9, standard: 1, loose: 1.15 };
+  const MODES = ['auto', 'light', 'dark'], STYLES = ['default', 'paper'], LEADS = { tight: 0.9, standard: 1, loose: 1.15 };
   const TYPE0 = { size: 1, width: 'standard', font: 'serif', hide: [], mode: 'auto', style: 'default', lead: 'standard' };
   let type = (() => {
     let v = null;
@@ -2675,7 +2675,7 @@
       vals.map((v, i) => `<button type="button" role="radio" aria-checked="${type[key] === v}" data-${key}="${v}">${esc(names[i])}</button>`).join('') + '</div>';
     typeMenu.setAttribute('aria-label', t.ty_title);
     typeMenu.innerHTML = `<div class="ty-row"><span class="ty-l">${esc(t.ty_mode)}</span>${seg('mode', MODES, [t.ty_auto, t.ty_light, t.ty_dark])}</div>` +
-      `<div class="ty-row"><span class="ty-l">${esc(t.ty_style)}</span>${seg('style', STYLES, [t.ty_default, t.ty_paper, t.ty_sage, t.ty_graphite])}</div>` +
+      `<div class="ty-row"><span class="ty-l">${esc(t.ty_style)}</span>${seg('style', STYLES, [t.ty_default, t.ty_paper])}</div>` +
       `<div class="ty-row"><span class="ty-l">${esc(t.ty_size)}</span><div class="ty-size">` +
       `<button type="button" class="ty-a sm" data-step="-1" aria-label="${esc(t.ty_smaller)}" title="${esc(t.ty_smaller)}"${k === 0 ? ' disabled' : ''}>A</button>` +
       `<button type="button" class="ty-pct" data-step="0" title="${esc(t.ty_usual)}">${Math.round(type.size * 100)}%</button>` +
