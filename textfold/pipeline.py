@@ -23,7 +23,7 @@ def task(cfg, name):
     return models.for_task(llm.spec_of(cfg), name)
 
 
-def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=lambda *a: None, stop=None):
+def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=lambda *a: None, stop=None, original=False):
     def check():
         if stop is not None and stop.is_set():
             raise llm.Stopped()
@@ -50,8 +50,16 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
                 raise RuntimeError("no-html")  # the app shows its own sentence for this
             raise
     check()
+    if original:
+        import json
+        f = d / "meta.json"
+        meta = json.loads(f.read_text(encoding="utf-8"))
+        meta["reading_mode"] = "original"
+        f.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     progress("parse", 0, 1)
     doc = store.parsed(pid)
+    if doc["meta"].get("reading_mode") == "original":
+        lang = "en"   # the base layer slot holds the source language; no translation task
     cache = d / "llm-cache"
     en = store.read(pid, "en")
     if cfg is None and (en is None or force or (lang != "en" and store.read(pid, f"tr-{lang}") is None)):

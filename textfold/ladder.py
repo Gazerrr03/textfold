@@ -241,6 +241,9 @@ Return JSON: {{"section": {{"takeaway": "...", "topic": "..."}}, "units": [{{"id
     if cjk:   # the style rules above are written for English punctuation
         prompt = prompt.replace("no em or en dashes as punctuation, use commas or colons",
                                 "use the punctuation of the text's own language")
+    if doc['meta'].get('reading_mode') == 'original':
+        prompt = prompt.replace('English sentence', "sentence in this source passage's original language")
+        prompt += "\nKeep all generated text in the original language; do not translate."
     return prompt
 
 

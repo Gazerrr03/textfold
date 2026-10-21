@@ -102,14 +102,41 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
     pdf: the paper's PDF beside a gallery's page, for the original pages next to the text ({"file", "pdfjs"})."""
     inline_images(doc, app)
     t = (WEB / "template.html").read_text(encoding="utf-8")
+    original_label = '<script>DR_I18N.NATIVE.en="Original";</script>' if doc["meta"].get("reading_mode") == "original" else ''
+    if app:
+        from . import docsite
+        documentation = docsite.manifest(doc["meta"]["id"])
+        if documentation:
+            failed = [c for c in documentation["chapters"] if c["status"] != "ready"]
+            rows = ''.join(f'<li>{escape(c["title"])}: {escape(c.get("error", ""))}</li>' for c in failed)
+            chapters = doc['meta'].get('documentation_chapters', [])
+            active = doc['meta'].get('active_chapter')
+            options = ''.join(f'<option value="{escape(c["id"], quote=True)}"' + (' selected' if c['id'] == active else '') + (' disabled' if not c.get('available') else '') +
+                              f'>{escape(" / ".join(c.get("path", []) + [c["title"]]))}</option>' for c in chapters)
+            available = [c for c in chapters if c.get('available')]
+            index = next((i for i, c in enumerate(available) if c['id'] == active), 0)
+            chapter_nav = (f'<div class="document-actions" style="font:13px/1.5 system-ui">'
+                           f'<select id="documentation-chapter" aria-label="Documentation chapter" style="max-width:220px;font:inherit;'
+                           f'color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 8px">{options}</select> '
+                           + (f'<a href="?chapter={available[index-1]["id"]}" aria-label="Previous chapter">←</a> ' if index else '')
+                           + (f'<a href="?chapter={available[index+1]["id"]}" aria-label="Next chapter">→</a>' if index + 1 < len(available) else '') + '</div>') if chapters else ''
+            banner = (chapter_nav + f'<details class="document-actions" style="font:13px/1.5 system-ui;position:relative"><summary>Sources · '
+                      f'{len(documentation["chapters"]) - len(failed)}/{len(documentation["chapters"])} chapters</summary>'
+                      f'<div style="position:absolute;right:0;top:100%;width:min(320px,80vw);max-height:40vh;overflow:auto;'
+                      f'padding:8px 12px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;z-index:50">'
+                      f'<p><a href="{escape(documentation["root"], quote=True)}">Original documentation</a> · Original language</p>'
+                      + (f'<ul>{rows}</ul><button type="button" id="documentation-retry">Retry failed chapters</button>' if failed else '')
+                      + (f'<p>Unresolved annotations: {len(documentation.get("unresolved_annotations", []))}</p>' if documentation.get("unresolved_annotations") else '')
+                      + '</div></details>')
+            t = t.replace('<div class="langpick">', banner + '<div class="langpick">')
     if app:
         head = fonts_head(APP_ASSETS) + '<link rel="stylesheet" href="/static/reader.css"><link rel="stylesheet" href="/static/app.css">'
-        scripts = ('<script src="/static/i18n.js"></script><script src="/static/tutorial.js"></script><script src="/static/reader.js"></script>'
-                   '<script src="/static/app.js"></script>')
+        scripts = ('<script src="/static/i18n.js"></script><script src="/static/tutorial.js"></script>' + original_label + '<script src="/static/reader.js"></script>'
+                   '<script src="/static/app.js"></script><script src="/static/webmcp.js"></script>')
         side, cls, katex = '<aside id="sidebar" class="collapsed"></aside>', "app", APP_ASSETS + "katex/"
     else:
         head = fonts_head(assets) + f"<style>{(WEB / 'reader.css').read_text(encoding="utf-8")}</style>"
-        scripts = f"<script>{(WEB / 'i18n.js').read_text(encoding="utf-8")}</script><script>{(WEB / 'reader.js').read_text(encoding="utf-8")}</script>"
+        scripts = f"<script>{(WEB / 'i18n.js').read_text(encoding="utf-8")}</script>" + original_label + f"<script>{(WEB / 'reader.js').read_text(encoding="utf-8")}</script>"
         side, cls, katex = "", "static", (assets + "katex/") if assets else None
         if not assets and (_has_tex(doc) or (saved and saved.get("notes"))):   # (an answer's formulas need it too)
             head += _katex_inside()

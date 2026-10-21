@@ -139,9 +139,9 @@
         return `<div class="sb-row" data-pid="${p.id}" data-q="${esc(hay(p))}"><input class="sb-dname-in" value="${esc(title)}" placeholder="${esc(own)}" ` +
           `aria-label="${esc(T.d_name)}" title="${esc(T.d_name)}" maxlength="200" spellcheck="false"></div>`;
       }
-      const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${SHORT[l] || l.toUpperCase()}</span>`).join('');
+      const langs = p.langs.map((l) => `<span${l === readLang ? ' class="on"' : ''}>${p.reading_mode === 'original' && l === 'en' ? 'Original' : SHORT[l] || l.toUpperCase()}</span>`).join('');
       const active = PAPER && PAPER.id === p.id;
-      const unfinished = !j && !p.langs.length;   // stopped (or failed) before its first language: a click goes on with it
+      const unfinished = !j && !p.langs.length && !p.readable;   // stopped (or failed) before its first language: a click goes on with it
       return `<div class="sb-row${chosen.has(p.id) ? ' chosen' : ''}" data-pid="${p.id}" data-q="${esc(hay(p))}"><a class="sb-item${active ? ' active' : ''}${unfinished ? ' unfinished' : ''}" href="${unfinished ? '#' : `/p/${p.id}?lang=${pick(p)}`}"${unfinished ? ` data-resume="${p.id}"` : ''} title="${esc(p.title)}">
         <span class="sb-t">${esc(title)}</span><span class="sb-m"><span class="sb-id">${p.id}</span><span class="sb-langs">${langs}</span></span>
         ${j ? progress(j, T) : unfinished ? `<span class="sb-stage">${esc(T.unfinished)}</span>` : ''}</a>` +
@@ -770,6 +770,19 @@
   const extOf = (name) => ((/\.([a-z0-9]+)$/i.exec(name || '') || [])[1] || '').toLowerCase();
   const forEngine = (file) => isPdf(file) || ENGINE_EXT.includes(extOf(file.name));
   const isText = (file) => TEXT_EXT.includes(extOf(file.name));
+  async function importFile(file, lang) {
+    if (file.size > 100 * 1024 * 1024) throw new Error('too-large');
+    if (forEngine(file)) return uploadFile(file, lang);
+    if (!isText(file)) throw new Error('not-supported');
+    const text = await file.text();
+    if (!text.trim()) throw new Error('empty');
+    return api('/api/import', { name: file.name, text });
+  }
+  // File selection, drop and browser tools share the upload dispatch and PDF reference discovery.
+  window.TFUploads = { importFile, isText,
+    language: () => document.getElementById('lang')?.value || window.__reader?.lang || readLang,
+    hasModel: () => !!modelName,
+    supportsLanguage: lang => !!(BOOT.langs || DATA?.langs || I18N.NATIVE)?.[lang] };
   // several files at once (dropped, or chosen together): each goes to the server in turn, one upload at a time, and its
   // job waits in the server's queues, which read the files and write their levels one after another (the sidebar shows
   // each, with its stop). Files given while others are still going up wait for them. Says what came of them: how many
@@ -786,10 +799,10 @@
         if (why) { got.skipped.push([file.name, why]); continue; }
         try {
           if (isText(file)) {
-            const r = await api('/api/import', { name: file.name, text: await file.text() });
+            const r = await importFile(file, lang);
             await submit(r.paper, lang, false, () => {});
           } else {
-            const d = await uploadFile(file, lang);
+            const d = await importFile(file, lang);
             if (d.needs === 'engine') { got.engine.push(d.upload); continue; }
             watch(d.job, () => {});
           }
@@ -956,7 +969,7 @@
       if (forEngine(file)) {
         say(isPdf(file) ? t().pdf_reading : t().file_reading);
         try {
-          const d = await uploadFile(file, readLang);
+          const d = await importFile(file, readLang);
           if (d.paper) { location.href = `/p/${d.paper}?lang=${encodeURIComponent(d.job.lang)}`; return; }   // read already
           const q = new URLSearchParams({ t: file.name });
           if (d.needs === 'engine') q.set('engine', d.upload); else { q.set('follow', d.job.id); if (d.via === 'online') q.set('ref', d.ref); }
@@ -966,7 +979,7 @@
       }
       if (!isText(file)) { say(t().md_only, 4000); return; }
       try {
-        const r = await api('/api/import', { name: file.name, text: await file.text() });
+        const r = await importFile(file, uiLang);
         location.href = `/?start=${encodeURIComponent(r.paper)}&t=${encodeURIComponent(r.title)}`;
       } catch (x) { say(errText(x.message), 4000); }
     });
@@ -1007,7 +1020,9 @@
       }
       try { if (u) sessionStorage.setItem('pf-keep', JSON.stringify({ pid: PAPER.id, uid: u.dataset.u, top: u.getBoundingClientRect().top, level: R && R.level })); } catch { /* private window */ }
       if (R && lang !== R.lang) { store.set(UI_KEY, lang); tellLang(lang); }   // a language just made: the reader's goes with it
-      location.href = `/p/${PAPER.id}?lang=${encodeURIComponent(lang)}`;
+      const q = new URLSearchParams({ lang });
+      if (PAPER.active_chapter) q.set('chapter', PAPER.active_chapter);
+      location.href = `/p/${PAPER.id}?${q}`;
     }
     const src = PAPER.source || {};
     if ((src.kind === 'pdf' && src.tier !== 'accurate') || (src.kind === 'file' && src.tier === 'fast')) {
@@ -1206,7 +1221,7 @@
       card.hidden = false;
       card.innerHTML = `<div class="jc-t">${esc(file.name)}</div><div class="jc-s">${esc(isPdf(file) ? t().pdf_reading : t().file_reading)}</div><span class="sb-prog"><i style="width:4%"></i></span>`;
       try {
-        const d = await uploadFile(file, lang);
+        const d = await importFile(file, lang);
         if (latest !== mine) return;
         took(d, file.name, mine, lang);
       } catch (x) { card.hidden = true; fail(errText(x.message)); }
@@ -1255,7 +1270,7 @@
       if (!isText(file)) { fail(t().md_only); return; }
       if (!modelName) { fail(t().no_model); return; }
       try {
-        const r = await api('/api/import', { name: file.name, text: await file.text() });
+        const r = await importFile(file, sel.value);
         start(r.paper, r.title);
       } catch (x) { fail(errText(x.message)); }
     }
