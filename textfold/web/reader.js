@@ -943,6 +943,13 @@
     return sheet;
   }
   function mirrorLang() { zhost.setAttribute('lang', document.documentElement.lang); zhost.dataset.lang = lang; }
+  // and the type's (applyType): the sandbox lays a level out with the page's rules for them (a sans-serif paragraph is
+  // smaller); without them the last frame of a zoom sat apart from the page it gave way to
+  function mirrorType() {
+    const r = document.documentElement;
+    for (const k of ['font', 'width']) { if (r.dataset[k]) zhost.dataset[k] = r.dataset[k]; else delete zhost.dataset[k]; }
+  }
+  mirrorType();
   // KaTeX's stylesheet, once the page has it (loaded, or carried inside), is wanted inside too (drawn formulas in the
   // copies and the sandbox)
   let katexInside = false;
@@ -2665,7 +2672,7 @@
     const anchor = defaultAnchor();
     type = { ...type, ...next };
     store.set(TYPE_KEY, JSON.stringify(type));
-    applyType();
+    applyType(); mirrorType();
     settle(anchor);
     capEpoch++; relayout(); geom = null; placeThumb(); warmSoon();
   }
