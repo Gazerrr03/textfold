@@ -7,6 +7,7 @@ Run from the repo root:
     python3 -m unittest discover tests
 """
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -281,7 +282,8 @@ class Refold(Base):
     def test_a_refold_asks_only_for_the_section_that_changed(self):
         pid = local.import_text(TEXT, "diary.md")
         asked = []
-        with mock.patch.object(llm, "_once", fake_model(asked)):
+        with mock.patch.object(llm, "_once", fake_model(asked)), mock.patch.dict(os.environ):
+            os.environ.pop("TEXTFOLD_NO_MODELS", None)   # (the build runs the tests with it: the model here is a stand-in)
             pipeline.generate(pid, "en", self.SPEC)
             self.assertEqual(len(asked), 4)   # three sections and the links
             local.replace_text(pid, TEXT.replace("how loud it was", "how loud it was at night"))

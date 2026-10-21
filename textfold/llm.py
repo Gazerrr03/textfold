@@ -12,6 +12,7 @@ the prompt, the schema, the model or its effort changes. `force` skips the cache
 """
 import hashlib
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -91,6 +92,8 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
     if f.exists() and not force:
         from .store import read_text   # (store imports ladder, which imports this)
         return {**json.loads(read_text(f)), "file": str(f)}, True
+    if os.environ.get("TEXTFOLD_NO_MODELS"):   # (agents.scan): a reply kept is read, none is asked for, whatever model is named
+        raise RuntimeError("No model is available: TEXTFOLD_NO_MODELS is set")
     note = None
     try:
         out, cost = _once(prompt, schema, spec, timeout, system)
