@@ -599,6 +599,41 @@ window.DR_I18N = (() => {
     hi: tys(["पाठ का आकार, चौड़ाई और फ़ॉन्ट", "आकार", "छोटा", "बड़ा", "सामान्य आकार", "चौड़ाई", "संकरी", "सामान्य", "चौड़ी", "फ़ॉन्ट", "सेरिफ़", "सान्स-सेरिफ़", "पहले जैसा करें"]),
   };
   for (const [code, words] of Object.entries(TY)) Object.assign(S[code], words);
+  // the margins, in the same menu: the links between paragraphs and the conversations on the right, the reader's own
+  // notes on the left, each shown or hidden
+  const tym = (w) => ({ ty_margin: w[0], ty_m_links: w[1], ty_m_asks: w[2], ty_m_notes: w[3] });
+  const TYM = {
+    en: tym(["Margins", "Links", "AI answers", "My notes"]),
+    zh: tym(["页边", "段落关联", "AI 问答", "我的笔记"]),
+    "zh-Hant": tym(["頁邊", "段落關聯", "AI 問答", "我的筆記"]),
+    ja: tym(["余白", "段落のつながり", "AI の回答", "自分のメモ"]),
+    ko: tym(["여백", "문단 연결", "AI 답변", "내 메모"]),
+    es: tym(["Márgenes", "Enlaces", "Respuestas de la IA", "Mis notas"]),
+    fr: tym(["Marges", "Liens", "Réponses de l’IA", "Mes notes"]),
+    de: tym(["Ränder", "Verweise", "KI-Antworten", "Meine Notizen"]),
+    pt: tym(["Margens", "Ligações", "Respostas da IA", "Minhas notas"]),
+    it: tym(["Margini", "Collegamenti", "Risposte dell’IA", "Le mie note"]),
+    ru: tym(["Поля", "Связи", "Ответы ИИ", "Мои заметки"]),
+    hi: tym(["हाशिया", "जुड़ाव", "AI के जवाब", "मेरे नोट"]),
+  };
+  for (const [code, words] of Object.entries(TYM)) Object.assign(S[code], words);
+  // Topic as cards or as a mind map (beside the zoom bar), and the map's own buttons
+  const tvs = (w) => ({ tv_label: w[0], tv_cards: w[1], tv_map: w[2], mm_all: w[3], mm_secs: w[4], mm_hint: w[5] });
+  const TV = {
+    en: tvs(["How Topic shows", "Cards", "Map", "Open all", "Sections only", "Click a topic to read its paragraph · click a section to fold it"]),
+    zh: tvs(["主题层的显示方式", "卡片", "导图", "全部展开", "只看章节", "点主题词打开那一段 · 点章节收起或展开"]),
+    "zh-Hant": tvs(["主題層的顯示方式", "卡片", "導圖", "全部展開", "只看章節", "點主題詞打開那一段 · 點章節收合或展開"]),
+    ja: tvs(["トピックの表示", "カード", "マップ", "すべて開く", "章だけ", "トピックをクリックでその段落へ · 章をクリックで折りたたみ"]),
+    ko: tvs(["주제 보기 방식", "카드", "마인드맵", "모두 펼치기", "장만 보기", "주제를 누르면 그 문단을 열고, 장을 누르면 접거나 펼칩니다"]),
+    es: tvs(["Cómo se muestra el Tema", "Tarjetas", "Mapa", "Abrir todo", "Solo secciones", "Haz clic en un tema para leer su párrafo · en una sección para plegarla"]),
+    fr: tvs(["Affichage du Sujet", "Cartes", "Carte mentale", "Tout ouvrir", "Sections seules", "Cliquez sur un sujet pour lire son paragraphe · sur une section pour la replier"]),
+    de: tvs(["Darstellung von Thema", "Karten", "Mindmap", "Alles öffnen", "Nur Abschnitte", "Ein Thema anklicken öffnet seinen Absatz · einen Abschnitt anklicken klappt ihn zu"]),
+    pt: tvs(["Como o Tema aparece", "Cartões", "Mapa", "Abrir tudo", "Só seções", "Clique num tema para ler o parágrafo · numa seção para recolhê-la"]),
+    it: tvs(["Come si vede il Tema", "Schede", "Mappa", "Apri tutto", "Solo sezioni", "Clicca un tema per leggerne il paragrafo · una sezione per chiuderla"]),
+    ru: tvs(["Вид темы", "Карточки", "Карта", "Раскрыть всё", "Только разделы", "Нажмите на тему, чтобы прочитать абзац · на раздел, чтобы свернуть его"]),
+    hi: tvs(["विषय कैसे दिखे", "कार्ड", "माइंड मैप", "सब खोलें", "सिर्फ़ खंड", "किसी विषय पर क्लिक करें तो उसका अनुच्छेद खुलेगा · खंड पर क्लिक करें तो वह सिमटेगा"]),
+  };
+  for (const [code, words] of Object.entries(TV)) Object.assign(S[code], words);
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });
   const SEL = {
