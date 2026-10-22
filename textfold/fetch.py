@@ -3,6 +3,7 @@ import json
 import re
 import urllib.parse
 import urllib.request
+import uuid
 from html import unescape
 from pathlib import Path
 
@@ -51,15 +52,25 @@ def fetch(pid, root: Path, force=False):
 
 
 def fetch_images(srcs, base_url, out_dir: Path):
-    """Download figure images next to the built page; returns {original src: local path}."""
+    """Download figure images next to the built page, four at a time, each kept smaller (picture.py; one kept before
+    that, as it came, stays as it is); returns {original src: local path}."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import picture
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    local = {}
-    for s in srcs:
+
+    def one(s):
         name = re.sub(r"[^\w.\-]", "_", s.split("/")[-1])
-        f = out_dir / name
-        if not f.exists():
-            data, _ = get(urllib.parse.urljoin(base_url, s))
-            f.write_bytes(data)
-        local[s] = f"{out_dir.name}/{name}"
-    return local
+        f = next((g for g in (out_dir / name, out_dir / (name + ".webp")) if g.exists()), None)
+        if f is None:
+            data, kept = picture.compact(get(urllib.parse.urljoin(base_url, s))[0], name)
+            f = out_dir / kept
+            tmp = f.with_name(f"{f.name}.{uuid.uuid4().hex[:8]}.part")   # (a page built meanwhile never finds half a picture)
+            tmp.write_bytes(data)
+            tmp.replace(f)
+        return s, f"{out_dir.name}/{f.name}"
+
+    with ThreadPoolExecutor(4) as ex:
+        return dict(ex.map(one, srcs))
 

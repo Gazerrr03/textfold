@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import markdown, notes, semantic, store
+from . import markdown, notes, picture, semantic, store
 from .fetch import UA
 from .parse import parse
 
@@ -42,8 +42,9 @@ def make_id(title, text):
 
 
 class Images:
-    """Where each image of the document is kept (img/NN-name): copied from beside the file, downloaded, or decoded
-    from a data URI. One that cannot be had is left out (the page shows its name)."""
+    """Where each image of the document is kept (img/NN-name, or NN-name.webp, kept smaller: picture.py): copied from
+    beside the file, downloaded, or decoded from a data URI. One that cannot be had is left out (the page shows its
+    name)."""
 
     def __init__(self, folder, base, get=None, pre=None):
         self.folder, self.base, self.seen, self.get = folder, base, {}, get   # get(url) -> (bytes, url): a source's own
@@ -59,7 +60,7 @@ class Images:
         where = None
         if data and len(data) <= MAX_IMG:
             name = re.sub(r"[^\w.\-]", "_", name)[-60:] or "image"
-            fn = f"{len(self.seen) + 1:02d}-{name}"
+            data, fn = picture.compact(data, f"{len(self.seen) + 1:02d}-{name}")   # (kept smaller: picture.py)
             self.folder.mkdir(parents=True, exist_ok=True)
             (self.folder / fn).write_bytes(data)
             where = f"img/{fn}"

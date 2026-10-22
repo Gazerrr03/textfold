@@ -229,7 +229,8 @@ figure, its caption the paragraph after it ("Figure 1: ...") or its alt text; a 
 table is its caption; a numbered heading ("2.1 Methods") keeps its number apart.
 
 A document is stored by `local.py` as a paper is: `papers/md-<title words>-<hash>/` with `source.html` (normalized),
-`source.md`, `meta.json` and `img/`, the images copied from beside the file, downloaded, or decoded, once. The id
+`source.md`, `meta.json` and `img/`, the images copied from beside the file, downloaded, or decoded, once (a large
+PNG or JPEG kept as WebP, at most 3200 px: `picture.py`, as for an arXiv paper's figures). The id
 carries a hash of the text, so the same file opened twice is one paper and an edited file a new one; a stored document
 is never rewritten, since its layers belong to the text they were made from. `python3 -m textfold notes.md` does the same
 from the command line (images found beside the file); the landing sends the file's text (`POST /api/import`), so
@@ -363,6 +364,7 @@ Frame intervals from requestAnimationFrame in a default headless browser hide mo
 
 ```
 textfold/fetch.py    arXiv HTML + metadata, figure images
+textfold/picture.py  a picture kept smaller as it comes in: a large PNG or JPEG as WebP (quality 90, at most 3200 px)
 textfold/parse.py    LaTeXML → units (paragraph, list item, caption) as token streams; math, citations, refs stay atomic
 textfold/latexml_safe.py  what an arXiv page may carry into the reader: scripts, handlers and script URLs out, figures kept
 textfold/semantic.py any semantic HTML → the HTML parse.py reads; the sanitizing boundary
