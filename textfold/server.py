@@ -38,8 +38,8 @@
                               with PDF.js, for the side-by-side view
   POST /api/ask               {paper, id, question, req}: the model answers a note's question; the answer is stored in it
   POST /api/ask/stop          {req}: that question stopped: its answer, when it comes, is not stored
-  POST /api/papers/delete     {paper}: move a paper to papers/.trash (not while it is being generated); the list. Or
-                              {papers: [ids]}: each that can go; {papers: the list, deleted: [ids], busy: [ids]}
+  POST /api/papers/delete     {paper}: move a paper to papers/.trash, kept 30 days (not while it is being generated); the
+                              list. Or {papers: [ids]}: each that can go; {papers: the list, deleted: [ids], busy: [ids]}
   POST /api/papers/restore    {papers: [ids]}: those deleted last back from papers/.trash, in their folders (the
                               reader's Undo); {papers: the list, folders, restored: [ids]}
   POST /api/papers/name       {paper, name}: what the reader calls it in the library ("": its own title again); the list
@@ -965,8 +965,9 @@ def serve(port=3017):
     if os.name == "nt":
         _quiet_children()
     jobs = Jobs()
-    # look for the agents on this computer while the server comes up
+    # look for the agents on this computer while the server comes up, and erase what was deleted 30 days ago
     threading.Thread(target=agents.scan, kwargs={"log": print}, daemon=True).start()
+    threading.Thread(target=store.empty_trash, daemon=True).start()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(jobs))
     port = httpd.server_address[1]   # (the one given, or the free one the system chose for 0)
 

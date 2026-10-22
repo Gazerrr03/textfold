@@ -196,8 +196,9 @@ The answer cites up to five paragraphs; a cite opens its paragraph in place.
 
 In the app the mark (in the bar and in the sidebar's rail) leads home; the rail's second button opens the list of
 papers. A paper is deleted from the list after a prompt that says what goes with it: its folder (layers, model
-replies, notes) moves to `papers/.trash/<id>-<time>/`, from where it can be moved back. A paper being generated
-cannot be deleted. The list is searched (⌘K or /), ordered by kind, by when each document came in or by when it was
+replies, notes) moves to `papers/.trash/<id>-<time>/`, from where it can be moved back for 30 days: the server erases
+older ones as it starts (`store.empty_trash`). A paper being generated cannot be deleted. The list is searched (⌘K or
+/), ordered by kind, by when each document came in or by when it was
 last opened, and kept in folders, one level deep, a document in one at most: dragged there, or moved from the menu a
 right click opens on it. Folders and dates are in `library.json` beside `papers/` (`library.py`). The format, the contract for every export, is `docs/notes-format.md`; the server keeps notes in
 `papers/<id>/notes.json`, a static page in the browser.

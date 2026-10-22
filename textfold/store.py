@@ -4,7 +4,8 @@
   papers/<id>/layers/en.json             the English ladder and the argument links
   papers/<id>/layers/tr-<lang>.json      one translation, stamped with the English version it was built on
   papers/.trash/<id>-<time>/             a paper the reader deleted (moved there whole, notes included; not listed), with
-                                         library.json: its place in the library, for the reader's Undo (untrash)
+                                         library.json: its place in the library, for the reader's Undo (untrash);
+                                         erased after 30 days (empty_trash)
 
 A model samples differently on every run, so the same paper does not come out the same twice.
 The layers are what makes a paper read the same every time it is opened: a reader is assembled
@@ -15,6 +16,7 @@ import json
 import locale
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -267,7 +269,8 @@ def papers():
 
 def trash(pid, kept=None):
     """Delete a paper from the list: its folder (source, layers, model replies, notes) moves to papers/.trash, from
-    where it can be moved back (untrash, or by hand). Nothing is erased. kept: its place in the library, kept with it."""
+    where it can be moved back (untrash, or by hand) for 30 days (empty_trash). kept: its place in the library, kept
+    with it."""
     to = DATA / "papers" / ".trash" / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
     to.parent.mkdir(parents=True, exist_ok=True)
     pdir(pid).rename(to)
@@ -293,3 +296,29 @@ def untrash(pid):
     gone[-1].rename(pdir(pid))
     (pdir(pid) / "library.json").unlink(missing_ok=True)
     return kept if isinstance(kept, dict) else {}
+
+
+TRASH_DAYS = 30
+
+
+def empty_trash(days=TRASH_DAYS, now=None):
+    """Papers deleted more than `days` ago erased from papers/.trash, by the time in their folder's name (trash's);
+    nothing else there is touched. The server does it as it starts. Their names, erased."""
+    root = DATA / "papers" / ".trash"
+    if not root.is_dir():
+        return []
+    cut = (time.time() if now is None else now) - days * 86400
+    gone = []
+    for d in sorted(root.iterdir()):
+        m = re.fullmatch(r"(.+)-(\d{8}-\d{6})", d.name)
+        if not (m and valid_id(m.group(1)) and d.is_dir() and not d.is_symlink()):
+            continue
+        try:
+            at = time.mktime(time.strptime(m.group(2), "%Y%m%d-%H%M%S"))
+        except (ValueError, OverflowError):
+            continue
+        if at < cut:
+            shutil.rmtree(d, ignore_errors=True)
+            if not d.exists():
+                gone.append(d.name)
+    return gone

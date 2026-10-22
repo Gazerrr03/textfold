@@ -6,10 +6,11 @@
 // ~/.textfold. Pages on other sites open in the system browser, where the reader is already signed in.
 // Run from the repository without a payload (`npm start`), it uses the python3 on the PATH (python on Windows) and the
 // repository itself. textfold:// links open a document of the library in the window (links.js).
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, session, shell } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const net = require('net');
+const os = require('os');
 const path = require('path');
 const links = require('./links');
 
@@ -31,6 +32,10 @@ let waiting = null;   // a link that came before that: the last one, opened then
 app.setName('TextFold');
 if (process.env.TEXTFOLD_DATA) app.setPath('userData', path.resolve(process.env.TEXTFOLD_DATA));
 else if (WIN) app.setPath('userData', path.join(process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local'), 'TextFold'));
+// The window's HTTP cache, at most 32 MB (and no large file in it): what it loads comes from the server on this computer,
+// read from the same disk, and under Chromium's own limit, a share of the free space, it kept a second copy of each PDF
+// and picture opened, 200 MB and more. A page still reuses what it loaded (Blink's memory cache).
+app.commandLine.appendSwitch('disk-cache-size', String(32 * 2 ** 20));
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', (_e, argv) => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
@@ -208,6 +213,22 @@ function updatedFrom() {
   try { fs.writeFileSync(f, app.getVersion()); } catch { /* a read-only folder: nothing to say next time */ }
   return was && was !== app.getVersion() ? was : null;
 }
+// What an update was downloaded into stays after it is installed (electron-updater empties pending/ only for the next
+// one): a second copy of the app, 190 MB, beside the copy the next update's download of what changed starts from
+// (update.zip on a Mac, installer.exe on Windows). The first launch of the new version removes it, and once more a
+// minute later on Windows, where the installer that just ran may still hold its file.
+function dropDownloaded(again = true) {
+  let dir = null;
+  try {
+    const name = (fs.readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8').match(/^updaterCacheDirName:\s*([\w.-]+)\s*$/m) || [])[1];
+    const caches = WIN ? process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+      : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Caches') : process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+    if (name && name !== '.' && name !== '..') dir = path.join(caches, name, 'pending');   // (electron-updater's own place)
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    if (dir && again) setTimeout(() => dropDownloaded(false), 60 * 1000);
+  }
+}
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('update:state', () => (update && !update.dismissed ? update : null));
 ipcMain.handle('update:dismiss', () => { if (update) update.dismissed = true; });
@@ -220,7 +241,12 @@ function setupUpdates() {
     return;
   }
   const was = updatedFrom();
-  if (was) update = { kind: 'updated', version: app.getVersion(), from: was, notes: `${REPO}/releases/tag/v${app.getVersion()}` };
+  if (was) {
+    update = { kind: 'updated', version: app.getVersion(), from: was, notes: `${REPO}/releases/tag/v${app.getVersion()}` };
+    dropDownloaded();
+    // and the window's HTTP cache, which an earlier version let grow (above); what a new version loads is new anyway
+    session.defaultSession.clearCache().catch(() => null);
+  }
   if (process.env.TEXTFOLD_UPDATES) updater.setFeedURL({ provider: 'generic', url: process.env.TEXTFOLD_UPDATES });
   updater.autoDownload = false;   // the reader starts the download, never the app
   updater.on('update-available', (info) => {
