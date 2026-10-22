@@ -437,6 +437,12 @@ math { font-size: 1.04em; }
 .ltx_rule { display: none; }
 .ltx_note_outer { display: none; }
 
+/* Markdown display math may arrive as a raw block, not an .eq. Keep it
+   scrollable locally instead of widening the mobile layout and its fixed bar. */
+@media screen and (max-width: 720px) {
+  .doc .raw { max-width: 100%; overflow-x: auto; }
+}
+
 @media (max-width: 640px) {
   .tagline, .legend, .hint { display: none !important; }
   .doc { padding: 4px 16px 170px; }
