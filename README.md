@@ -154,6 +154,7 @@ Your questions can go to a stronger model than the one that writes the levels: *
 | **Save**, at the top | keep the page as one file, as Markdown at the level you read, or only your notes |
 | **Aa**, at the top | light or dark, the default or paper style, the text's size, serif or sans-serif, the line spacing, the column's width, and which margins show |
 | `F` | focus: the text alone, the bars back at the screen's edge |
+| **Full screen**, in **Aa** | the window fills the screen (⌃⌘F on a Mac, F11 on Windows) |
 | Select text | highlight, write a note, or ask |
 | **Ask the paper**, bottom right | ask about the whole text |
 | `L` | next language |
@@ -245,6 +246,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 
 ## What's new
 
+- **October 22, 2026: figures as TeX drew them, and full screen.** In an arXiv paper, a drawing whose words the browser sets itself (a TikZ picture) can have them run out of its boxes, on arXiv's own page too. A button under such a drawing takes the paper's figures of that kind from its PDF, as TeX set them; nothing is downloaded until you press it. **Full screen** in **Aa** fills the screen. At Brief, the words that go on to Key stand out by a step, not a jump, and the paper style keeps the default's text colours.
 - **October 22, 2026: lighter on your disk.** Pictures are kept as WebP as they come in: an arXiv paper's figures take a fifth of the space or less, and download four at a time, so a new paper opens sooner. Pictures already in your library stay as they are. The app's copy of the pictures and PDFs it showed stays under 32 MB, and a downloaded update is removed once it is installed. A deleted document stays in papers/.trash for 30 days, then it is erased. At Key and Takeaway, a figure of several panels shows them side by side, no longer one under another and cut off.
 - **October 21, 2026: a reader to stay in.** **Aa** has light or dark (or your system's) and a paper style, quieter than white, for either; and the line spacing. A text opens where you left it. `F` leaves the text alone on the screen. The sidebar can be pinned beside the text.
 - **October 21, 2026: tools for an agent in your browser.** In a browser that offers WebMCP, an agent finds TextFold's own operations as tools: it reads the passage you selected and, when you ask, saves a note on it, imports a file or a Zotero item, or sorts your folders. [The tools](https://github.com/chenxiachan/textfold/blob/main/docs/webmcp.md). Thanks to [@peitianyi23-sudo](https://github.com/peitianyi23-sudo).
