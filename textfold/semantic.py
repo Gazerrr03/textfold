@@ -315,13 +315,15 @@ BLOCK = ["p", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "blockquote
 def _unfold_tables(soup, root):
     """Tables that hold text, not data, read as text: a layout's table (a screenshot beside its paragraph, in one to
     three rows) gives its cells' contents in reading order; a table of short names each with a sentence (a README's
-    features, a comparison in words) becomes a list, "name: sentence", so its sentences fold like any other."""
+    features, a comparison in words) becomes a list, "name: sentence", so its sentences fold like any other. A display
+    formula's table (_equation) is none of these: a long one has thirty words in its MathML, and unfolded it lost its
+    box, which scrolls it within the column, and in a list item the formula itself."""
     def words(el):
         return len(el.get_text(" ", strip=True).split())
 
     for t in root.find_all("table"):
-        if t.find_parent("table") is not None or t.parent is None:
-            continue   # a table inside another: the outer one decides
+        if t.find_parent("table") is not None or t.parent is None or _ours(t):
+            continue   # a table inside another: the outer one decides; a formula's stays
         rows = [r for r in t.find_all("tr") if r.find_parent("table") is t]
         cells = [r.find_all(["td", "th"], recursive=False) for r in rows]
         if not rows or not any(cells):
