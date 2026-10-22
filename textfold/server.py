@@ -32,6 +32,7 @@
                               names), or a Word, PowerPoint, Excel, EPUB, HTML file or picture: through the PDF engine
   GET  /api/pdf/<id>          the paper's original PDF (arXiv, PubMed Central, bioRxiv), fetched once and kept (pdf.py)
   POST /api/pdf/<id>          the PDF itself (the reader's copy, when the server would not give it): kept the same way
+  POST /api/pdf-figures/<id>  an arXiv paper's drawings with words cut from its PDF (fetched once): {cut: how many}
   POST /api/notes/<id>        {op: "put", note} or {op: "delete", id}
   POST /api/export            {paper, lang, langs: "current" | "all", kinds: ["hl", "note", "ask"], pdf}: the paper as one
                               HTML file: its levels, the reader's notes of the kinds chosen, and (pdf) its original PDF
@@ -79,7 +80,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, agents, bridges, build, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdftext, pipeline, providers, store, zotero
+from . import __version__, agents, bridges, build, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdffigs, pdftext, pipeline, providers, store, zotero
 
 STATIC = {"app.js": "text/javascript", "app.css": "text/css", "reader.js": "text/javascript",
           "reader.css": "text/css", "i18n.js": "text/javascript", "tutorial.js": "text/javascript", "webmcp.js": "text/javascript"}
@@ -766,6 +767,14 @@ def make_handler(jobs):
                                 saved["pdfmap"] = pdfdoc.place(pid)
                     html = build.page(doc, app=False, saved=saved)
                     return self.send(200, html, "text/html; charset=utf-8")
+                m = re.fullmatch(r"/api/pdf-figures/([\w.-]+)", u.path)   # the button under a drawing set out of place
+                if m and store.valid_id(m.group(1)) and (store.pdir(m.group(1)) / "meta.json").exists():
+                    try:
+                        n = pdffigs.from_pdf(m.group(1))
+                    except LookupError:
+                        return self.json({"error": "no-pdf"}, 502)
+                    PAGES.pop(m.group(1), None)
+                    return self.json({"cut": n})
                 m = re.fullmatch(r"/api/notes/([\w.-]+)", u.path)
                 if m and store.valid_id(m.group(1)) and (store.pdir(m.group(1)) / "meta.json").exists():
                     try:

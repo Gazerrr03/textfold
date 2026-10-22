@@ -82,6 +82,8 @@ def inline_images(doc, app=False):
         if "html" in b:
             for src, uri in uris.items():
                 b["html"] = b["html"].replace(f'src="{src}"', f'src="{uri}"')
+    from . import pdffigs   # an arXiv paper's drawings with words: cut from its PDF where the reader asked, else offered
+    pdffigs.place(doc, cache, lambda name: f"/p/{pid}/img/{name}" if app else data_uri(cache / name))
 
 
 def payload(doc, app, katex=None, saved=None, pdf=None):

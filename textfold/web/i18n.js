@@ -668,6 +668,23 @@ window.DR_I18N = (() => {
     hi: rds(["रूप", "शैली", "सिस्टम जैसा", "हल्का", "गहरा", "सामान्य", "कागज़", "पंक्ति अंतर", "सघन", "खुला", "फ़ोकस मोड", "फ़ोकस मोड: बाहर निकलने के लिए F या Esc", "आप वहीं लौट आए जहाँ छोड़ा था", "शुरू से"]),
   };
   for (const [code, words] of Object.entries(RDS)) Object.assign(S[code], words);
+  // the button under a drawing whose words the browser set out of place: the figure as the paper's PDF has it
+  const pdfs = (w) => ({ fig_pdf: w[0], fig_pdf_busy: w[1], fig_pdf_none: w[2], fig_pdf_fail: w[3] });
+  const PDFS = {
+    en: pdfs(["Words out of place? Use the figure from the PDF", "Getting the PDF…", "The PDF has no figure to match", "The PDF could not be downloaded. Try again later"]),
+    zh: pdfs(["图里的字错位了？改用 PDF 里的图", "正在下载 PDF…", "PDF 里没有找到对应的图", "没能下载 PDF，请稍后再试"]),
+    "zh-Hant": pdfs(["圖裡的字錯位了？改用 PDF 裡的圖", "正在下載 PDF…", "PDF 裡沒有找到對應的圖", "沒能下載 PDF，請稍後再試"]),
+    ja: pdfs(["図の文字がずれていますか？PDF の図を使う", "PDF を取得しています…", "PDF に対応する図が見つかりません", "PDF をダウンロードできませんでした。後でもう一度お試しください"]),
+    ko: pdfs(["그림 속 글자가 어긋났나요? PDF의 그림 사용", "PDF를 받는 중…", "PDF에서 맞는 그림을 찾지 못했습니다", "PDF를 내려받지 못했습니다. 나중에 다시 시도하세요"]),
+    es: pdfs(["¿Texto descolocado? Usar la figura del PDF", "Descargando el PDF…", "El PDF no tiene una figura que coincida", "No se pudo descargar el PDF. Inténtalo más tarde"]),
+    fr: pdfs(["Texte décalé ? Utiliser la figure du PDF", "Téléchargement du PDF…", "Le PDF n’a pas de figure correspondante", "Le PDF n’a pas pu être téléchargé. Réessayez plus tard"]),
+    de: pdfs(["Text verrutscht? Abbildung aus dem PDF verwenden", "PDF wird geladen…", "Im PDF gibt es keine passende Abbildung", "Das PDF konnte nicht geladen werden. Versuche es später noch einmal"]),
+    pt: pdfs(["Texto fora do lugar? Usar a figura do PDF", "Baixando o PDF…", "O PDF não tem uma figura correspondente", "Não foi possível baixar o PDF. Tente mais tarde"]),
+    it: pdfs(["Testo fuori posto? Usa la figura del PDF", "Scaricamento del PDF…", "Nel PDF non c’è una figura corrispondente", "Impossibile scaricare il PDF. Riprova più tardi"]),
+    ru: pdfs(["Текст съехал? Взять рисунок из PDF", "Загружаю PDF…", "В PDF нет подходящего рисунка", "Не удалось загрузить PDF. Попробуйте позже"]),
+    hi: pdfs(["चित्र के शब्द खिसक गए? PDF वाला चित्र लें", "PDF ला रहे हैं…", "PDF में मेल खाता चित्र नहीं मिला", "PDF डाउनलोड नहीं हो सका। बाद में फिर कोशिश करें"]),
+  };
+  for (const [code, words] of Object.entries(PDFS)) Object.assign(S[code], words);
   for (const [code, w] of Object.entries({"en": "Leave focus", "zh": "退出专注", "zh-Hant": "退出專注", "ja": "集中モードを終了", "ko": "집중 모드 끝내기", "es": "Salir del modo concentración", "fr": "Quitter le mode concentration", "de": "Fokusmodus beenden", "pt": "Sair do modo foco", "it": "Esci dalla concentrazione", "ru": "Выйти из режима чтения", "hi": "फ़ोकस मोड से बाहर"})) S[code].ty_focus_off = w;
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });

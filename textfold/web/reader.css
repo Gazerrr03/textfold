@@ -329,6 +329,13 @@ figure.fig .fbody figure { margin: 0; }
    viewBox has one from parse.py */
 figure.fig .fbody svg.ltx_picture[viewBox], figure.fig .fbody .ltx_picture > svg[viewBox] { max-width: 100%; height: auto; }
 figure.fig .fbody img, figure.fig .fbody svg { cursor: zoom-in; }
+/* the button under a drawing whose words the browser set (reader.js pdfOffer), where the figure is whole: Full, Brief */
+figure.fig .fig-pdf { display: block; margin: 6px auto 0; padding: 3px 8px; border: 0; border-radius: 6px; background: none;
+  font: 12.5px var(--sans); color: var(--muted); cursor: pointer; }
+figure.fig .fig-pdf:hover:not(:disabled) { color: var(--accent); background: var(--line-2); }
+figure.fig .fig-pdf:disabled { cursor: default; }
+figure.fig:not([data-l="4"]):not([data-l="3"]) .fig-pdf { display: none; }
+@media print { figure.fig .fig-pdf { display: none; } }
 /* a figure, enlarged over the page: dark around it in either theme, the picture on white as on paper */
 .lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   padding: 28px 24px 22px; background: rgba(20, 18, 15, .88); animation: lb-in .16s ease-out; }

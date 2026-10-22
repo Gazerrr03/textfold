@@ -373,29 +373,29 @@ def _figures_on(page, lines, body, frame, raw):
     return out
 
 
-def add_figures(file, sc, out):
-    """The figures of a PDF read this way, cut whole from their pages into out/images/ (engine.crop, here without the
-    engine) and set in sc as the engine's pictures are, each with its caption; the words drawn in them out of the
-    pages' text. Nothing when pypdfium2 is not installed (the captions stay, as text)."""
+def figures_in(file):
+    """The figures a PDF's captions name, as (the words of its pages, [(page number, figure)], where its prose stands:
+    frame), each figure as _figures_on gives it; no figures when there are none, or pypdfium2 or pdf-inspector is not
+    installed."""
     from . import engine
     try:
         import pdf_inspector
         import pypdfium2 as pdfium
         import pypdfium2.raw as raw
     except ImportError:
-        return
+        return [], [], None
     try:
         items = pdf_inspector.extract_text_with_positions(str(file))
     except Exception:
-        return
+        return [], [], None
     lines = _lines(items)
     pages = sorted({l["page"] for l in lines if _is_caption(l)})
     if not pages:
-        return
+        return items, [], None
     body, found = _body_size(lines), []
     frame = _frame(lines, body)
     if frame is None:
-        return
+        return items, [], None
     with engine.PDFIUM:
         doc = pdfium.PdfDocument(str(file))
         try:
@@ -405,6 +405,15 @@ def add_figures(file, sc, out):
             found = []
         finally:
             doc.close()
+    return items, found, frame
+
+
+def add_figures(file, sc, out):
+    """The figures of a PDF read this way, cut whole from their pages into out/images/ (engine.crop, here without the
+    engine) and set in sc as the engine's pictures are, each with its caption; the words drawn in them out of the
+    pages' text. Nothing when pypdfium2 is not installed (the captions stay, as text)."""
+    from . import engine
+    items, found, _ = figures_in(file)
     if not found:
         return
     for no, f in found:   # the words drawn in it, turned ones too (an axis's title, slanted ticks)

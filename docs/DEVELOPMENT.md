@@ -383,6 +383,7 @@ textfold/pdfdoc.py   a converted PDF as a document: MinerU's structured output i
 textfold/office.py   Word, PowerPoint, Excel, CSV, EPUB and saved web pages read without the engine, in its shape
 textfold/omml.py     Office's formulas (OMML) as LaTeX
 textfold/pdf.py      a paper's original PDF for the side-by-side view (source.pdf)
+textfold/pdffigs.py  an arXiv drawing whose words the browser set (TikZ): cut from the paper's PDF when the reader asks
 textfold/zotero.py   a Zotero library through Zotero Desktop's local API; an item read as a link or a dropped file
 textfold/tokens.py   tokenizer, sentence splitter, LCS alignment
 textfold/ladder.py   one model call per section; validation; written words aligned to source words for the morph

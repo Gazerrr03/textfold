@@ -352,6 +352,19 @@
   if (madeWith) docEl.after(madeWith);
   const madeLabel = () => { if (madeWith) madeWith.innerHTML = `<a href="${REPO}" target="_blank" rel="noopener">${LOGO}<span>${esc(T[ui].sv_madewith)}</span></a>`; };
   madeLabel();
+  // under a drawing whose words the browser set (an arXiv paper's TikZ picture: they may run out of their boxes), the
+  // paper's figures of that kind cut from its PDF, as TeX set them, when the reader asks (pdffigs.py); then the page again
+  function pdfOffer() {
+    const btn = h('button', 'fig-pdf'); btn.type = 'button'; btn.textContent = T[ui].fig_pdf;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = T[ui].fig_pdf_busy;
+      try {
+        const r = await post(`/api/pdf-figures/${encodeURIComponent(D.meta.id)}`, {});
+        if (r.cut) location.reload(); else btn.textContent = T[ui].fig_pdf_none;
+      } catch { btn.disabled = false; btn.textContent = T[ui].fig_pdf_fail; }
+    });
+    return btn;
+  }
   // where a paper comes from, in a few words: arXiv:2201.11903v6, or a document's file name
   const sourceName = (m) => m.label || `arXiv:${m.id}${m.version || ''}`;
   function build() {
@@ -413,6 +426,7 @@
         if (!b.cap) { bareFigs.push(f); lvBlocks.push(f); }
         const fb = h('div', 'fbody', b.html); fb.dataset.id = `fb:${b.id}`;
         f.append(fb);
+        if (b.pdf === 'offer' && D.app) f.append(pdfOffer());
         if (b.cap) {
           const cap = unitNode(b.cap, 'figcaption');
           if (b.label) { const fl = h('span', 'flabel'); fl.dataset.label = b.label; fl.dataset.id = `fl:${b.cap}`; cap.insertBefore(fl, cap._tx); }
