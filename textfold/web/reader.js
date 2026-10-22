@@ -353,14 +353,15 @@
   const madeLabel = () => { if (madeWith) madeWith.innerHTML = `<a href="${REPO}" target="_blank" rel="noopener">${LOGO}<span>${esc(T[ui].sv_madewith)}</span></a>`; };
   madeLabel();
   // under a drawing whose words the browser set (an arXiv paper's TikZ picture: they may run out of their boxes), the
-  // paper's figures of that kind cut from its PDF, as TeX set them, when the reader asks (pdffigs.py); then the page again
-  function pdfOffer() {
-    const btn = h('button', 'fig-pdf'); btn.type = 'button'; btn.textContent = T[ui].fig_pdf;
+  // paper's figures of that kind cut from its PDF, as TeX set them, when the reader asks (pdffigs.py); under one taken
+  // (back), the paper's put back as the HTML has them; then the page again
+  function pdfOffer(back) {
+    const btn = h('button', 'fig-pdf'); btn.type = 'button'; btn.textContent = back ? T[ui].fig_pdf_back : T[ui].fig_pdf;
     btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = T[ui].fig_pdf_busy;
+      btn.disabled = true; if (!back) btn.textContent = T[ui].fig_pdf_busy;
       try {
-        const r = await post(`/api/pdf-figures/${encodeURIComponent(D.meta.id)}`, {});
-        if (r.cut) location.reload(); else btn.textContent = T[ui].fig_pdf_none;
+        const r = await post(`/api/pdf-figures/${encodeURIComponent(D.meta.id)}`, back ? { back: true } : {});
+        if (r.cut || back) location.reload(); else btn.textContent = T[ui].fig_pdf_none;
       } catch { btn.disabled = false; btn.textContent = T[ui].fig_pdf_fail; }
     });
     return btn;
@@ -426,7 +427,7 @@
         if (!b.cap) { bareFigs.push(f); lvBlocks.push(f); }
         const fb = h('div', 'fbody', b.html); fb.dataset.id = `fb:${b.id}`;
         f.append(fb);
-        if (b.pdf === 'offer' && D.app) f.append(pdfOffer());
+        if (b.pdf && D.app) f.append(pdfOffer(b.pdf === 'cut'));
         if (b.cap) {
           const cap = unitNode(b.cap, 'figcaption');
           if (b.label) { const fl = h('span', 'flabel'); fl.dataset.label = b.label; fl.dataset.id = `fl:${b.cap}`; cap.insertBefore(fl, cap._tx); }

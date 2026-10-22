@@ -7,7 +7,8 @@ Such a figure is shown as the HTML has it, with a button under it (the page's "o
 reader presses it. Then the PDF is fetched once, as for the side-by-side view, and kept (source.pdf), and each of the
 paper's figures with words in a drawing is cut from it (pdftext's figures, found by their captions) into img/ beside
 the other figures (pdf-figure-<n>.png, as picture.py keeps it). img/pdf-figures.json says what was found, a figure the
-PDF did not give included (null), so that the button goes. A figure is taken only when the PDF's caption of that
+PDF did not give included (null), so that the button goes; under the figures taken, another puts the paper's back
+as the HTML has them (back: the cuts and the list go, the PDF stays). A figure is taken only when the PDF's caption of that
 number reads as the HTML's (a later version may number them otherwise). Its caption stays the HTML's: read, translated
 and zoomed as before. Drawings without words, which the browser draws as TeX did, are left as they are."""
 import json
@@ -45,8 +46,9 @@ def _kept(folder):
 
 
 def place(doc, folder, src_of):
-    """doc's figures with words in a drawing: as cut from the PDF where that was asked for and found, else offered
-    (b["pdf"] = "offer", the reader's button); src_of(name): the address of a picture of folder in the page."""
+    """doc's figures with words in a drawing: as cut from the PDF where that was asked for and found (b["pdf"] =
+    "cut": the button that puts them back), else offered (b["pdf"] = "offer", the reader's button); src_of(name): the
+    address of a picture of folder in the page."""
     kept = _kept(folder)
     for n, b in drawn(doc).items():
         if n not in kept:
@@ -54,6 +56,7 @@ def place(doc, folder, src_of):
         elif kept[n] and (folder / kept[n]["file"]).is_file():
             b["html"] = (f'<img class="ltx_graphics pdf-cut" src="{escape(src_of(kept[n]["file"]))}" alt="{escape(b["label"])}"'
                          f' style="width: {round(100 * kept[n]["width"])}%">')
+            b["pdf"] = "cut"
 
 
 def _words(s):
@@ -112,6 +115,17 @@ def from_pdf(pid):
             kept.update(cut(file, want, folder))
             (folder / KEPT).write_text(json.dumps(kept, indent=1), encoding="utf-8")
     return sum(1 for n in figs if kept.get(n))
+
+
+def back(pid):
+    """The other button: the paper's figures as the HTML has them again, and offered again. The PDF stays (the
+    side-by-side view reads it)."""
+    folder = store.pdir(pid) / "img"
+    with _lock:
+        for c in _kept(folder).values():
+            if c and re.fullmatch(r"pdf-figure-[\w.-]+", c.get("file") or ""):
+                (folder / c["file"]).unlink(missing_ok=True)
+        (folder / KEPT).unlink(missing_ok=True)
 
 
 def _caption(doc, b):

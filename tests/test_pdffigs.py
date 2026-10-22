@@ -1,6 +1,7 @@
 """pdffigs.py: an arXiv figure whose drawing has words in it (LaTeXML's TikZ picture, its words set by the browser)
 is offered as cut from the paper's PDF, and nothing is downloaded until the reader asks (the button); then it is cut
-once, where the PDF gives it under the same number and caption, and the offer goes. It stays as it was where the PDF
+once, where the PDF gives it under the same number and caption, and the offer goes (another button puts it back as
+the HTML has it, and offered again). It stays as it was where the PDF
 has no such figure, and is offered again where the PDF could not be had. A drawing without words and a paper that is
 not arXiv's are left alone. The PDF is written by hand (test_pdftext's page: paragraphs, a drawing between them, its
 caption); nothing is downloaded, and the library is a folder of the test's own.
@@ -78,13 +79,22 @@ class Figures(unittest.TestCase):
         self.assertEqual(pdffigs.from_pdf("2401.00001"), 1)
         b = self.page()
         self.assertTrue(b["html"].startswith('<img class="ltx_graphics pdf-cut" src="/p/x/img/pdf-figure-3.png'), b["html"])
-        self.assertNotIn("pdf", b)
+        self.assertEqual(b["pdf"], "cut")   # (the button that puts it back)
         kept = json.loads((self.img / pdffigs.KEPT).read_text(encoding="utf-8"))["3"]
         self.assertTrue((self.img / kept["file"]).is_file())
         self.assertTrue(0.5 < kept["width"] <= 1, kept)
         self.assertIn(f'style="width: {round(100 * kept["width"])}%"', b["html"])
         self.assertEqual(pdffigs.from_pdf("2401.00001"), 1)   # (asked again: from what was kept)
         self.assertEqual(self.asked, ["2401.00001"])
+
+    def test_put_back(self):
+        pdffigs.from_pdf("2401.00001")
+        cut = json.loads((self.img / pdffigs.KEPT).read_text(encoding="utf-8"))["3"]["file"]
+        pdffigs.back("2401.00001")
+        self.assertFalse((self.img / cut).exists() or (self.img / pdffigs.KEPT).exists())
+        self.assertTrue(self.pdf.exists())   # (the PDF stays)
+        b = self.page()
+        self.assertEqual((b["html"], b.get("pdf")), (DRAWING, "offer"))
 
     def test_another_caption_under_that_number_is_not_taken(self):
         self.doc = a_doc(caption="Ablation of the tokenizer over seven benchmark suites and seeds.")

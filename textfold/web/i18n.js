@@ -685,6 +685,9 @@ window.DR_I18N = (() => {
     hi: pdfs(["चित्र के शब्द खिसक गए? PDF वाला चित्र लें", "PDF ला रहे हैं…", "PDF में मेल खाता चित्र नहीं मिला", "PDF डाउनलोड नहीं हो सका। बाद में फिर कोशिश करें"]),
   };
   for (const [code, words] of Object.entries(PDFS)) Object.assign(S[code], words);
+  for (const [code, w] of Object.entries({ en: "Back to the figure as it was", zh: "换回原来的图", "zh-Hant": "換回原來的圖", ja: "元の図に戻す",
+    ko: "원래 그림으로 되돌리기", es: "Volver a la figura de antes", fr: "Revenir à la figure d’avant", de: "Zurück zur vorherigen Abbildung",
+    pt: "Voltar à figura anterior", it: "Torna alla figura di prima", ru: "Вернуть прежний рисунок", hi: "पहले वाला चित्र वापस लाएँ" })) S[code].fig_pdf_back = w;
   // the window filling the screen (Aa), and leaving it
   const fulls = (w) => ({ ty_full: w[0], ty_full_off: w[1] });
   for (const [code, w] of Object.entries({ en: ["Full screen", "Leave full screen"], zh: ["全屏", "退出全屏"], "zh-Hant": ["全螢幕", "結束全螢幕"],
