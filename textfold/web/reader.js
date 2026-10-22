@@ -4074,14 +4074,15 @@ math { font-size: 1.05em; }
     mapCanvas.style.width = `${right + PAD}px`;
     mapCanvas.style.height = `${bottom + PAD}px`;
   }
-  // where it lies: under the bar at the top, beside the sidebar (the app's)
+  // where it lies: under the bar at the top, beside the sidebar (the app's) and the original pages (where the column
+  // starts: the body's padding); laid again whenever the window or the pages' width changes (reflowKeeping's resize)
   function mapFrame() {
     const tb = document.querySelector('.topbar'), bs = getComputedStyle(document.body);
     mapEl.style.top = `${Math.max(0, tb ? tb.getBoundingClientRect().bottom : 0)}px`;
     mapEl.style.left = `${parseFloat(bs.paddingLeft) || 0}px`;
   }
   function mapSync() {
-    const can = mapReady && topicView === 'map' && level === 0 && !localLevel.size && !document.documentElement.classList.contains('compare');
+    const can = mapReady && topicView === 'map' && level === 0 && !localLevel.size;
     if (!can) { if (mapShown) mapAway(); return; }
     if (mapShown || busy || stage) return;   // (over the page already; or, once the motion is over: rest(), done())
     mapFrame();
