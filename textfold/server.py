@@ -195,8 +195,9 @@ class Jobs:
         q.put(job["id"])
         return job
 
-    def _same(self, **kw):   # the same request already waiting or running is that job
-        return next((j for j in self.items.values() if j["status"] in ("queued", "running") and all(j.get(k) == v for k, v in kw.items())), None)
+    def _same(self, **kw):   # the same request already waiting or running (and not being stopped) is that job
+        return next((j for j in self.items.values() if j["status"] in ("queued", "running") and not j.get("stopping")
+                     and all(j.get(k) == v for k, v in kw.items())), None)
 
     def submit(self, ref, lang, force, attach=None):
         pid = store.resolve(ref)
@@ -223,6 +224,17 @@ class Jobs:
 
     def install_engine(self):
         return self._same(kind="install") or self._new(self.eq, kind="install", title="PDF engine")
+
+    def superseded(self, pid):
+        """A document about to be converted again: the languages it has and is being generated in, the generations of
+        its old text stopped (what they would write belongs to that text: a translation of another text's paragraphs,
+        laid on the new ones by their places)."""
+        langs = (["en"] if store.read(pid, "en") else []) + store.languages(pid)
+        for j in list(self.items.values()):
+            if j["kind"] == "generate" and j["pid"] == pid and j["status"] in ("queued", "running"):
+                langs.append(j["lang"])
+                self.stop(j["id"])
+        return list(dict.fromkeys(langs))
 
     def stop(self, job_id):
         job = self.items.get(job_id)
@@ -371,6 +383,7 @@ class Jobs:
                             raise
                         log("the engine could not read this file: TextFold reads it itself")
                         office.convert(job["file"], out)
+                    langs = self.superseded(job["pid"]) if job["replace"] else []
                     pdfdoc.store_pdf(job["pid"], out, pdfdoc.read_output(out), job["name"], job["tier"], replace=job["replace"])
                     src = store.pdir(job["pid"]) / pdfdoc.kept_name(job["pid"], job["file"])   # the file itself, kept
                     if not src.exists():
@@ -382,6 +395,9 @@ class Jobs:
                     PAGES.pop(job["pid"], None)
                     job["readable"] = True
                     job["next"] = self.submit(job["pid"], job["lang"] or "en", False)["id"]   # its levels, in the other queue
+                    for lang in langs:   # converted again: its other languages made again of the new text (English first)
+                        if lang not in ("en", job["lang"] or "en"):
+                            self.submit(job["pid"], lang, False)
                 job.update(status="done", finished=time.time())
             except Exception as e:
                 if job["kind"] == "convert":   # what the engine wrote before it failed

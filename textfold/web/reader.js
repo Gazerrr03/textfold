@@ -3801,6 +3801,13 @@ math { font-size: 1.05em; }
   function renderLangMenu() {
     const t = T[ui];
     langMenu.replaceChildren();
+    if (D.app && STALE.has(lang)) {   // first: a translation built on an earlier English, made again of this one (the
+      // replies kept that still fit are used again: no new sample, so nothing is asked first, as Regenerate asks)
+      const f = h('button', 'lm-item lm-regen lm-fill'); f.type = 'button';
+      f.innerHTML = `<span>↻ ${esc(t.stale_fill)}</span><em>${esc(nameOf(lang))}</em>`;
+      f.addEventListener('click', () => { closeLangMenu(); window.DRApp.generate(lang, false); });
+      langMenu.append(f);
+    }
     if (D.app && gapTag(lang, t)) {   // first: the paragraphs left untranslated, asked for again (the rest stays as it is)
       const f = h('button', 'lm-item lm-regen lm-fill'); f.type = 'button';
       f.innerHTML = `<span>↻ ${esc(t.gaps_fill.replace('{n}', GAPS[lang]))}</span><em>${esc(nameOf(lang))}</em>`;

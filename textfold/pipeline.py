@@ -66,6 +66,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
         check()
         progress("links", 0, 1)
         links.build(doc, task(cfg, "links"), cache, log=log, force=again)
+        check()   # (stopped meanwhile, its text converted again: what it made is of the old text, and is not written)
         store.save_en(doc, model)
         en = store.read(pid, "en")
     else:
@@ -76,6 +77,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
             check()
             again = force and not (replaced and tr is None)
             translate.build(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), force=again, stop=stop)
+            check()
             store.save_tr(doc, lang, en["version"], model)
         elif cfg is not None:
             store.apply_tr(doc, lang, tr)
@@ -83,6 +85,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
                 check()
                 translate.fill(doc, lang, task(cfg, "translate"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("translate", a, b), stop=stop)
                 was = tr.get("model") or model
+                check()
                 store.save_tr(doc, lang, en["version"], was if was == model else f"{was} + {model}")
     progress("done", 1, 1)
     return pid
