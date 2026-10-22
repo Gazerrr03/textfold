@@ -360,6 +360,13 @@ def parse(html, meta):
             obj.name = "img"
             obj["src"] = obj.attrs.pop("data")
             obj.attrs.pop("type", None)
+    # a drawing LaTeXML gives no viewBox, only its size (in px): given one of that size it draws as before, and can be
+    # scaled down to a narrower column (reader.css) instead of being cut at the column's edge
+    num = re.compile(r"\d+(?:\.\d+)?")
+    for svg in art.find_all("svg"):
+        w, h = svg.get("width", ""), svg.get("height", "")
+        if not svg.get("viewbox") and num.fullmatch(w) and num.fullmatch(h) and not svg.find_parent("svg"):
+            svg["viewBox"] = f"0 0 {w} {h}"
     make_safe(art)   # arXiv's page reaches the reader as it is, so what could run script is taken out here (latexml_safe.py)
     doc.images = sorted({img["src"] for img in art.find_all("img") if img.get("src") and not img["src"].startswith("data:")})
     for ch in art.find_all(recursive=False):

@@ -320,6 +320,15 @@ li.u[data-l="2"] .mk, li.u[data-l="1"] .mk, li.u[data-l="0"] .mk { display: none
 figure.fig { margin: 26px 0; }
 figure.fig .fbody { text-align: center; overflow-x: auto; transition: opacity .3s; }
 figure.fig .fbody img { max-width: 100%; height: auto; display: inline-block; }
+/* a picture LaTeXML sized both ways in its style (a width and a height, in em): its height follows its width, which the
+   column may narrow, not a tall empty box around it */
+figure.fig .fbody img[style*="width"] { height: auto !important; }
+/* a figure's panels (its subfigures): without the margins a browser gives a figure, which took 80 px of each */
+figure.fig .fbody figure { margin: 0; }
+/* a drawing (LaTeXML's picture: an SVG as wide as the page it was drawn for), scaled down to the column as a picture is,
+   not cut at the column's edge (at Brief, beside a caption at Key, as a thumbnail at Takeaway); one LaTeXML gave no
+   viewBox has one from parse.py */
+figure.fig .fbody svg.ltx_picture[viewBox], figure.fig .fbody .ltx_picture > svg[viewBox] { max-width: 100%; height: auto; }
 figure.fig .fbody img, figure.fig .fbody svg { cursor: zoom-in; }
 /* a figure, enlarged over the page: dark around it in either theme, the picture on white as on paper */
 .lightbox { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
@@ -349,6 +358,20 @@ figure.fig[data-l="2"] figcaption .dot, figure.fig[data-l="1"] figcaption .dot {
 figure.fig[data-l="1"] { display: flex; align-items: center; gap: 10px; margin: 2px 0 2px 22px; }
 figure.fig[data-l="1"] .fbody { width: 64px; flex: none; }
 figure.fig[data-l="1"] figcaption.u { padding: 0; }
+/* a figure of several panels at Key and Takeaway, one picture beside the caption: at Key in half the column (not one
+   picture's 168 px), its panels in their rows, each as narrow as its share and under its letter alone, (a); at
+   Takeaway in one row 48 px high, bare. In one picture's place they stood one under another, cut at the edge */
+figure.fig[data-l="2"]:has(.ltx_flex_cell + .ltx_flex_cell) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+figure.fig[data-l="2"] .ltx_flex_cell, figure.fig[data-l="1"] .ltx_flex_cell { min-width: 0; }
+figure.fig[data-l="2"] .fbody :is(.ltx_minipage, .ltx_parbox), figure.fig[data-l="1"] .fbody :is(.ltx_minipage, .ltx_parbox) { max-width: 100%; }
+figure.fig[data-l="1"] .ltx_flex_figure { flex-wrap: nowrap; gap: 6px; }
+figure.fig[data-l="1"] .ltx_flex_break { display: none; }
+figure.fig[data-l="2"] .ltx_flex_cell .ltx_caption > :not(.ltx_tag) { display: none; }
+figure.fig[data-l="1"] .ltx_flex_cell .ltx_caption, figure.fig[data-l="1"] .ltx_flex_cell:not(:has(img, svg)) { display: none; }
+figure.fig[data-l="2"] .fbody .ltx_parbox { font-size: .75em; }   /* (a panel of words, set in a box) */
+figure.fig[data-l="2"] .ltx_flex_cell .ltx_p, figure.fig[data-l="1"] .ltx_flex_cell .ltx_p { margin: 0; }
+figure.fig[data-l="1"]:has(.ltx_flex_cell + .ltx_flex_cell) .fbody { width: auto; max-width: 45%; max-height: 56px; overflow: hidden; }
+figure.fig[data-l="1"] .ltx_flex_cell img { max-height: 48px; width: auto !important; }
 figure.fig[data-l="0"] { display: inline-flex; margin: 0 4px 5px 0; }
 figure.fig[data-l="0"] .fbody { display: none; }
 figure.fig.fig-table[data-l="2"], figure.fig.fig-table[data-l="1"] { display: block; }
