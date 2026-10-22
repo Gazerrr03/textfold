@@ -20,7 +20,7 @@ const LANGS = ['en', 'zh', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'it', 
 
 const ARXIV = new RegExp(`^(?:${ARXIV_ID})$`);
 const IMPORTED = new RegExp(`^(?:${IMPORTED_ID})$`);
-const PART = /^[\w.-]+$/;   // a paragraph's id (S3.p2), a section's (S3.SS1), a note's (n-k2x9q0ab)
+const PART = /^[\w.~-]+$/;   // a paragraph's id (S3.p2, or u6~2: a later part of a paragraph parse.py split), a section's (S3.SS1), a note's (n-k2x9q0ab)
 
 function validId(id) {
   return ARXIV.test(id) || (IMPORTED.test(id) && id.length <= 80);
