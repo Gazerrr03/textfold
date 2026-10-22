@@ -182,6 +182,12 @@ html.sb-narrow .chunk > .side, html.sb-narrow .chunk > .lside { position: static
   html.app .lk { width: auto; max-width: 100%; }
 }
 
+/* The mobile sidebar opener floats over the page; leave it its own touch target. */
+@media screen and (max-width: 720px) {
+  html.app:not(.landing) .topbar { padding-left: 56px; }
+  html.app:not(.landing) .topbar .brand { min-width: 0; }
+}
+
 /* ── landing ─────────────────────────────────────────────── */
 #landing { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 14vh 24px 80px; position: relative; }
 /* the interface language, top right; the bar's own menu is the language papers are read in */
