@@ -59,12 +59,12 @@
 /* a style: the colours of the page, light and dark (reader.js, html[data-style]; none: the default above). It sets
    every colour the default does, so either brightness combines with it */
 @media screen {
-  /* warm, unbleached: a book's page in daylight, warm black ink */
-  :root[data-style="paper"] { --surface: #F3EEE4; --card: #F9F6EF; --ink: #26211B; --ink-2: #453D33; --muted: #71675A; --faint: #B6AC9D; --line: #DDD5C7; --line-2: #E9E3D7; --accent: #5E55C6; --accent-soft: #E6E1F0; --accent-deep: #352D85; --rule: #8B8174; --hl: #F5D97F; --hl-ink: #BF9000; --pop: 0 1px 2px rgba(60, 45, 20, .07), 0 14px 36px -14px rgba(60, 45, 20, .38); }
-  :root[data-style="paper"][data-theme="dark"] { --surface: #221E19; --card: #2A251F; --ink: #EAE1D2; --ink-2: #CDC2B0; --muted: #A09581; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
+  /* warm, unbleached: a book's page in daylight; the text in the default's colours, so that a page reads alike in either */
+  :root[data-style="paper"] { --surface: #F3EEE4; --card: #F9F6EF; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --faint: #B6AC9D; --line: #DDD5C7; --line-2: #E9E3D7; --accent: #5E55C6; --accent-soft: #E6E1F0; --accent-deep: #352D85; --rule: #8B8174; --hl: #F5D97F; --hl-ink: #BF9000; --pop: 0 1px 2px rgba(60, 45, 20, .07), 0 14px 36px -14px rgba(60, 45, 20, .38); }
+  :root[data-style="paper"][data-theme="dark"] { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
 }
 @media screen and (prefers-color-scheme: dark) {
-  :root[data-style="paper"]:not([data-theme]) { --surface: #221E19; --card: #2A251F; --ink: #EAE1D2; --ink-2: #CDC2B0; --muted: #A09581; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
+  :root[data-style="paper"]:not([data-theme]) { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
 }
 
 * { box-sizing: border-box; }
