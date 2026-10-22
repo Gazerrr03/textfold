@@ -2699,8 +2699,22 @@
       `<div class="ty-row ty-wrow"><span class="ty-l">${esc(t.ty_width)}</span>${seg('width', WIDTHS, [t.ty_narrow, t.ty_standard, t.ty_wide])}</div>` +
       `<div class="ty-row"><span class="ty-l">${esc(t.ty_margin)}</span><div class="ty-seg ty-checks" role="group" aria-label="${esc(t.ty_margin)}">` +
       MARGINS.map((k) => `<button type="button" aria-pressed="${!type.hide.includes(k)}" data-margin="${k}">${esc(t[`ty_m_${k}`])}</button>`).join('') + '</div></div>' +
-      `<div class="ty-foot"><button type="button" class="ty-focus" data-focus="1">${esc(focusOn ? t.ty_focus_off : t.ty_focus)}<kbd>F</kbd></button>` +
+      `<div class="ty-foot"><span class="ty-modes"><button type="button" class="ty-focus" data-focus="1">${esc(focusOn ? t.ty_focus_off : t.ty_focus)}<kbd>F</kbd></button>` +
+      (canFull ? `<button type="button" class="ty-focus" data-full="1">${esc(fullOn ? t.ty_full_off : t.ty_full)}<kbd>${FULL_KEY}</kbd></button>` : '') + '</span>' +
       `<button type="button" class="ty-reset"${isType0() ? ' hidden' : ''}>${esc(t.ty_reset)}</button></div>`;
+  }
+  // full screen: the app's window (as View › Toggle Full Screen, the key beside it), else the browser's
+  const DESK = window.desktop && window.desktop.fullScreen ? window.desktop : null;
+  const canFull = Boolean(DESK || document.documentElement.requestFullscreen);   // (none in an iPhone's Safari)
+  const FULL_KEY = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌃⌘F' : 'F11';
+  let fullOn = Boolean(document.fullscreenElement);
+  const fullIs = (on) => { fullOn = on; if (!typeMenu.hidden) renderTypeMenu(); };
+  if (DESK) { DESK.fullScreen().then(fullIs, () => {}); DESK.onFullScreen(fullIs); }
+  else document.addEventListener('fullscreenchange', () => fullIs(Boolean(document.fullscreenElement)));
+  function setFull(on) {
+    if (DESK) DESK.fullScreen(on);
+    else if (on) document.documentElement.requestFullscreen().catch(() => {});
+    else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
   function setType(next) {
     if (busy) return;   // (not while a zoom plays)
@@ -2729,6 +2743,7 @@
     else if (b.dataset.style) setType({ style: b.dataset.style });
     else if (b.dataset.lead) setType({ lead: b.dataset.lead });
     else if (b.dataset.focus) { closeTypeMenu(); setFocus(!focusOn); return; }
+    else if (b.dataset.full) { closeTypeMenu(); setFull(!fullOn); return; }
     else if (b.dataset.margin) { const k = b.dataset.margin; setType({ hide: MARGINS.filter((x) => (x === k) !== type.hide.includes(x)) }); }
     else setType({ ...TYPE0 });
     // drawn anew: the key that was pressed keeps the focus (the reset, gone: the first)

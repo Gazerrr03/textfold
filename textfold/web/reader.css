@@ -943,6 +943,7 @@ html.compare .chunk > .side, html.compare .chunk > .lside { position: static; }
 .ty-seg [data-style="default"]::before { background: linear-gradient(135deg, #E6E0D8 50%, #3A362F 50%); }
 .ty-seg [data-style="paper"]::before { background: linear-gradient(135deg, #E8D8BA 50%, #4B3F30 50%); }
 .ty-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ty-modes { display: flex; flex-wrap: wrap; gap: 8px; }
 .ty-focus { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: none; border-radius: 8px; padding: 4px 6px 4px 10px;
   font: 550 12.5px var(--sans); color: var(--ink-2); cursor: pointer; }
 .ty-focus:hover { border-color: var(--accent); color: var(--ink); }

@@ -151,6 +151,8 @@ async function open() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
   });
   win.loadFile(path.join(__dirname, 'splash.html'));
+  // full screen, from View › Toggle Full Screen or the reader's Aa: the page told when it changes (its button's name)
+  for (const ev of ['enter-full-screen', 'leave-full-screen']) win.on(ev, () => win.webContents.send('fullscreen', win.isFullScreen()));
   const local = (url) => /^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(url);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
@@ -230,6 +232,11 @@ function dropDownloaded(again = true) {
   }
 }
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('window:fullscreen', (e, on) => {   // on: true or false; nothing: only whether it is
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w && typeof on === 'boolean') w.setFullScreen(on);
+  return Boolean(w && w.isFullScreen());
+});
 ipcMain.handle('update:state', () => (update && !update.dismissed ? update : null));
 ipcMain.handle('update:dismiss', () => { if (update) update.dismissed = true; });
 function setupUpdates() {

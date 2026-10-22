@@ -685,6 +685,12 @@ window.DR_I18N = (() => {
     hi: pdfs(["चित्र के शब्द खिसक गए? PDF वाला चित्र लें", "PDF ला रहे हैं…", "PDF में मेल खाता चित्र नहीं मिला", "PDF डाउनलोड नहीं हो सका। बाद में फिर कोशिश करें"]),
   };
   for (const [code, words] of Object.entries(PDFS)) Object.assign(S[code], words);
+  // the window filling the screen (Aa), and leaving it
+  const fulls = (w) => ({ ty_full: w[0], ty_full_off: w[1] });
+  for (const [code, w] of Object.entries({ en: ["Full screen", "Leave full screen"], zh: ["全屏", "退出全屏"], "zh-Hant": ["全螢幕", "結束全螢幕"],
+    ja: ["フルスクリーン", "フルスクリーンを終了"], ko: ["전체 화면", "전체 화면 끝내기"], es: ["Pantalla completa", "Salir de pantalla completa"],
+    fr: ["Plein écran", "Quitter le plein écran"], de: ["Vollbild", "Vollbild beenden"], pt: ["Tela cheia", "Sair da tela cheia"],
+    it: ["Schermo intero", "Esci da schermo intero"], ru: ["Во весь экран", "Выйти из полноэкранного режима"], hi: ["पूर्ण स्क्रीन", "पूर्ण स्क्रीन से बाहर"] })) Object.assign(S[code], fulls(w));
   for (const [code, w] of Object.entries({"en": "Leave focus", "zh": "退出专注", "zh-Hant": "退出專注", "ja": "集中モードを終了", "ko": "집중 모드 끝내기", "es": "Salir del modo concentración", "fr": "Quitter le mode concentration", "de": "Fokusmodus beenden", "pt": "Sair do modo foco", "it": "Esci dalla concentrazione", "ru": "Выйти из режима чтения", "hi": "फ़ोकस मोड से बाहर"})) S[code].ty_focus_off = w;
   // several documents chosen in the sidebar, moved or deleted together; a delete, and its Undo
   const sels = (w) => ({ sel_n: w[0], sel_move: w[1], sel_delete: w[2], sel_clear: w[3], sel_pick: w[4], sel_del_n: w[5], sel_del_confirm: w[6], sel_busy: w[7], del_done: w[8], del_done_n: w[9], undo: w[10], undone: w[11], sel_tip: w[12] });
