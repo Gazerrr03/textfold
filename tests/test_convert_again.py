@@ -1,8 +1,9 @@
 """A PDF converted again (accurately, POST /api/convert): the generations of its old text stop, and write nothing (a
 translation of the old paragraphs, laid on the new ones by their places, showed each at another paragraph, outdated);
 after the conversion the document is generated again in every language it had or was being generated in, not only
-the one the page showed when the button was pressed. In a data folder of its own; no model is called, the engine is
-not run, and nothing is fetched.
+the one the page showed when the button was pressed. The reader's notes on it follow their passages into the new text,
+whose paragraphs are named by their new places. In a data folder of its own; no model is called, the engine is not
+run (the PDFs are read by TextFold's own reader, written by hand), and nothing is fetched.
 
 Run from the repo root:
     python3 -m unittest discover tests
@@ -18,9 +19,11 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_pdftext import typeset   # noqa: E402
 from test_replace import TEXT, fake_model   # noqa: E402
 
-from textfold import llm, local, pipeline, server, store   # noqa: E402
+from textfold import llm, local, notes, pdfdoc, pdftext, pipeline, server, store   # noqa: E402
+from textfold.notes import _at, _spans   # noqa: E402
 
 SPEC = {"id": "fake/model", "kind": "api", "protocol": "openai", "base": "http://127.0.0.1:9", "api_key": "", "model": "fake"}
 PID = "pdf-0123456789abcdef"
@@ -120,6 +123,45 @@ class Convert(Base):
         self.assertEqual([lang for lang, _ in calls], ["zh", "en", "zh"])
         self.assertTrue(all("accurate" in text for _, text in calls[1:]))
         self.assertEqual(jobs.items[conv["next"]]["lang"], "en")
+
+
+
+class Notes(Base):
+    HEAT = "Heat pumps move heat from a cold place to a warm one, and the compressor does the work."
+    TANK = "The buffer tank stores heat for the night, so that the pump can rest while the price is high."
+    HOUSE = "A paragraph the accurate conversion found before the others, about the house and its walls."
+
+    def setUp(self):
+        super().setUp()
+        try:
+            import pdf_inspector   # noqa: F401
+        except ImportError:
+            self.skipTest("pdf-inspector is not installed")
+
+    def store(self, paragraphs, replace):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "a.pdf"
+            f.write_bytes(typeset([(20, "Heat at Home"), (14, "1 Heating")] + [(11, t) for t in paragraphs]))
+            out = pdftext.convert(f, Path(tmp) / "out")
+            pdfdoc.store_pdf(PID, out, pdfdoc.read_output(out), "a.pdf", "fast", replace=replace)
+        return store.parsed(PID)
+
+    def unit_with(self, doc, words):
+        return next(u for u, x in doc["units"].items() if words in _spans(x["toks"], doc["atoms"])[0])
+
+    def test_a_note_follows_its_passage(self):
+        doc = self.store([self.HEAT, self.TANK], replace=False)
+        uid = self.unit_with(doc, "buffer tank")
+        text, _ = _spans(doc["units"][uid]["toks"], doc["atoms"])
+        i = text.index("buffer tank")
+        notes.put(PID, {"id": "n-tank0001", "kind": "highlight", "text": "", "thread": [],
+                        "anchor": {**_at(doc, uid, i, i + len("buffer tank")), "lang": "en", "level": 4}})
+        new = self.store([self.HOUSE, self.HEAT, self.TANK], replace=True)   # converted again: one more paragraph first
+        anchor = notes.read(PID)["notes"][0]["anchor"]
+        self.assertEqual(anchor["unit"], self.unit_with(new, "buffer tank"))
+        self.assertNotEqual(anchor["unit"], uid)   # (its old place names another paragraph now)
+        self.assertFalse(anchor.get("lost"))
+        self.assertEqual(notes._quoted(new["units"][anchor["unit"]]["toks"], new["atoms"], *anchor["tokens"]), "buffer tank")
 
 
 if __name__ == "__main__":

@@ -397,7 +397,9 @@ def store_pdf(pid, folder, sc, name, tier, replace=False):
     file itself is kept as source.pdf, so the reader can show it beside the text (another file, as original.<its
     extension>); the engine's structured content as
     structured_content.json, so that its figures and places can be made again without the engine. Converted again
-    (replace), the reader's notes and the file stay; the levels go, since they belong to the text they were made from."""
+    (replace), the reader's notes and the file stay, the notes found again in the new text (notes.reanchor: its
+    paragraphs are named by their places, so an old place now names another paragraph); the levels go, since they
+    belong to the text they were made from."""
     from . import engine
     d = store.pdir(pid)
     ext = "pdf" if pid.startswith("pdf-") else engine.kind_of(name) or "file"
@@ -417,6 +419,7 @@ def store_pdf(pid, folder, sc, name, tier, replace=False):
                           "engine": producer}
         meta["label"] = f"{engine.FILES.get(ext, ext.upper())} · {name}"
     keep = d.with_name(d.name + ".keep")   # the reader's notes and the file, on disk while the document is rewritten
+    old = store.parsed(pid) if replace and (d / "source.html").exists() else None
     if replace and d.exists():
         shutil.rmtree(keep, ignore_errors=True)
         keep.mkdir(parents=True)
@@ -436,6 +439,9 @@ def store_pdf(pid, folder, sc, name, tier, replace=False):
             for f in keep.iterdir():
                 shutil.copy2(f, d / f.name)
             shutil.rmtree(keep)
+    if old is not None:
+        from . import notes
+        notes.reanchor(pid, old, store.parsed(pid))
     return pid
 
 
