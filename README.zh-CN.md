@@ -246,6 +246,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 22 日：精确转换后语言都在；手机上更好读。** PDF 重新精确转换后，原来有的每种语言都会按新文本重新生成。快速转换时的翻译不会再落到新文本上（显示为已过期，而且对不上段落）。过期的翻译在语言菜单最上面有 **更新**。在手机上，打开侧栏的按钮不再压住标志，很宽的公式在自己的框里横向滚动。Markdown 文档和转换来的 PDF 里的长公式在任何屏幕上都保留公式框，在列表里也会显示。指向拆开的段落后半部分的 `textfold://` 链接能打开了。感谢 [@LumenYoung](https://github.com/LumenYoung) 和 [@adalach](https://github.com/adalach)。
 - **2026 年 10 月 22 日：按 TeX 原样显示的图；全屏。** arXiv 论文里由浏览器排字的图（TikZ 画的图）有时字会溢出框，arXiv 自己的网页也一样。这类图下面有一个按钮，点了就从论文的 PDF 里取 TeX 排好的原图，不点就不下载；换过的图下面可以一键换回来。**Aa** 里可以 **全屏**；对照原文时也能打开主题层的导图。简述层里进入下一层的词和其他词的深浅差小了一些，纸张风格的字色和默认风格一致。
 - **2026 年 10 月 22 日：更省磁盘空间。** 新进来的图片存成 WebP：一篇 arXiv 论文的插图只占原来五分之一甚至更少，而且同时下载 4 张，新论文打开更快。文献库里已有的图片保持原样。应用为显示过的图片和 PDF 留的缓存不超过 32 MB，更新安装好以后会删掉下载的安装包。删除的文档在 papers/.trash 里保留 30 天，之后彻底清除。在关键句和要点层，由几个子图组成的插图改为并排显示，不再上下叠在一起被截断。
 - **2026 年 10 月 21 日：更适合长时间阅读。** **Aa** 里可以选浅色或深色（或跟随系统），再选一种比白底柔和的纸张风格，两者可以搭配；还能调行距。再打开一篇文档会回到上次读到的地方。按 `F` 进入专注模式，屏幕上只留正文。侧栏可以固定在正文旁边。
@@ -295,6 +296,7 @@ pi install ./textfold/plugins/pi-textfold
 <a href="https://github.com/mcardZH" title="@mcardZH"><img src="https://github.com/mcardZH.png?size=80" width="40" height="40" alt="@mcardZH" /></a>
 <a href="https://github.com/momoko-sketch" title="@momoko-sketch"><img src="https://github.com/momoko-sketch.png?size=80" width="40" height="40" alt="@momoko-sketch" /></a>
 <a href="https://github.com/Knoety" title="@Knoety"><img src="https://github.com/Knoety.png?size=80" width="40" height="40" alt="@Knoety" /></a>
+<a href="https://github.com/LumenYoung" title="@LumenYoung"><img src="https://github.com/LumenYoung.png?size=80" width="40" height="40" alt="@LumenYoung" /></a>
 
 欢迎贡献：先看 [CONTRIBUTING.md](https://github.com/chenxiachan/textfold/blob/main/CONTRIBUTING.md)。
 
