@@ -995,9 +995,7 @@ html.compare .chunk > .side, html.compare .chunk > .lside { position: static; }
 }
 @media print { .tview, .mmap { display: none !important; } }
 
-/* ── how far in the text is, under the top bar; a word over the page (where it was opened, focus begun) ── */
-.readprog { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; pointer-events: none; }
-.readprog i { display: block; height: 100%; background: var(--accent); opacity: .5; transform: scaleX(0); transform-origin: 0 50%; }
+/* ── a word over the page: where it was opened, focus begun ── */
 .rpill { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 46; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px);
   padding: 6px 7px 6px 14px; border-radius: 999px; background: var(--ink); color: var(--surface); font: 500 13px var(--sans); box-shadow: var(--pop); }
 html.focus .rpill { top: 14px; }   /* (no top bar over it) */
@@ -1011,4 +1009,4 @@ html.focus.show-top .topbar { transform: none; opacity: 1; }
 html.focus footer.zoom, html.focus .chatbtn { transform: translateY(28px); opacity: 0; }
 html.focus:not(.show-bottom) footer.zoom *, html.focus:not(.show-bottom) .chatbtn { pointer-events: none !important; }
 html.focus.show-bottom footer.zoom, html.focus.show-bottom .chatbtn { transform: none; opacity: 1; }
-@media print { .readprog, .rpill { display: none !important; } }
+@media print { .rpill { display: none !important; } }

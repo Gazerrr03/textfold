@@ -3854,7 +3854,7 @@ math { font-size: 1.05em; }
 
   // ── where this text was being read (kept in this browser, the last 300 texts): its level and the paragraph at the
   //    reading line, saved as the reader scrolls or zooms. Opened again (and with no place asked for in its link),
-  //    it comes back there, says so, and offers the beginning. A line under the top bar shows how far in it is ──
+  //    it comes back there, says so, and offers the beginning ──
   const POS_KEY = 'textfold.pos';
   const readPos = () => { try { return JSON.parse(store.get(POS_KEY) || '{}') || {}; } catch { return {}; } };
   let posTimer = 0;
@@ -3869,15 +3869,7 @@ math { font-size: 1.05em; }
     store.set(POS_KEY, JSON.stringify(Object.fromEntries(keep)));
   }
   const savePosSoon = () => { clearTimeout(posTimer); posTimer = setTimeout(savePos, 700); };
-  const progEl = h('div', 'readprog', '<i></i>');
-  document.querySelector('.topbar').append(progEl);
-  let progFrame = 0;
-  function placeProg() {
-    progFrame = 0;
-    const max = document.documentElement.scrollHeight - innerHeight;
-    progEl.firstChild.style.transform = `scaleX(${max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0})`;
-  }
-  addEventListener('scroll', () => { savePosSoon(); if (!progFrame) progFrame = requestAnimationFrame(placeProg); }, { passive: true });
+  addEventListener('scroll', savePosSoon, { passive: true });
   addEventListener('pagehide', savePos);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') savePos(); });
 
