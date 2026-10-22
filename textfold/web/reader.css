@@ -259,7 +259,6 @@ html[data-font="sans"] { --text: var(--sans); }
 .u[data-l="4"], .u[data-l="3"] { font-family: var(--text); font-size: calc(18.5px * var(--fs)); line-height: calc(1.62 * var(--lh, 1)); color: var(--ink-2); margin: 0 0 calc(14px * var(--fs)); }
 html[data-font="sans"] .u[data-l="4"], html[data-font="sans"] .u[data-l="3"] { font-size: calc(17px * var(--fs)); line-height: calc(1.68 * var(--lh, 1)); }
 .u[data-l="4"] .tk.lead, .u[data-l="3"] .tk.lead, .u[data-l="4"] .tr.lead, .u[data-l="3"] .tr.lead { color: var(--ink); }
-.u[data-l="3"] .tk:not(.lead), .u[data-l="3"] .tr:not(.lead) { color: var(--muted); }
 .tk.gap, .tr.gap { color: var(--faint) !important; padding: 0 .1em; }
 .u.abstract[data-l="4"], .u.abstract[data-l="3"] { font-size: calc(17.5px * var(--fs)); }
 .u.local-open { background: var(--card); border-color: var(--line); border-radius: 10px; padding: 10px 14px; margin-left: -15px; margin-right: -15px; box-shadow: 0 8px 28px -18px rgba(40, 30, 10, .35); }
