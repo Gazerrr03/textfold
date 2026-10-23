@@ -68,6 +68,10 @@ more than one way, so it can be found again when the text around it changes.
     on, when that is still there edited (`tokens` and `sents` null), else on its section's title (`unit` null, `on:
     "title"`). Its own `quote` stays as it was.
 - **text**: the reader's own note, plain text with line breaks.
+- **color**, optional, on a `highlight` or `note`: the colour the reader gave it, one of `yellow`, `green`, `blue`,
+  `pink`, `purple`, `orange`. Without it the note is in the colour of the level it was made at (below). Its mark, its
+  card and its line in the notes list take it (the paragraph's mark has a band of each colour its notes have, in the order they come); in
+  Markdown it is a tag, `#highlight/<color>`, under the block id.
 - **thread**: the turns of an `ask` note, in order, each `{ "q", "a", "takeaway", "cites", "next", "model", "lang", "at" }`:
   the question, the answer (Markdown), the answer in one sentence, the units of the paper the answer rests on (in the
   order the answer first cites them), two questions to go on with, the model id, the answer's language and when it was
@@ -92,7 +96,8 @@ more than one way, so it can be found again when the text around it changes.
 ## How a note is shown at each level
 
 A mark is shown where it was made, in the colour of that level: Full and Brief (the author's words) share one, Key
-and Takeaway have one each. The levels leave each other's marks alone.
+and Takeaway have one each; or in the one the reader gave it (`color`), at every level. Where marks overlap, the
+latest note's colour shows. The levels leave each other's marks alone.
 
 - Full, Brief: the words in `tokens` of a note made there are marked when the note's language is the one being read;
   in another language, the sentences in `sents` are marked more lightly. With "Keep my highlights" on, these

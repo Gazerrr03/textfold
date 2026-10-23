@@ -171,8 +171,11 @@
     // marked on it, the model's too, in the colour of the level they were marked at; and the words that came from a
     // passage marked on a line before marks were kept as the line's own (anchor.shown), as they were lit then
     if (mk) for (const x of out) {
-      if (L <= 2 && !x.kept) x.hl = x.j !== undefined && mk.line.has(x.j) ? mk.line.get(x.j) : x.i !== undefined && mk.old.has(x.i) ? mk.old.get(x.i) : 0;
-      else if (x.i !== undefined) x.hl = mk.exact.has(x.i) ? 1 : mk.soft.has(x.i) ? 2 : 0;
+      if (L <= 2 && !x.kept) {
+        const ln = x.j !== undefined && mk.line.has(x.j);
+        x.hl = ln ? mk.line.get(x.j) : x.i !== undefined && mk.old.has(x.i) ? mk.old.get(x.i) : 0;
+        x.hc = ln ? mk.lineHc.get(x.j) : mk.hc.get(x.i);
+      } else if (x.i !== undefined) { x.hl = mk.exact.has(x.i) ? 1 : mk.soft.has(x.i) ? 2 : 0; x.hc = mk.hc.get(x.i); }
     }
     // a formula, citation or reference is the same element in every level and language
     const seen = new Map();
@@ -190,6 +193,13 @@
   // a piece's highlight (pieces(): hl): marked at Full or Brief, the same more lightly (another language), marked at
   // Key, marked at Takeaway
   const HL = ['', ' hl', ' hl hls', ' hl hlk', ' hl hlt'];
+  // the colours a reader may give a note (note.color; reader.css .hc-<name>): none, the level's
+  const COLORS = ['yellow', 'green', 'blue', 'pink', 'purple', 'orange'];
+  // the colour last chosen (a dot clicked): a note written from the bar over a selection takes it
+  let lastColor = store.get('dr-color');
+  const useColor = (c) => { if (COLORS.includes(c)) { lastColor = c; store.set('dr-color', c); } };
+  const hcOf = (n) => (n && COLORS.includes(n.color) ? ` hc-${n.color}` : '');
+  const hlCls = (p) => (HL[p.hl] || '') + (p.hl && p.hc ? ` hc-${p.hc}` : '');
   function fill(el, p) {
     const t = p.tok || {};
     const key = p.gap ? 'gap' : `${t.a || ''}\u0001${t.x || ''}\u0001${t.t || ''}\u0001${t.f || ''}`;
@@ -202,7 +212,7 @@
       el.className = 'tk' + (p.gap ? ' gap' : '') + atCls(t) + (t.f ? ' ' + t.f : '');
       el._base = el.className;
     }
-    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + (HL[p.hl] || '');
+    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + hlCls(p);
   }
 
   // where a line may break between two pieces written without a space: between Chinese characters yes (except
@@ -260,7 +270,7 @@
       else frag.appendChild(s);
       if (space) {   // a space inside a highlight is highlighted too
         const both = p.hl && !last && pcs[n + 1].hl;
-        frag.appendChild(both ? h('span', `hlsp${p.hl === pcs[n + 1].hl ? HL[p.hl].replace(' hl', '') : ''}`, ' ') : document.createTextNode(' '));
+        frag.appendChild(both ? h('span', `hlsp${p.hl === pcs[n + 1].hl && p.hc === pcs[n + 1].hc ? hlCls(p).replace(' hl', '') : ''}`, ' ') : document.createTextNode(' '));
       }
     });
     el._tx.replaceChildren(frag);
@@ -273,7 +283,7 @@
     const flush = () => { if (buf) html += run ? `<span class="${run}">${buf}</span>` : buf; buf = ''; };
     pcs.forEach((p, n) => {
       const t = p.tok || {};
-      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${HL[p.hl] || ''}`;
+      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${hlCls(p)}`;
       if (cls !== run) { flush(); run = cls; }
       buf += p.gap ? '…' : t.a ? A[t.a].html : t.x ? `<span class="texsrc">${esc(t.x)}</span>` : esc(t.t);
       if (n < pcs.length - 1 && (p.gap || t.s || pcs[n + 1].gap)) {
@@ -535,11 +545,11 @@
     if (!lad) return;
     const mk = stakeMarks(c.id);
     lad.take.forEach((tk, i) => {
-      const s = tokEl(tk, `${lad.topic.includes(i) ? 'lead' : ''}${mk && mk.has(i) ? ' hl' : ''}`);
+      const s = tokEl(tk, `${lad.topic.includes(i) ? 'lead' : ''}${mk && mk.has(i) ? ' hl' + mk.get(i) : ''}`);
       s.dataset.id = `st:${c.id}:${lang}:${i}`;
       s._i = i;
       st.append(s);
-      if (tk.s) st.append(mk && mk.has(i) && mk.has(i + 1) ? h('span', 'hlsp', ' ') : ' ');
+      if (tk.s) st.append(mk && mk.has(i) && mk.has(i + 1) ? h('span', `hlsp${mk.get(i) === mk.get(i + 1) ? mk.get(i) : ''}`, ' ') : ' ');
     });
   }
   function chunkTitle(c) { const z = trOf(c); return z ? mathify(z.title, c.html) : c.html; }
@@ -1835,10 +1845,10 @@
   const keyOf = (a) => (whole(a) ? '¶' : a.unit ? a.unit : `§${a.section}`);
   const shown = (a) => !!a && (whole(a) || (a.unit ? unitEl.has(a.unit) : secs.has(a.section)));
   function stakeMarks(cid) {   // the words of a section's summary that the reader marked, in the language being read
-    const list = notesOf.get(`§${cid}`), out = new Set();
+    const list = notesOf.get(`§${cid}`), out = new Map();   // token -> its note's colour class ('' the level's)
     for (const n of list || []) {
       const a = n.anchor;
-      if (a.on === 'summary' && a.lang === lang && a.tokens) for (let i = a.tokens[0]; i <= a.tokens[1]; i++) out.add(i);
+      if (a.on === 'summary' && a.lang === lang && a.tokens) for (let i = a.tokens[0]; i <= a.tokens[1]; i++) out.set(i, hcOf(n));
     }
     return out.size ? out : null;
   }
@@ -1859,19 +1869,20 @@
   function marksFor(uid) {
     const list = notesOf.get(uid);
     if (!list) return null;
-    const v = view(uid), exact = new Set(), soft = new Set(), old = new Map(), line = new Map();
+    // (hc, lineHc: the colour the reader gave the note a token or a place of the line is marked by, the latest's)
+    const v = view(uid), exact = new Set(), soft = new Set(), old = new Map(), line = new Map(), hc = new Map(), lineHc = new Map();
     for (const n of list) {
-      const a = n.anchor;
+      const a = n.anchor, c = hcOf(n).slice(4);
       if (a.shown) {
         const at = shownAt(a);
-        if (at) for (let j = at[0]; j <= at[1]; j++) line.set(j, a.level === 1 ? 4 : 3);
+        if (at) for (let j = at[0]; j <= at[1]; j++) { line.set(j, a.level === 1 ? 4 : 3); lineHc.set(j, c); }
         continue;
       }
       const before = (a.level ?? 4) <= 2;
-      if (a.lang === lang && a.tokens) { for (let i = a.tokens[0]; i <= a.tokens[1]; i++) { exact.add(i); if (before) old.set(i, 1); } }
-      else if (a.sents) for (const k of a.sents) { const r = v.sents[k]; if (r) for (let i = r[0]; i < r[1]; i++) { soft.add(i); if (before && !old.has(i)) old.set(i, 2); } }
+      if (a.lang === lang && a.tokens) { for (let i = a.tokens[0]; i <= a.tokens[1]; i++) { exact.add(i); hc.set(i, c); if (before) old.set(i, 1); } }
+      else if (a.sents) for (const k of a.sents) { const r = v.sents[k]; if (r) for (let i = r[0]; i < r[1]; i++) { if (!exact.has(i)) hc.set(i, c); soft.add(i); if (before && !old.has(i)) old.set(i, 2); } }
     }
-    return exact.size || soft.size || line.size ? { exact, soft, old, line } : null;
+    return exact.size || soft.size || line.size ? { exact, soft, old, line, hc, lineHc } : null;
   }
   function indexNotes() {
     notesOf.clear();
@@ -1882,6 +1893,16 @@
       notesOf.get(key).push(n);
     }
   }
+  // the mark of a paragraph (or heading) with notes: a band of each colour its marks have, in the order they come in
+  // the text (the level's, for a mark given none); a conversation alone leaves it as it was
+  function noteBar(el, key) {
+    const at = (a) => (a.tokens ? a.tokens[0] : a.shown && a.shown.words ? a.shown.words[0] : a.sents ? a.sents[0] : 0);
+    const inks = [...new Set((notesOf.get(key) || []).filter((n) => n.kind !== 'ask').sort((x, y) => at(x.anchor) - at(y.anchor))
+      .map((n) => (hcOf(n) ? `var(--c-${n.color}-ink)` : 'var(--hl-ink)')))];
+    if (!inks.length) { el.style.removeProperty('--note-bar'); return; }
+    const k = inks.length;
+    el.style.setProperty('--note-bar', k === 1 ? inks[0] : `linear-gradient(${inks.map((c, i) => `${c} ${(i * 100 / k).toFixed(2)}% ${((i + 1) * 100 / k).toFixed(2)}%`).join(', ')})`);
+  }
   // what a change of notes redraws: the units, their margin, the keyframes (which hold the marks)
   function notesChanged(uids) {
     for (const uid of new Set(uids)) {
@@ -1890,6 +1911,7 @@
         const sc = secs.get(uid.slice(1));
         if (!sc) continue;
         sc.hd.classList.toggle('has-notes', notesOf.has(uid));
+        noteBar(sc.hd, uid);
         renderStake(sc.c, sc.st);
         renderNoteCards(uid);
         continue;
@@ -1897,6 +1919,7 @@
       const el = unitEl.get(uid);
       if (!el) continue;
       el.classList.toggle('has-notes', notesOf.has(uid));
+      noteBar(el, uid);
       if (!el._stale) renderUnit(uid, el._mode === 'tok');
       renderNoteCards(uid);
     }
@@ -2031,7 +2054,7 @@
     if (!anchors) { hideSelbar(); return; }
     selAnchors = anchors;
     const t = T[ui];
-    selbar.innerHTML = `<button type="button" data-act="hl">${esc(t.n_highlight)}</button><button type="button" data-act="note">${esc(t.n_note)}</button>` +
+    selbar.innerHTML = `${swatches('hl')}<button type="button" data-act="note">${esc(t.n_note)}</button>` +
       `<button type="button" data-act="ask">${esc(t.n_ask)}</button>`;
     selbar.hidden = false;
     const r = getSelection().getRangeAt(0).getBoundingClientRect(), w = selbar.offsetWidth;
@@ -2039,11 +2062,21 @@
     selbar.style.top = `${r.top > 70 ? r.top - 44 : r.bottom + 8}px`;
   }
   function hideSelbar() { selbar.hidden = true; selAnchors = null; }
+  // a dot for each colour a note may be given (data-c); in a note opened, the one it has is on, and a click on it
+  // again takes it off (the level's colour)
+  function swatches(act, n) {
+    const t = T[ui], on = n && COLORS.includes(n.color) ? n.color : '';
+    const dot = (c, k) => `<button type="button" class="sw hc-${c}${n && c === on ? ' on' : ''}" data-act="${act}" data-c="${c}" title="${esc(t.n_colors[k])}" aria-label="${esc(t.n_colors[k])}"></button>`;
+    return `<span class="sws" role="group" aria-label="${esc(t.n_color)}">${COLORS.map((c, k) => dot(c, k)).join('')}</span>`;
+  }
   selbar.addEventListener('mousedown', (e) => e.preventDefault());   // keep the selection while a button is pressed
   selbar.addEventListener('click', (e) => {
-    const act = e.target.closest('button') && e.target.closest('button').dataset.act, anchors = selAnchors;
+    // a dot marks the selection in its colour; a note is marked in the colour last chosen, and opened to write
+    const b = e.target.closest('button'), act = b && b.dataset.act, anchors = selAnchors;
     if (!act || !anchors) return;
-    const made = anchors.map((a, k) => ({ id: noteId(), kind: k === 0 && act === 'note' ? 'note' : 'highlight', anchor: a, text: '', ask: null }));
+    if (act === 'hl') useColor(b.dataset.c);
+    const c = act === 'hl' ? { color: b.dataset.c } : act === 'note' && COLORS.includes(lastColor) ? { color: lastColor } : {};
+    const made = anchors.map((a, k) => ({ id: noteId(), kind: k === 0 && act === 'note' ? 'note' : 'highlight', anchor: a, text: '', ask: null, ...c }));
     hideSelbar();
     getSelection().removeAllRanges();
     if (act === 'ask') {   // the question is written first; the note is kept once it is asked
@@ -2161,9 +2194,9 @@
       body = `<textarea class="np-text" rows="3" placeholder="${esc(t.n_note_ph)}">${esc(n.text || '')}</textarea>`;
     }
     const q = passage(a), at = a.shown ? lineAt(a) + (lineGone(a) ? ` · ${t.n_line_changed}` : '') : ask ? askedAt(a) : '';
-    npop.innerHTML = `<div class="np-quote${a.shown ? ` ai l${a.level}` : ''}"><span class="np-where">${esc(whereA(a))}</span> ${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}` +
+    npop.innerHTML = `<div class="np-quote${a.shown ? ` ai l${a.level}` : ''}${ask ? '' : hcOf(n)}"><span class="np-where">${esc(whereA(a))}</span> ${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}` +
       `${at ? `<span class="np-at">${esc(at)}</span>` : ''}</div>${body}` +
-      (draft ? '' : `<div class="np-acts">${!ask && !whole(a) ? `<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
+      (draft ? '' : `<div class="np-acts">${!ask && !whole(a) ? `${swatches('color', n)}<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
         `<button type="button" data-act="link">${esc(t.n_copy)}</button><button type="button" data-act="del">${esc(t.n_delete)}</button></div>`);
     texify(npop);
     npop.hidden = false;
@@ -2215,6 +2248,17 @@
     if (b.classList.contains('np-stop')) { stopAsk(n); return; }
     if (b.classList.contains('np-tdel')) { deleteTurn(n, +b.dataset.turn); return; }
     if (b.classList.contains('np-cite') && b.dataset.to) { closeNote(); showEvidence(b.dataset.to, targetEl(n.anchor)); return; }
+    if (b.dataset.act === 'color') {   // (what is being written goes with it)
+      const field = npop.querySelector('.np-text'), m = { ...n, text: field ? field.value : n.text };
+      if (b.classList.contains('on')) delete m.color; else { m.color = b.dataset.c; useColor(m.color); }
+      clearTimeout(saveTimer);
+      popNote = m;
+      saveNote(m);
+      for (const x of npop.querySelectorAll('.sw')) x.classList.toggle('on', x.dataset.c === m.color);
+      const qe = npop.querySelector('.np-quote');
+      for (const c of COLORS) qe.classList.toggle(`hc-${c}`, c === m.color);
+      return;
+    }
     if (b.dataset.act === 'del') { closeNote(); deleteNote(n); }
     else if (b.dataset.act === 'ask') { closeNote(); openNote({ id: noteId(), kind: 'ask', anchor: n.anchor, text: '', thread: [] }, true); }
     else if (b.dataset.act === 'link') {
@@ -2231,7 +2275,7 @@
         const turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
         return `<div class="pk-n ask"><b>${esc((turns[0] || {}).q || '')}</b>${said ? ` <span>${mdLite(said.takeaway).replace(/<\/?p>/g, '')}</span>` : ''}</div>`;
       }
-      return `<div class="pk-n"><span class="pk-q${n.anchor.shown ? ' ai' : ''}">“${esc(clip(passage(n.anchor), 90))}”</span>${n.text ? ` ${esc(clip(n.text, 160))}` : ''}</div>`;
+      return `<div class="pk-n${hcOf(n)}"><span class="pk-q${n.anchor.shown ? ' ai' : ''}">“${esc(clip(passage(n.anchor), 90))}”</span>${n.text ? ` ${esc(clip(n.text, 160))}` : ''}</div>`;
     }).join('');
     texify(peek);
     peekFor = el;
@@ -2408,7 +2452,7 @@
     // (the conversations about the whole paper live in the chat: its head carries the reader's own notes alone)
     const mine = list.filter((n) => n.kind !== 'ask' && n.text && n.text.trim()), asks = key === '¶' ? [] : list.filter((n) => n.kind === 'ask');
     const card = (n) => {
-      const c = h('button', `ncard${n.kind === 'ask' ? ' ask' : ''}`);
+      const c = h('button', `ncard${n.kind === 'ask' ? ' ask' : hcOf(n)}`);
       c.type = 'button';
       c.draggable = true;   // (into another app, with a link back: the drags, below)
       c.dataset.note = n.id;
@@ -2875,7 +2919,7 @@
         : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span>${q ? `<span class="nl-q">“${texLite(clipTex(q, 80))}”</span>` : ''}${gone}`
         : `<span class="nl-hl">${texLite(clipTex(q, 150))}</span>${gone}`;
       const sure = nmSure === n.id;
-      items += `<div class="nl-item ${k}${a.shown ? ` ai l${a.level}` : ''}" draggable="true" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
+      items += `<div class="nl-item ${k}${a.shown ? ` ai l${a.level}` : ''}${k === 'ask' ? '' : hcOf(n)}" draggable="true" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
         `<button type="button" class="nl-del${sure ? ' sure' : ''}" title="${esc(sure ? t.n_del_sure : t.n_delete)}">${sure ? esc(t.n_del_sure) : '×'}</button></div>`;
     }
     const tab = (f, label) => `<button type="button" class="nl-tab${nmFilter === f ? ' on' : ''}" data-f="${f}">${esc(label)}<em>${count[f]}</em></button>`;
@@ -2989,6 +3033,7 @@
     } else if (a.shown) out.push(...mdQuote(q), '>', ...mdQuote(`*${lineAt(a)}*`));
     else if (!whole(a)) out.push(...mdQuote((para && paraOf(a, true)) || q));   // (a note on the whole paper quotes nothing)
     out.push('', `^${n.id}`, '');
+    if (n.kind !== 'ask' && hcOf(n)) out.push(`#highlight/${n.color}`, '');   // (the colour it was given, as a tag Obsidian can search)
     if (n.text && n.text.trim()) out.push(n.text.trim(), '');
     out.push(`[${T[ui].n_open}](${noteLink(n)})`, '');
     return out;
@@ -3251,7 +3296,7 @@
       const a = n.anchor, g = groupOf(a), said = n.kind === 'ask' ? turnsOf(n).filter((x) => x.a) : [];
       if (g && g !== sec) { sec = g; body += `<h2>${esc(g)}</h2>`; }
       const whole_ = para && paraOf(a);
-      body += `<article class="n ${kindOf(n)}">${whole_ && !a.shown ? `<blockquote class="para">${whole_}</blockquote>` : passage(a) ? `<blockquote${a.shown ? ` class="ai l${a.level}"` : ''}>${texLite(passage(a))}</blockquote>` : ''}` +
+      body += `<article class="n ${kindOf(n)}${n.kind === 'ask' ? '' : hcOf(n)}">${whole_ && !a.shown ? `<blockquote class="para">${whole_}</blockquote>` : passage(a) ? `<blockquote${a.shown ? ` class="ai l${a.level}"` : ''}>${texLite(passage(a))}</blockquote>` : ''}` +
         (a.shown && !said.length ? `<p class="at">${esc(lineAt(a))}</p>` : '') +
         (n.text && n.text.trim() ? `<div class="t">${esc(n.text.trim()).replace(/\n/g, '<br>')}</div>` : '') +
         said.map((x) => `<div class="qa"><p class="q">${esc(x.q)}</p><div class="a">${mdLite(answerText(x.a))}</div></div>`).join('') +
@@ -3280,8 +3325,11 @@
 `;
   }
   const MARKS_CSS = `
-:root { --bg: #FAF9F7; --card: #fff; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --line: #E9E5DF; --accent: #6B5CE7; --hl: #FFE07A; --hl-ink: #D9A400; --hl-key: #D3CAFF; --hl-take: #C6E2F7; color-scheme: light dark; }
-@media (prefers-color-scheme: dark) { :root { --bg: #1C1B19; --card: #252421; --ink: #ECE8E1; --ink-2: #C9C3B9; --muted: #9A938A; --line: #3A3732; --accent: #A99CF5; --hl: #6B5A1E; --hl-key: #4A3F94; --hl-take: #2B5675; --hl-ink: #E3B73A; } }
+:root { --bg: #FAF9F7; --card: #fff; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --line: #E9E5DF; --accent: #6B5CE7; --hl: #FFE07A; --hl-ink: #D9A400; --hl-key: #D3CAFF; --hl-take: #C6E2F7; color-scheme: light dark;
+  --c-yellow: #FFE07A; --c-yellow-ink: #D9A400; --c-green: #BDE8A8; --c-green-ink: #4E9A3A; --c-blue: #BFDDF7; --c-blue-ink: #3B82C4; --c-pink: #F9C4D8; --c-pink-ink: #D0487A; --c-purple: #D9CCFF; --c-purple-ink: #6B5CE7; --c-orange: #FFCB99; --c-orange-ink: #E07A1F; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1C1B19; --card: #252421; --ink: #ECE8E1; --ink-2: #C9C3B9; --muted: #9A938A; --line: #3A3732; --accent: #A99CF5; --hl: #6B5A1E; --hl-key: #4A3F94; --hl-take: #2B5675; --hl-ink: #E3B73A;
+  --c-yellow: #8A7024; --c-yellow-ink: #E8C04A; --c-green: #3E6B33; --c-green-ink: #8FD27A; --c-blue: #2B5675; --c-blue-ink: #7DB8EA; --c-pink: #7A3550; --c-pink-ink: #F08CB4; --c-purple: #4A3F94; --c-purple-ink: #B1A6EE; --c-orange: #85501F; --c-orange-ink: #F2A65E; } }
+${COLORS.map((c) => `.hc-${c} { --hl: var(--c-${c}); --hl-key: var(--c-${c}); --hl-take: var(--c-${c}); --hl-ink: var(--c-${c}-ink); }`).join('\n')}
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, 'Inter', 'PingFang SC', 'Segoe UI', sans-serif; }
 .wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 48px; }
