@@ -12,7 +12,7 @@ version 2.
 | a paragraph, by the handle beside it on hover (its text stays selectable) | `paragraph` | `u=<id>&level=<level>` | the paragraph at its level |
 | a section's heading, by its handle: the whole section, its subsections with it | `section` | `s=<id>&level=<level>` | the section as it reads at that level: at Key and Takeaway its summary, then a `- ` bullet per paragraph; at Brief and Full a paragraph each, blank lines between (Brief keeps its `…`); each subsection after its own heading (and summary) |
 | a section's one-line summary (Key, Takeaway), by its handle | `summary` | `s=<id>&level=<level>` | the summary |
-| a section's card on the Topic map, grabbed anywhere (no handles there) | `section` | `s=<id>&level=topic` | its topic, then on a line of its own its paragraphs' topics (its chips), joined by ` · ` |
+| a section's card on the Topic map, grabbed anywhere (no handles there) | `section` | `s=<id>&level=topic` | as the card reads: its summary (the line under its title, which goes in `heading`), then on a line of its own its paragraphs' topics (its chips), joined by ` · ` |
 | a selection in one paragraph | `selection` | `u=<that paragraph>&level=<level>` (`s=` when it is on a heading or summary alone) | the selected words |
 | a selection over several paragraphs | `selection` | `u=<the first>&to=<the last>&level=<level>` | the selected words, a paragraph each (a heading or summary it crosses too), blank lines between |
 | a highlight's or a note's card, in the margin or the notes list | `note` | `n=<note id>` | the note's text, else its quote |

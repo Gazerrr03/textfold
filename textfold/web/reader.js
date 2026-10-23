@@ -2627,15 +2627,15 @@
     }
     return { kind: 'section', c, L: level, heading: headingOf(c), text: blocks.filter(Boolean).join('\n\n'), written, units };
   }
-  // a section's card on the Topic map: its topic, then the topics of its paragraphs (its chips), as the map reads
+  // a section's card on the Topic map, as the card reads: its summary (the line under its title), then the topics of
+  // its paragraphs (its chips)
   function cardDrag(card) {
     const sc = secs.get(card.dataset.chunk);
     if (!sc) return null;
-    const c = sc.c, lad = (trOf(c) && trOf(c).lad) || c.lad;
-    const topic = lad && lad.topic ? lad.topic.filter((i) => lad.take[i]).map((i) => tokPlain(lad.take[i]) + (lad.take[i].s ? ' ' : '')).join('').trim() : '';
+    const c = sc.c, summary = sc.st.getClientRects().length ? summaryOf(c) : '';
     const units = c.units.filter((uid) => unitEl.has(uid) && piecesText(pieces(uid, 0)));
     const chips = units.map((uid) => piecesText(pieces(uid, 0)));
-    return { kind: 'section', c, L: 0, heading: headingOf(c), text: [topic, chips.join(' · ')].filter(Boolean).join('\n'), written: true, units };
+    return { kind: 'section', c, L: 0, heading: headingOf(c), text: [summary, chips.join(' · ')].filter(Boolean).join('\n'), written: true, units };
   }
   // a note's card, or its row in the notes list: a highlight or a note (its quote, and the reader's words), or a
   // conversation (the reader's question, and the model's answer in one sentence)
