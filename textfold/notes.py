@@ -159,7 +159,8 @@ def prompt(doc, note, question, lang, earlier=(), ui=None):
                         for c in chunks if c.get("lad"))
     level = a.get("level", 4)
     name, whose = LEVELS.get(level, LEVELS[4])
-    quote = (a.get("quote") or {}).get("exact", "")
+    # what they selected: on a written line (Key, Takeaway), its words as the model wrote them; else the passage
+    quote = (a.get("shown") or {}).get("exact") or (a.get("quote") or {}).get("exact", "")
     if whole:
         near = []
         where = (f"They are reading at the {name} level of a zoomable reader and asked about the paper as a whole. Answer "

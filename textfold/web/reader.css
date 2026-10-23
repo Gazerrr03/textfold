@@ -22,7 +22,8 @@
   --r-context: #A39C93; --r-gap: #D9822B; --r-claim: #6B5CE7; --r-method: #3B82C4;
   --r-setup: #7C8BA1; --r-result: #2E9E6A; --r-analysis: #0F8B8D; --r-limitation: #C2453D;
   --rel-supports: #2E9E6A; --rel-builds_on: #3B82C4; --rel-qualifies: #C2453D; --rel-explains: #6B5CE7; --rel-ref: #A39C93;
-  --hl: #FFE07A; --hl-ink: #D9A400;   /* the reader's highlights */
+  --hl: #FFE07A; --hl-ink: #D9A400;   /* the reader's highlights: made at Full or Brief */
+  --hl-key: #D3CAFF; --hl-take: #C6E2F7;   /* made on the written line at Key, at Takeaway */
   /* the type as the reader set it (reader.js, the type): its size (--fs, every size in the column scales with it), the
      column's width (html[data-width]: narrow, standard, wide, at this size: a line holds as many words at any size, as
      long as the margins keep their room) and the font of the author's words (--text) */
@@ -37,7 +38,7 @@
   :root:not([data-theme]) {
     --surface: #1B1915; --card: #24211C; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B;
     --faint: #5E5850; --line: #3A362F; --line-2: #2E2B25; --accent: #A79FF4; --accent-soft: #2D2850;
-    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A;
+    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A; --hl-key: #4A3F94; --hl-take: #2B5675;
     --btn: #6B5CE7; --btn-hover: #7B6DF0; --on-btn: #fff;
     --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65);
   }
@@ -49,7 +50,7 @@
     color-scheme: dark;
     --surface: #1B1915; --card: #24211C; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B;
     --faint: #5E5850; --line: #3A362F; --line-2: #2E2B25; --accent: #A79FF4; --accent-soft: #2D2850;
-    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A;
+    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A; --hl-key: #4A3F94; --hl-take: #2B5675;
     --btn: #6B5CE7; --btn-hover: #7B6DF0; --on-btn: #fff;
     --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65);
   }
@@ -554,6 +555,8 @@ html[lang="zh-TW"] .u[data-l="4"], html[lang="zh-TW"] .u[data-l="3"] { line-heig
 /* ── the reader's notes (docs/notes-format.md) ──────────────── */
 .tk.hl, .tr.hl, .hlsp { background-color: color-mix(in srgb, var(--hl) 78%, transparent); border-radius: 2px; cursor: pointer; }
 .tk.hls, .tr.hls, .hlsp.hls { background-color: color-mix(in srgb, var(--hl) 36%, transparent); }
+.tk.hlk, .tr.hlk, .hlsp.hlk { background-color: color-mix(in srgb, var(--hl-key) 85%, transparent); }
+.tk.hlt, .tr.hlt, .hlsp.hlt { background-color: color-mix(in srgb, var(--hl-take) 90%, transparent); }
 /* a paragraph with notes keeps a mark at every level, also where the passage itself is not shown */
 .u.has-notes::after { content: ""; position: absolute; left: -13px; top: .4em; bottom: .4em; width: 3px; border-radius: 2px; background: var(--hl-ink); opacity: .75; }
 li.u.has-notes::after { left: calc(-1.3em - 13px); }
@@ -579,6 +582,8 @@ html[data-hide~="links"] .side-links, html[data-hide~="asks"] .side-notes, html[
 .npop { position: fixed; z-index: 44; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 10px;
   box-shadow: 0 16px 44px -18px rgba(40, 30, 10, .45); font: 13.5px/1.5 var(--sans); color: var(--ink-2); max-height: 70vh; overflow: auto; }
 .npop .np-quote { font-family: var(--serif); font-size: 13.5px; color: var(--muted); border-left: 2px solid var(--hl-ink); padding-left: 8px; margin-bottom: 8px; }
+.npop .np-quote.ai { font-family: var(--sans); font-size: 13px; }   /* the model's words, as on its line */
+.npop .np-quote.l2 { border-left-color: color-mix(in srgb, var(--hl-key) 60%, var(--accent)); } .npop .np-quote.l1 { border-left-color: color-mix(in srgb, var(--hl-take) 55%, #3B82C4); }
 .npop .np-where { font-family: var(--sans); font-weight: 650; color: var(--faint); margin-right: 3px; }
 .npop textarea, .npop input { width: 100%; font: 14px/1.5 var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 9px; outline: none; resize: vertical; }
@@ -749,6 +754,9 @@ html.morphing .chatbtn { pointer-events: none; }
 .nl-item.ask .nl-go::before { background: var(--accent); }
 .nl-go b { font-weight: 600; }
 .nl-hl { font-family: var(--serif); font-size: 13.5px; color: var(--ink-2); }
+.nl-item.ai .nl-hl, .nl-item.ai .nl-q { font-family: var(--sans); }
+.nl-item.l2 .nl-go::before { background: var(--hl-key); } .nl-item.l1 .nl-go::before { background: var(--hl-take); }
+.nl-gone { display: block; font: italic 11.5px var(--sans); color: var(--muted); margin-top: 2px; }
 .nl-t { color: var(--ink); }
 .nl-a { color: var(--ink-2); }
 .nl-q { font-family: var(--serif); font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -796,6 +804,7 @@ html.morphing .chatbtn { pointer-events: none; }
   .pf-n.ask { border-left-color: #6b5ce7; }
   .pf-n blockquote { margin: 0; background: color-mix(in srgb, #f6e08a 45%, transparent); display: inline; -webkit-box-decoration-break: clone; box-decoration-break: clone; padding: 0 1pt; }
   .pf-n blockquote.para { display: block; background: none; padding: 0; color: #3a3631; }
+  .pf-n blockquote.ai { font-family: var(--sans); background: color-mix(in srgb, #d3caff 60%, transparent); } .pf-n blockquote.ai.l1 { background: color-mix(in srgb, #c6e2f7 70%, transparent); }
   .pf-n blockquote.para mark { background: color-mix(in srgb, #f6e08a 70%, transparent); color: inherit; padding: 0 1pt; }
   .pf-t { font-family: var(--sans); font-size: 9.8pt; margin-top: 4pt; color: #2a2722; }
   .pf-q { font: 600 9.8pt var(--sans); margin-top: 6pt; }
@@ -847,6 +856,7 @@ html.morphing .chatbtn { pointer-events: none; }
 .peek .pk-n:not(.ask) { border-left: 2px solid var(--hl-ink); padding-left: 7px; }
 .peek .pk-n b { color: var(--ink); }
 .peek .pk-q { font-family: var(--serif); color: var(--muted); }
+.peek .pk-q.ai { font-family: var(--sans); }
 @media (max-width: 1239px) {
   .lside { position: static; width: auto; flex-direction: row; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; }
   .lside .ncard { width: auto; max-width: 100%; }

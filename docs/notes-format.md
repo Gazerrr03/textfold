@@ -56,7 +56,12 @@ more than one way, so it can be found again when the text around it changes.
     language: a note made in Chinese is shown on the same sentences in English.
   - `quote`: the selected text exactly, with up to 40 characters before and after (W3C `TextQuoteSelector`). This is
     what finds the passage again when ids and token numbers no longer fit (a Markdown text replaced by its edited
-    version, below; a new arXiv version of the paper).
+    version, below; a new arXiv version of the paper). For a selection in a written level, the words of the full text
+    from `tokens`.
+  - `shown`, only on a note made on a written line (Key, Takeaway): the words of the line selected, the model's too,
+    as `{ "words": [first, last], "exact": "…" }`, where `words` count the words of the unit's Key line in `lang`
+    (Takeaway is its first sentence, so a word keeps its place in both) and `exact` is those words as the line read
+    then. `exact` tells whether the line still reads so: a refold writes the line again.
   - `lost`, only on a note whose passage was not found again after the text changed: where it was, `{ "unit",
     "section", "tokens", "sents", "since" }` (and, for a note made in a translation, `quote`: its sentences in the
     text's own words, to look for). The note is kept where the reader still lists and shows it: on the paragraph it was
@@ -77,6 +82,7 @@ more than one way, so it can be found again when the text around it changes.
 
 - To Obsidian (done): one Markdown note per paper; a highlight is a quote with the block id `^<id>`; a conversation is a
   `[!question]` callout, the first question its title and each follow-up in bold; every note links back to the reader.
+  A note made on a written line quotes the line's words (`shown`) and says that they are the model's, and at which level.
   The note ends with a line saying it was made with TextFold.
 - To PDF (done): the browser prints the notes in reading order (each passage, the reader's note, the conversation
   with its cites and the level it was asked at), with the TextFold mark at the end.
@@ -85,9 +91,16 @@ more than one way, so it can be found again when the text around it changes.
 
 ## How a note is shown at each level
 
-- Full, Brief: the words in `tokens` are marked when the note's language is the one being read; in another language,
-  the sentences in `sents` are marked more lightly.
-- Key, Takeaway: the written words that came from those tokens are marked.
+A mark is shown where it was made, in the colour of that level: Full and Brief (the author's words) share one, Key
+and Takeaway have one each. The levels leave each other's marks alone.
+
+- Full, Brief: the words in `tokens` of a note made there are marked when the note's language is the one being read;
+  in another language, the sentences in `sents` are marked more lightly. With "Keep my highlights" on, these
+  passages also stay after the written line at Key and Takeaway, in the author's words.
+- Key, Takeaway: the words in `shown` of a note made on the line, all of them, the model's too, at both levels (the
+  words of Key past its first sentence at Key alone), while `exact` still reads so in the language being read. In
+  another language nothing is marked; nor where the line has been written again since, and the note says so. A note made
+  at Key or Takeaway before `shown` was kept has the written words that came from its tokens marked, as then.
 - Wherever none of the passage is on screen (a sentence the Brief level leaves out, a chip on the Topic map), the
   paragraph carries a mark, so nothing a reader wrote disappears when they zoom out.
 - The reader's own notes (with text) sit in the left margin, the conversations with the model in the right margin

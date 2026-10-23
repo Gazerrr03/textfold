@@ -146,8 +146,9 @@
         }
       }
     } else {
-      // i: the token of the full text a written word came from (none for the model's own words)
-      const brief = v.brief.map((t, j) => ({ id: t.m !== undefined ? p + t.m : `${p}w${j}`, i: t.m, tok: t }));
+      // i: the token of the full text a written word came from (none for the model's own words); j: its place in
+      // the written line (Key's: Takeaway is the line's first sentence, so its words keep their places)
+      const brief = v.brief.map((t, j) => ({ id: t.m !== undefined ? p + t.m : `${p}w${j}`, i: t.m, j, tok: t }));
       if (L === 2) out = brief.map((x, j) => ({ ...x, lead: j < v.tn }));
       else if (L === 1) {
         // topic words carry k, the takeaway word they slide from; a topic the model phrased itself may have none
@@ -165,8 +166,14 @@
         }
       }
     }
-    // the reader's highlights: the words of the passage, or (in another language) its sentences, more lightly
-    if (mk) for (const x of out) if (x.i !== undefined) x.hl = mk.exact.has(x.i) ? 1 : mk.soft.has(x.i) ? 2 : 0;
+    // the reader's highlights. At Full and Brief (and in the passages kept after a written line): the words of the
+    // passages marked there, or (in another language) their sentences, more lightly. On a written line: the words
+    // marked on it, the model's too, in the colour of the level they were marked at; and the words that came from a
+    // passage marked on a line before marks were kept as the line's own (anchor.shown), as they were lit then
+    if (mk) for (const x of out) {
+      if (L <= 2 && !x.kept) x.hl = x.j !== undefined && mk.line.has(x.j) ? mk.line.get(x.j) : x.i !== undefined && mk.old.has(x.i) ? mk.old.get(x.i) : 0;
+      else if (x.i !== undefined) x.hl = mk.exact.has(x.i) ? 1 : mk.soft.has(x.i) ? 2 : 0;
+    }
     // a formula, citation or reference is the same element in every level and language
     const seen = new Map();
     for (const x of out) {
@@ -180,6 +187,9 @@
 
   // an atom is kept on one line, except a citation, which may list many works and breaks between them
   const atCls = (t) => (t.a ? (A[t.a].wrap ??= A[t.a].html.includes('ltx_cite')) ? ' at wrap' : ' at' : t.x ? ' at' : '');
+  // a piece's highlight (pieces(): hl): marked at Full or Brief, the same more lightly (another language), marked at
+  // Key, marked at Takeaway
+  const HL = ['', ' hl', ' hl hls', ' hl hlk', ' hl hlt'];
   function fill(el, p) {
     const t = p.tok || {};
     const key = p.gap ? 'gap' : `${t.a || ''}\u0001${t.x || ''}\u0001${t.t || ''}\u0001${t.f || ''}`;
@@ -192,7 +202,7 @@
       el.className = 'tk' + (p.gap ? ' gap' : '') + atCls(t) + (t.f ? ' ' + t.f : '');
       el._base = el.className;
     }
-    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + (p.hl === 1 ? ' hl' : p.hl === 2 ? ' hl hls' : '');
+    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + (HL[p.hl] || '');
   }
 
   // where a line may break between two pieces written without a space: between Chinese characters yes (except
@@ -241,6 +251,7 @@
       if (!s) { s = document.createElement('span'); s.dataset.id = p.id; map.set(p.id, s); }
       fill(s, p);
       s._i = p.i;
+      s._j = p.j;
       const last = n === pcs.length - 1;
       const space = !last && (p.gap || (p.tok && p.tok.s) || pcs[n + 1].gap);
       const glue = !last && !space && glued(p, pcs[n + 1]);
@@ -249,7 +260,7 @@
       else frag.appendChild(s);
       if (space) {   // a space inside a highlight is highlighted too
         const both = p.hl && !last && pcs[n + 1].hl;
-        frag.appendChild(both ? h('span', `hlsp${p.hl === 2 && pcs[n + 1].hl === 2 ? ' hls' : ''}`, ' ') : document.createTextNode(' '));
+        frag.appendChild(both ? h('span', `hlsp${p.hl === pcs[n + 1].hl ? HL[p.hl].replace(' hl', '') : ''}`, ' ') : document.createTextNode(' '));
       }
     });
     el._tx.replaceChildren(frag);
@@ -262,7 +273,7 @@
     const flush = () => { if (buf) html += run ? `<span class="${run}">${buf}</span>` : buf; buf = ''; };
     pcs.forEach((p, n) => {
       const t = p.tok || {};
-      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${p.hl === 1 ? ' hl' : p.hl === 2 ? ' hl hls' : ''}`;
+      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${HL[p.hl] || ''}`;
       if (cls !== run) { flush(); run = cls; }
       buf += p.gap ? '…' : t.a ? A[t.a].html : t.x ? `<span class="texsrc">${esc(t.x)}</span>` : esc(t.t);
       if (n < pcs.length - 1 && (p.gap || t.s || pcs[n + 1].gap)) {
@@ -1832,18 +1843,35 @@
     return out.size ? out : null;
   }
 
-  // the tokens to mark in a unit, in the language being read: the words of a passage marked in this language,
-  // the sentences of one marked in another
+  // the words of the written line a note was marked on (Key or Takeaway: anchor.shown), while the line reads as it
+  // did, in the language it was marked in; null when it is not on one, or the line has been written again since
+  function shownAt(a) {
+    if (!a.shown || a.lang !== lang || !a.unit || !U[a.unit]) return null;
+    const v = view(a.unit), [x, y] = a.shown.words || [];
+    if (!(x >= 0 && y >= x && y < v.brief.length)) return null;
+    return toksText(v.brief, x, y) === a.shown.exact ? [x, y] : null;
+  }
+  // what to mark in a unit, in the language being read. A passage marked at Full or Brief: its tokens, or in another
+  // language its sentences (soft), lit at Full and Brief, and after a written line when the reader keeps their
+  // highlights. One marked on a written line: those words of the line (line: place -> its colour), lit on the line
+  // alone. One marked on a line before the line's words were kept (no anchor.shown): as it was lit then, its tokens
+  // at Full and Brief and the written words that came from them (old: token -> its mark)
   function marksFor(uid) {
     const list = notesOf.get(uid);
     if (!list) return null;
-    const v = view(uid), exact = new Set(), soft = new Set();
+    const v = view(uid), exact = new Set(), soft = new Set(), old = new Map(), line = new Map();
     for (const n of list) {
       const a = n.anchor;
-      if (a.lang === lang && a.tokens) { for (let i = a.tokens[0]; i <= a.tokens[1]; i++) exact.add(i); }
-      else if (a.sents) for (const k of a.sents) { const r = v.sents[k]; if (r) for (let i = r[0]; i < r[1]; i++) soft.add(i); }
+      if (a.shown) {
+        const at = shownAt(a);
+        if (at) for (let j = at[0]; j <= at[1]; j++) line.set(j, a.level === 1 ? 4 : 3);
+        continue;
+      }
+      const before = (a.level ?? 4) <= 2;
+      if (a.lang === lang && a.tokens) { for (let i = a.tokens[0]; i <= a.tokens[1]; i++) { exact.add(i); if (before) old.set(i, 1); } }
+      else if (a.sents) for (const k of a.sents) { const r = v.sents[k]; if (r) for (let i = r[0]; i < r[1]; i++) { soft.add(i); if (before && !old.has(i)) old.set(i, 2); } }
     }
-    return exact.size || soft.size ? { exact, soft } : null;
+    return exact.size || soft.size || line.size ? { exact, soft, old, line } : null;
   }
   function indexNotes() {
     notesOf.clear();
@@ -1954,9 +1982,17 @@
     }
     const anchors = spans.map(([uid, from, to]) => {
       const tx = unitEl.get(uid)._tx, text = tx.textContent;
-      let lo = Infinity, hi = -Infinity;
-      for (const [a, b, piece] of segments(tx)) if (piece && b > from && a < to && piece._i !== undefined) { lo = Math.min(lo, piece._i); hi = Math.max(hi, piece._i); }
-      const tokens = lo <= hi ? [lo, hi] : null, v = view(uid);
+      let lo = Infinity, hi = -Infinity, jlo = Infinity, jhi = -Infinity;
+      for (const [a, b, piece] of segments(tx)) {
+        if (!piece || b <= from || a >= to) continue;
+        if (piece._i !== undefined) { lo = Math.min(lo, piece._i); hi = Math.max(hi, piece._i); }
+        if (piece._j !== undefined) { jlo = Math.min(jlo, piece._j); jhi = Math.max(jhi, piece._j); }
+      }
+      const tokens = lo <= hi ? [lo, hi] : null, v = view(uid), L = levelOf(uid);
+      // on a written line (Key, Takeaway): the words of the line selected, the model's too, to mark them as they
+      // were selected; the author's words kept after the line, alone, are a passage of the full text
+      const line = L >= 1 && L <= 2 && jlo <= jhi;
+      const shown = line ? { words: [jlo, jhi], exact: toksText(v.brief, jlo, jhi) } : null;
       const sents = tokens ? v.sents.map((r, k) => [r, k]).filter(([r]) => r[1] > tokens[0] && r[0] <= tokens[1]).map(([, k]) => k) : null;
       // the quote in plain text, from the tokens (a formula as $LaTeX$), not from the page, which also holds each
       // formula's hidden source; words the model wrote itself are taken from the page as they are
@@ -1964,7 +2000,7 @@
         ? { exact: toksText(v.toks, tokens[0], tokens[1]), prefix: toksText(v.toks, Math.max(0, tokens[0] - 12), tokens[0] - 1, true).slice(-40),
           suffix: toksText(v.toks, tokens[1] + 1, Math.min(v.toks.length - 1, tokens[1] + 12), false, true).slice(0, 40) }
         : { exact: text.slice(from, to).replace(/[\u200b\s]+/g, ' ').trim(), prefix: '', suffix: '' };
-      return { unit: uid, section: chunkOf[uid] ? chunkOf[uid].id : null, lang, level: levelOf(uid), tokens, sents, quote };
+      return { unit: uid, section: chunkOf[uid] ? chunkOf[uid].id : null, lang, level: L >= 1 && L <= 2 && !line && tokens ? 4 : L, tokens, sents, quote, ...(shown ? { shown } : {}) };
     });
     // a section's one-line summary (written by the model; its words are counted in the summary) or its title
     for (const [c, hd, st] of headEls) {
@@ -2102,6 +2138,11 @@
     return sc && (sc.st.getClientRects().length && a.on !== 'title' ? sc.st : sc.hd);
   }
   const askedAt = (a) => T[ui].n_asked_at.replace('{level}', T[ui].levels[a.level ?? 4]);
+  // what a note marks, as the reader selected it: the words of the written line it was made on (the model's), else
+  // the passage; where that line was, and whether it has been written again since (in the language it was made in)
+  const passage = (a) => (a.shown ? a.shown.exact : (a.quote && a.quote.exact) || '');
+  const lineAt = (a) => T[ui].n_line.replace('{level}', T[ui].levels[a.level]);
+  const lineGone = (a) => !!a.shown && a.lang === lang && !!U[a.unit] && !shownAt(a);
   // a question note is a conversation about its passage: every turn asked there, and a field to ask the next
   const turnsOf = (n) => n.thread || (n.ask ? [n.ask] : []);
   function openNote(n, draft = false, back = '') {   // back: a question stopped, in the field again to be put right
@@ -2119,8 +2160,9 @@
     } else {
       body = `<textarea class="np-text" rows="3" placeholder="${esc(t.n_note_ph)}">${esc(n.text || '')}</textarea>`;
     }
-    npop.innerHTML = `<div class="np-quote"><span class="np-where">${esc(whereA(a))}</span> ${esc(a.quote.exact.length > 160 ? a.quote.exact.slice(0, 157) + '…' : a.quote.exact)}` +
-      `${ask ? `<span class="np-at">${esc(askedAt(a))}</span>` : ''}</div>${body}` +
+    const q = passage(a), at = a.shown ? lineAt(a) + (lineGone(a) ? ` · ${t.n_line_changed}` : '') : ask ? askedAt(a) : '';
+    npop.innerHTML = `<div class="np-quote${a.shown ? ` ai l${a.level}` : ''}"><span class="np-where">${esc(whereA(a))}</span> ${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}` +
+      `${at ? `<span class="np-at">${esc(at)}</span>` : ''}</div>${body}` +
       (draft ? '' : `<div class="np-acts">${!ask && !whole(a) ? `<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
         `<button type="button" data-act="link">${esc(t.n_copy)}</button><button type="button" data-act="del">${esc(t.n_delete)}</button></div>`);
     texify(npop);
@@ -2189,7 +2231,7 @@
         const turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
         return `<div class="pk-n ask"><b>${esc((turns[0] || {}).q || '')}</b>${said ? ` <span>${mdLite(said.takeaway).replace(/<\/?p>/g, '')}</span>` : ''}</div>`;
       }
-      return `<div class="pk-n"><span class="pk-q">“${esc(clip(n.anchor.quote.exact, 90))}”</span>${n.text ? ` ${esc(clip(n.text, 160))}` : ''}</div>`;
+      return `<div class="pk-n"><span class="pk-q${n.anchor.shown ? ' ai' : ''}">“${esc(clip(passage(n.anchor), 90))}”</span>${n.text ? ` ${esc(clip(n.text, 160))}` : ''}</div>`;
     }).join('');
     texify(peek);
     peekFor = el;
@@ -2395,9 +2437,10 @@
     }
     const u = mark.closest('.u'), list = u && notesOf.get(u.dataset.u);
     if (!list) return null;
-    const v = view(u.dataset.u);
+    const v = view(u.dataset.u), j = piece ? piece._j : undefined;
     const holds = (n) => {
       const a = n.anchor;
+      if (a.shown) { const at = shownAt(a); return !!at && j !== undefined && j >= at[0] && j <= at[1]; }   // a word of the line it marks
       if (i === undefined) return true;
       if (a.lang === lang && a.tokens) return i >= a.tokens[0] && i <= a.tokens[1];
       return (a.sents || []).some((k) => v.sents[k] && i >= v.sents[k][0] && i < v.sents[k][1]);
@@ -2581,13 +2624,13 @@
   // a note's card, or its row in the notes list: a highlight or a note (its quote, and the reader's words), or a
   // conversation (the reader's question, and the model's answer in one sentence)
   function noteDrag(n) {
-    const a = n.anchor || {}, quote = (a.quote && a.quote.exact) || '', c = secOfNote(n);
+    const a = n.anchor || {}, quote = passage(a), c = secOfNote(n);
     if (n.kind === 'ask') {
       const turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
       return { kind: 'ask', note: n, c, L: level, text: said ? said.takeaway || '' : '', written: !!said, quote, comment: (turns[0] || {}).q || '' };
     }
     const comment = (n.text || '').trim();
-    return { kind: 'note', note: n, c, L: level, text: comment || quote, written: !comment && a.on === 'summary', quote, comment };
+    return { kind: 'note', note: n, c, L: level, text: comment || quote, written: !comment && (a.on === 'summary' || !!a.shown), quote, comment };
   }
   // one message of a conversation, in the chat or a note's window: its question, or its answer (its Markdown, a
   // citation as its label), or words selected in it; with the turn, so the link opens there
@@ -2599,7 +2642,7 @@
     if (!x) return null;
     const answer = !!el.closest('.np-a'), a = n.anchor || {};
     return { kind: 'ask', note: n, turn: k, part: answer ? 'a' : 'q', c: secOfNote(n), L: level, text: words || (answer ? answerText(x.a).trim() : x.q),
-      written: answer, quote: (a.quote && a.quote.exact) || '', comment: answer ? x.q : '' };
+      written: answer, quote: passage(a), comment: answer ? x.q : '' };
   }
   // a selection: its words, a paragraph each (a heading or a summary it crosses too), and every paragraph it touches;
   // the link names them from the first to the last (in one paragraph, that paragraph; in headings alone, the section)
@@ -2787,7 +2830,7 @@
     savebtn.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v7.5M5 7l3 3 3-3M3 12.5h10"/></svg><span>${esc(t.sv_save)}</span>`;
     savebtn.title = t.sv_title;
     nbtn.classList.toggle('none', !n);
-    keepbtn.hidden = !notes.some((x) => unitEl.has(x.anchor && x.anchor.unit) && (x.anchor.tokens || x.anchor.sents));
+    keepbtn.hidden = !notes.some((x) => unitEl.has(x.anchor && x.anchor.unit) && !x.anchor.shown && (x.anchor.tokens || x.anchor.sents));   // (a mark on a written line is up there already)
     keepbtn.innerHTML = `<i></i>${esc(t.n_keep)}`;
     keepbtn.title = t.n_keep_tip;
     keepbtn.setAttribute('aria-pressed', String(keepMine));
@@ -2810,12 +2853,13 @@
     for (const n of nmFilter === 'all' ? all : all.filter((x) => kindOf(x) === nmFilter)) {
       const a = n.anchor, g = groupOf(a), k = kindOf(n), turns = turnsOf(n), said = [...turns].reverse().find((x) => x.a);
       if (g && g !== sec) { sec = g; items += `<div class="nl-sec">${esc(g)}</div>`; }
+      const q = passage(a), gone = lineGone(a) ? `<em class="nl-gone">${esc(t.n_line_changed)}</em>` : '';
       const body = k === 'ask'
-        ? `<b>${esc((turns[0] || {}).q || '')}</b>${said ? `<span class="nl-a">${texLite(clipTex(said.takeaway, 120))}</span>` : ''}${a.quote.exact ? `<span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>` : ''}`
-        : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span>${a.quote.exact ? `<span class="nl-q">“${texLite(clipTex(a.quote.exact, 80))}”</span>` : ''}`
-        : `<span class="nl-hl">${texLite(clipTex(a.quote.exact, 150))}</span>`;
+        ? `<b>${esc((turns[0] || {}).q || '')}</b>${said ? `<span class="nl-a">${texLite(clipTex(said.takeaway, 120))}</span>` : ''}${q ? `<span class="nl-q">“${texLite(clipTex(q, 80))}”</span>` : ''}${gone}`
+        : k === 'note' ? `<span class="nl-t">${esc(clip(n.text.trim(), 150))}</span>${q ? `<span class="nl-q">“${texLite(clipTex(q, 80))}”</span>` : ''}${gone}`
+        : `<span class="nl-hl">${texLite(clipTex(q, 150))}</span>${gone}`;
       const sure = nmSure === n.id;
-      items += `<div class="nl-item ${k}" draggable="true" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
+      items += `<div class="nl-item ${k}${a.shown ? ` ai l${a.level}` : ''}" draggable="true" data-note="${esc(n.id)}"><button type="button" class="nl-go">${body}</button>` +
         `<button type="button" class="nl-del${sure ? ' sure' : ''}" title="${esc(sure ? t.n_del_sure : t.n_delete)}">${sure ? esc(t.n_del_sure) : '×'}</button></div>`;
     }
     const tab = (f, label) => `<button type="button" class="nl-tab${nmFilter === f ? ' on' : ''}" data-f="${f}">${esc(label)}<em>${count[f]}</em></button>`;
@@ -2919,13 +2963,15 @@
   }
   // one note: its passage quoted (or the whole paragraph around it), its block id, the reader's words, the link back;
   // a conversation as one callout, the first question as its title, each later one in bold
+  // (a mark on a written line quotes the line as the model wrote it, and says so: never as the author's words)
   function noteMd(n, para) {
-    const out = [], said = n.kind === 'ask' ? turnsOf(n).filter((x) => x.a) : [];
+    const out = [], said = n.kind === 'ask' ? turnsOf(n).filter((x) => x.a) : [], a = n.anchor, q = passage(a);
     if (said.length) {
-      const around = para && paraOf(n.anchor, true);
-      out.push(...mdQuote(`[!question] ${said[0].q}`), ...(around ? mdQuote(around) : n.anchor.quote.exact ? mdQuote(`*${n.anchor.quote.exact}*`) : []));
+      const around = !a.shown && para && paraOf(a, true);
+      out.push(...mdQuote(`[!question] ${said[0].q}`), ...(around ? mdQuote(around) : q ? mdQuote(`*${q}*${a.shown ? ` (${lineAt(a)})` : ''}`) : []));
       said.forEach((x, k) => out.push('>', ...(k ? mdQuote(`**${x.q}**`) : []), ...(k ? ['>'] : []), ...mdQuote(answerText(x.a)), '>', ...mdQuote(`→ ${x.takeaway}`)));
-    } else if (!whole(n.anchor)) out.push(...mdQuote((para && paraOf(n.anchor, true)) || n.anchor.quote.exact));   // (a note on the whole paper quotes nothing)
+    } else if (a.shown) out.push(...mdQuote(q), '>', ...mdQuote(`*${lineAt(a)}*`));
+    else if (!whole(a)) out.push(...mdQuote((para && paraOf(a, true)) || q));   // (a note on the whole paper quotes nothing)
     out.push('', `^${n.id}`, '');
     if (n.text && n.text.trim()) out.push(n.text.trim(), '');
     out.push(`[${T[ui].n_open}](${noteLink(n)})`, '');
@@ -2969,7 +3015,7 @@
         const L = levelOf(uid), u = U[uid], marks = mine.get(uid) || [], under = [];
         let text = unitEl.has(uid) ? piecesText(pieces(uid, L)) : '';
         for (const n of marks) {
-          const ex = L >= 3 && kindOf(n) === 'hl' && flat(n.anchor.quote && n.anchor.quote.exact), at = ex ? text.indexOf(ex) : -1;
+          const a = n.anchor, ex = kindOf(n) === 'hl' && (a.shown ? L <= 2 && shownAt(a) && flat(a.shown.exact) : L >= 3 && flat(a.quote && a.quote.exact)), at = ex ? text.indexOf(ex) : -1;
           if (at >= 0) text = `${text.slice(0, at)}==${ex}==${text.slice(at + ex.length)}`; else under.push(n);
         }
         if (!text && !under.length) continue;
@@ -3030,7 +3076,8 @@
     for (const n of inOrder(kinds)) {
       const a = n.anchor, g = groupOf(a), said = n.kind === 'ask' ? turnsOf(n).filter((x) => x.a) : [], whole_ = para && paraOf(a);
       if (g && g !== sec) { sec = g; body += `<h2>${esc(g)}</h2>`; }
-      body += `<div class="pf-n ${kindOf(n)}">${whole_ ? `<blockquote class="para">${whole_}</blockquote>` : a.quote.exact ? `<blockquote>${texLite(a.quote.exact)}</blockquote>` : ''}` +
+      body += `<div class="pf-n ${kindOf(n)}">${whole_ && !a.shown ? `<blockquote class="para">${whole_}</blockquote>` : passage(a) ? `<blockquote${a.shown ? ` class="ai l${a.level}"` : ''}>${texLite(passage(a))}</blockquote>` : ''}` +
+        (a.shown ? `<div class="pf-c">${esc(lineAt(a))}</div>` : '') +
         (n.text && n.text.trim() ? `<div class="pf-t">${esc(n.text.trim()).replace(/\n/g, '<br>')}</div>` : '') +
         said.map((x) => `<div class="pf-q">${esc(x.q)}</div><div class="pf-a">${mdLite(answerText(x.a))}</div>` +
           (x.cites && x.cites.length && !/\[\[/.test(x.a || '') ? `<div class="pf-c">${x.cites.map((u) => esc(citeLabel(u))).join(' · ')}</div>` : '')).join('') +
@@ -3188,7 +3235,8 @@
       const a = n.anchor, g = groupOf(a), said = n.kind === 'ask' ? turnsOf(n).filter((x) => x.a) : [];
       if (g && g !== sec) { sec = g; body += `<h2>${esc(g)}</h2>`; }
       const whole_ = para && paraOf(a);
-      body += `<article class="n ${kindOf(n)}">${whole_ ? `<blockquote class="para">${whole_}</blockquote>` : a.quote.exact ? `<blockquote>${texLite(a.quote.exact)}</blockquote>` : ''}` +
+      body += `<article class="n ${kindOf(n)}">${whole_ && !a.shown ? `<blockquote class="para">${whole_}</blockquote>` : passage(a) ? `<blockquote${a.shown ? ` class="ai l${a.level}"` : ''}>${texLite(passage(a))}</blockquote>` : ''}` +
+        (a.shown && !said.length ? `<p class="at">${esc(lineAt(a))}</p>` : '') +
         (n.text && n.text.trim() ? `<div class="t">${esc(n.text.trim()).replace(/\n/g, '<br>')}</div>` : '') +
         said.map((x) => `<div class="qa"><p class="q">${esc(x.q)}</p><div class="a">${mdLite(answerText(x.a))}</div></div>`).join('') +
         (said.length ? `<p class="at">${esc(whole(a) ? t.n_whole : askedAt(a))}${said[said.length - 1].model ? ` · ${esc(said[said.length - 1].model)}` : ''}</p>` : '') + '</article>';
@@ -3216,8 +3264,8 @@
 `;
   }
   const MARKS_CSS = `
-:root { --bg: #FAF9F7; --card: #fff; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --line: #E9E5DF; --accent: #6B5CE7; --hl: #FFE07A; --hl-ink: #D9A400; color-scheme: light dark; }
-@media (prefers-color-scheme: dark) { :root { --bg: #1C1B19; --card: #252421; --ink: #ECE8E1; --ink-2: #C9C3B9; --muted: #9A938A; --line: #3A3732; --accent: #A99CF5; --hl: #6B5A1E; --hl-ink: #E3B73A; } }
+:root { --bg: #FAF9F7; --card: #fff; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --line: #E9E5DF; --accent: #6B5CE7; --hl: #FFE07A; --hl-ink: #D9A400; --hl-key: #D3CAFF; --hl-take: #C6E2F7; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1C1B19; --card: #252421; --ink: #ECE8E1; --ink-2: #C9C3B9; --muted: #9A938A; --line: #3A3732; --accent: #A99CF5; --hl: #6B5A1E; --hl-key: #4A3F94; --hl-take: #2B5675; --hl-ink: #E3B73A; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, 'Inter', 'PingFang SC', 'Segoe UI', sans-serif; }
 .wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 48px; }
@@ -3231,6 +3279,8 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: v
 .n { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 10px 0; }
 blockquote { margin: 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--hl-ink); font-family: 'Source Serif 4', Georgia, 'Songti SC', serif; font-size: 17px; color: var(--ink); }
 .n.hl blockquote:not(.para) { background: color-mix(in srgb, var(--hl) 35%, transparent); border-radius: 0 6px 6px 0; }
+blockquote.ai { font-family: inherit; font-size: 15.5px; }   /* the model's words, as on its line */
+.n.hl blockquote.ai.l2 { background: color-mix(in srgb, var(--hl-key) 45%, transparent); } .n.hl blockquote.ai.l1 { background: color-mix(in srgb, var(--hl-take) 50%, transparent); }
 blockquote.para { font-size: 15.5px; color: var(--ink-2); border-left-color: var(--line); }
 mark { background: color-mix(in srgb, var(--hl) 70%, transparent); color: var(--ink); padding: 0 1px; border-radius: 2px; }
 .t { margin-top: 10px; white-space: normal; }
