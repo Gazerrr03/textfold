@@ -6,6 +6,7 @@ A page asks no other server for anything. Its fonts (Inter, Source Serif 4) and 
 serves them, a gallery keeps them beside its pages (assets), and a single file carries them inside.
 """
 import base64
+import hashlib
 import io
 import json
 import re
@@ -21,6 +22,15 @@ from .fetch import fetch_images
 WEB = Path(__file__).resolve().parent / "web"   # the reader's pages, styles, scripts and vendor files
 VENDOR = WEB / "vendor"
 APP_ASSETS = "/static/vendor/"
+
+
+def app_assets(html):
+    """Shared scripts and styles keep their URLs until their contents change."""
+    def version(m):
+        name = m.group(2)
+        key = hashlib.sha256((WEB / name).read_bytes()).hexdigest()
+        return f'{m.group(1)}/static/{name}?v={key}"'
+    return re.sub(r'((?:src|href)=")/static/([\w.-]+\.(?:js|css))"', version, html)
 
 
 def _data(f, kind):
@@ -108,6 +118,7 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
         head = fonts_head(APP_ASSETS) + '<link rel="stylesheet" href="/static/reader.css"><link rel="stylesheet" href="/static/app.css">'
         scripts = ('<script src="/static/i18n.js"></script><script src="/static/tutorial.js"></script><script src="/static/reader.js"></script>'
                    '<script src="/static/app.js"></script><script src="/static/webmcp.js"></script>')
+        head, scripts = app_assets(head), app_assets(scripts)
         side, cls, katex = '<aside id="sidebar" class="collapsed"></aside>', "app", APP_ASSETS + "katex/"
     else:
         head = fonts_head(assets) + f"<style>{(WEB / 'reader.css').read_text(encoding="utf-8")}</style>"

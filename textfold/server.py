@@ -63,6 +63,7 @@ rebinding) is the same origin as its requests to the browser, so only the name t
 keys live in ~/.textfold/settings.json (mode 600), never in the project folder, which may be synced or shared.
 """
 import base64
+import hashlib
 import json
 import os
 import queue
@@ -500,6 +501,7 @@ def reader_page(pid):
     layers = store.pdir(pid) / "layers"
     sig = tuple(sorted((f.name, f.stat().st_mtime) for f in layers.glob("*.json"))) if layers.exists() else ()
     sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template, or name, re-renders too
+    sig += tuple((name, (build.WEB / name).stat().st_mtime_ns) for name in STATIC)
     hit = PAGES.get(pid)
     if not hit or hit[0] != sig:
         hit = (sig, build.page(assembled(pid), app=True))
@@ -526,7 +528,7 @@ def landing_page(jobs):
     boot = {"papers": listed(), "folders": library.folders(), "jobs": jobs.list(), "model": data["selectedName"] or "",
             "askName": data["askName"], "modelData": data,
             "bridge": data["bridge"], "langs": langs.natives()}
-    t = (build.WEB / "app.html").read_text(encoding="utf-8")
+    t = build.app_assets((build.WEB / "app.html").read_text(encoding="utf-8"))
     return t.replace("{{HEAD}}", build.fonts_head(build.APP_ASSETS)).replace("{{BOOT}}", json.dumps(boot, ensure_ascii=False).replace("</", "<\\/"))
 
 
@@ -602,7 +604,10 @@ def make_handler(jobs):
                     library.opened(m.group(1))
                     return self.send(200, reader_page(m.group(1)), "text/html; charset=utf-8")
                 if u.path.startswith("/static/") and u.path[8:] in STATIC:
-                    return self.send(200, (build.WEB / u.path[8:]).read_bytes(), STATIC[u.path[8:]] + "; charset=utf-8")
+                    data = (build.WEB / u.path[8:]).read_bytes()
+                    version = hashlib.sha256(data).hexdigest()
+                    cache = "private, max-age=31536000, immutable" if parse_qs(u.query).get("v") == [version] else "no-store"
+                    return self.send(200, data, STATIC[u.path[8:]] + "; charset=utf-8", cache=cache)
                 if u.path.startswith("/static/vendor/"):
                     f = vendor_file(unquote(u.path[len("/static/vendor/"):]))
                     if f:
