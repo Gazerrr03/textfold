@@ -60,7 +60,7 @@ def _convert(text):
 
 def front_matter(src):
     """The few fields a document's YAML front matter is read for: title, author(s), date, license."""
-    meta, key, block = {}, None, None
+    meta, key, block, item = {}, None, None, None
     for line in src.splitlines():
         if block is not None:
             # the lines of a `key: >` / `key: |` block scalar are the ones indented under it
@@ -71,9 +71,7 @@ def front_matter(src):
             block = None
         m = re.match(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$", line)
         if m:
-            key, val = m.group(1).lower(), m.group(2).strip()
-            if val[:1] not in "\"'":
-                val = re.sub(r"\s+#.*$", "", val)   # a YAML comment after the value
+            key, val, item = m.group(1).lower(), _value(m.group(2)), None
             if val.startswith("[") and val.endswith("]"):
                 meta[key] = [_unquote(x) for x in re.split(r",\s*(?=(?:[^\"']*[\"'][^\"']*[\"'])*[^\"']*$)", val[1:-1]) if x.strip()]
             elif re.fullmatch(r"[>|][+-]?", val):
@@ -82,26 +80,57 @@ def front_matter(src):
                 meta[key] = _unquote(val)
             else:
                 meta[key] = []
-        elif key and re.match(r"^\s*-\s+", line) and isinstance(meta.get(key), list):
-            item = re.sub(r"^\s*-\s+", "", line)
-            # Quarto/pandoc list authors as mappings (`- name: Jane Doe` with affiliation etc. under it):
-            # keep the name, and wait for a later `name:` line when the mapping starts with another field
-            entry = re.match(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$", item)
-            if entry:
-                meta[key].append(_unquote(entry.group(2)) if entry.group(1).lower() == "name" else None)
-            else:
-                meta[key].append(_unquote(item))
-        elif key and isinstance(meta.get(key), list) and meta[key] and meta[key][-1] is None:
-            name = re.match(r"^\s+name\s*:\s*(.*)$", line)
-            if name:
-                meta[key][-1] = _unquote(name.group(1))
+        elif key and isinstance(meta.get(key), list):
+            ind, li = len(line) - len(line.lstrip()), re.match(r"^\s*-\s+(.*)$", line)
+            if li and (item is None or ind <= item[0]):
+                # an item of the key's own list; a `- ` further in is in the mapping of the item above it (an
+                # author's affiliations). Quarto/pandoc list authors as mappings, `- name: Jane Doe` and more under it
+                entry = re.match(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$", li.group(1))
+                item = [ind, li.start(1), False]   # where its `-` and its fields are; whether its name's parts follow
+                if entry:
+                    meta[key].append({})
+                    item[2] = _field(meta[key][-1], entry.group(1), _value(entry.group(2)))
+                else:
+                    meta[key].append(_unquote(_value(li.group(1))))
+            elif item and not li and isinstance(meta[key][-1], dict):
+                f = re.match(r"^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$", line)
+                if f and ind == item[1]:
+                    item[2] = _field(meta[key][-1], f.group(1), _value(f.group(2)))
+                elif f and ind > item[1] and item[2] and f.group(1).lower() in ("given", "family", "literal"):
+                    meta[key][-1][f.group(1).lower()] = _unquote(_value(f.group(2)))
     if block is not None:
         meta[block[0]] = (" " if block[2] == ">" else "\n").join(x for x in block[1] if x).strip()
     authors = meta.get("authors") or meta.get("author") or []
     return {"title": meta.get("title") if isinstance(meta.get("title"), str) else "",
-            "authors": [authors] if isinstance(authors, str) else [a for a in authors if isinstance(a, str)],
+            "authors": [authors] if isinstance(authors, str) else [n for n in map(_name, authors) if n],
             "date": meta.get("date") if isinstance(meta.get("date"), str) else "",
             "license": meta.get("license") if isinstance(meta.get("license"), str) else ""}
+
+
+def _value(v):
+    """A value as written after its key, without a comment after it (` # …`, as YAML reads one)."""
+    v = v.strip()
+    if v[:1] in ("\"", "'"):
+        q = re.match(r"""^(["']).*?\1(?=\s+#|$)""", v)
+        return q.group(0) if q else v
+    return re.sub(r"\s+#.*$", "", v)
+
+
+def _field(entry, k, v):
+    """A field of an author's mapping: the name is kept. True when it is `name:` alone, its parts (given, family)
+    on the lines under it."""
+    if k.lower() != "name":
+        return False
+    if v:
+        entry["name"] = _unquote(v)
+    return not v
+
+
+def _name(a):
+    """An author as listed: a name, or the name in its mapping."""
+    if isinstance(a, dict):
+        return a.get("name") or a.get("literal") or " ".join(x for x in (a.get("given"), a.get("family")) if x)
+    return a if isinstance(a, str) else ""
 
 
 def _unquote(s):

@@ -19,6 +19,35 @@ class FrontMatterTest(unittest.TestCase):
         fm = front_matter("author:\n  - id: jd\n    name: Jane Doe\n  - name: John Roe\n")
         self.assertEqual(fm["authors"], ["Jane Doe", "John Roe"])
 
+    def test_an_authors_affiliations_are_not_authors(self):
+        # Quarto's own example of an author: the `- name:` of an affiliation is in the author's mapping
+        fm = front_matter(
+            "author:\n"
+            "  - name: Norah Jones\n"
+            "    orcid: 0000-0001-2345-6789\n"
+            "    affiliations:\n"
+            "      - name: Carnegie Mellon University\n"
+            "        city: Pittsburgh\n"
+            "  - name: John Roe\n"
+        )
+        self.assertEqual(fm["authors"], ["Norah Jones", "John Roe"])
+        # the items at the key's own indent, their affiliations two in
+        fm = front_matter("author:\n- name: Jane Doe\n  affiliations:\n  - name: MIT\n- name: John Roe\n")
+        self.assertEqual(fm["authors"], ["Jane Doe", "John Roe"])
+
+    def test_a_name_in_parts(self):
+        fm = front_matter(
+            "author:\n"
+            "  - name:\n"
+            "      given: Norah\n"
+            "      family: Jones\n"
+            "    affiliations:\n"
+            "      - name: Carnegie Mellon University\n"
+            "  - name:\n"
+            "      literal: The TextFold Team\n"
+        )
+        self.assertEqual(fm["authors"], ["Norah Jones", "The TextFold Team"])
+
     def test_plain_and_inline_author_lists_are_unchanged(self):
         self.assertEqual(front_matter("authors:\n  - Jane Doe\n  - John Roe\n")["authors"],
                          ["Jane Doe", "John Roe"])
@@ -35,6 +64,9 @@ class FrontMatterTest(unittest.TestCase):
         # a # inside quotes, or not after a space, is text
         self.assertEqual(front_matter('title: "C# in depth"\n')["title"], "C# in depth")
         self.assertEqual(front_matter("title: C#Sharp\n")["title"], "C#Sharp")
+        self.assertEqual(front_matter('title: "Paper" # draft\n')["title"], "Paper")
+        self.assertEqual(front_matter("author:\n  - Jane Doe # lead\n  - name: John Roe # second\n")["authors"],
+                         ["Jane Doe", "John Roe"])
 
 
 if __name__ == "__main__":
