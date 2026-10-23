@@ -100,11 +100,13 @@ more than one way, so it can be found again when the text around it changes.
 
 ## When the text changes
 
-A Markdown document can be replaced by its edited text under the same id (`POST /api/import` with `id`); its notes are
-then found again in the new text (`notes.reanchor`), before its levels are made again:
+A Markdown document can be replaced by its edited text under the same id (`POST /api/import` with `id`), and a PDF
+converted again; its notes are then found again in the new text (`notes.reanchor`), before its levels are made again.
+A paragraph or section still there, edited, moved or renamed, keeps its id (`ids.py`), so a note's `unit` and a link's
+`u=` still name it; one new in the text gets an id no paragraph of the document had before; one that is gone is kept in
+`ids.json` beside the document, with the section it was in (`GET /api/ids/<id>`).
 
-- A paragraph still there word for word keeps its notes as they are. Its id is made from its words (`p-<hash>`, the
-  second of two alike `p-<hash>-2`), so it is the same id, however the text around it changed.
+- A paragraph still there word for word keeps its notes as they are.
 - A note on a paragraph edited or moved is found by its `quote`: the places with its exact words, scored by how much of
   `prefix` and `suffix` fits around them (of several, the paragraph it was on wins a tie, then the place nearest the old
   one; one whose surroundings do not fit is not guessed at); else, when its own words were edited, what now stands
@@ -114,9 +116,8 @@ then found again in the new text (`notes.reanchor`), before its levels are made 
 - A note on words the model wrote (`tokens` null) goes with its paragraph when that is still there, edited.
 - A note found nowhere is kept and marked `lost` (above); the next replace looks for it again, and a note found again
   loses the mark.
-- A note on a section keeps it while the section is there (a section's id is its heading's words); a heading renamed,
-  it follows the section's paragraphs. The cites of a conversation (`thread[].cites`, `[[id]]` in an answer) follow the
-  paragraphs they name.
+- A note on a section keeps it while the section is there, renamed or not; a section gone, it follows the section's
+  paragraphs. The cites of a conversation (`thread[].cites`, `[[id]]` in an answer) follow the paragraphs they name.
 
 ## Not yet
 

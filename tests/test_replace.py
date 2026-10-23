@@ -7,6 +7,7 @@ Run from the repo root:
     python3 -m unittest discover tests
 """
 import json
+import re
 import os
 import tempfile
 import threading
@@ -83,7 +84,8 @@ class Ids(Base):
         local.replace_text(pid, edited)
         _, v = self.units(pid)
         self.assertEqual(v["sec-monday"][1], u["sec-monday"][0])          # moved down one place: the same id
-        self.assertNotEqual(v["sec-monday"][2], u["sec-monday"][1])       # edited: another
+        self.assertEqual(v["sec-monday"][2], u["sec-monday"][1])          # edited: the same id too (ids.py)
+        self.assertNotIn(v["sec-monday"][0], [x for c in u.values() for x in c])   # new: an id of its own
         self.assertEqual(v["sec-monday"][3:], u["sec-monday"][2:])
         self.assertEqual(v["sec-tuesday"], u["sec-tuesday"])
 
@@ -97,11 +99,13 @@ class Ids(Base):
         doc = parse(html, {"id": "pdf-0123456789abcdef", "title": "A PDF", "source": {"kind": "pdf"}})
         self.assertEqual(list(doc["units"]), ["u0", "u1"])
 
-    def test_a_document_stored_before_keeps_its_ids_until_it_is_replaced(self):
+    def test_a_document_stored_before_keeps_its_ids_when_it_is_replaced(self):
         pid = local.import_text(TEXT, "diary.md")
         meta = json.loads((store.pdir(pid) / "meta.json").read_text(encoding="utf-8"))
-        del meta["unit_ids"]   # as an earlier TextFold stored it
+        del meta["unit_ids"]   # as an earlier TextFold stored it: paragraphs named by their places, no ids in the page
         (store.pdir(pid) / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+        src = store.pdir(pid) / "source.html"
+        src.write_text(re.sub(r' data-[us]="[^"]*"', "", src.read_text(encoding="utf-8")), encoding="utf-8")
         _, u = self.units(pid)
         self.assertEqual(u["sec-monday"][0], "u1")
         self.note(pid, "n-cop", "u1", "Its COP stayed above three")
@@ -110,11 +114,12 @@ class Ids(Base):
         local.replace_text(pid, TEXT.replace("## Tuesday", "## Tuesday\n\nA new line."))
         _, v = self.units(pid)
         got = self.notes(pid)
-        self.assertEqual(got["n-cop"]["anchor"]["unit"], v["sec-monday"][0])
-        self.assertTrue(v["sec-monday"][0].startswith("p-"))
-        self.assertEqual(got["n-ask"]["anchor"]["unit"], v["sec-monday"][1])
-        self.assertEqual(got["n-ask"]["thread"][0]["cites"], [v["sec-monday"][0]])
-        self.assertEqual(got["n-ask"]["thread"][0]["a"], f"Because it is mild [[{v['sec-monday'][0]}]] and [[?]].")
+        self.assertEqual(v["sec-monday"][:2], ["u1", "u2"])   # the ids it had, so links made before still land (ids.py)
+        self.assertEqual(got["n-cop"]["anchor"]["unit"], "u1")
+        self.assertEqual(got["n-ask"]["anchor"]["unit"], "u2")
+        self.assertEqual(got["n-ask"]["thread"][0]["cites"], ["u1"])
+        self.assertEqual(got["n-ask"]["thread"][0]["a"], "Because it is mild [[u1]] and [[?]].")
+        self.assertNotIn(v["sec-tuesday"][0], [x for c in u.values() for x in c])   # the new line: an id of its own
 
 
 class Replace(Base):
@@ -191,7 +196,7 @@ class Notes(Base):
         got = self.notes(pid)
         a = got["n-cop"]["anchor"]
         self.assertEqual((a["unit"], a["section"], a["sents"]), (v["sec-monday"][0], "sec-monday", [1]))
-        self.assertNotEqual(a["unit"], u["sec-monday"][0])
+        self.assertEqual(a["unit"], u["sec-monday"][0])   # edited, its paragraph keeps its id (ids.py)
         self.assertEqual(self.words_at(pid, a), "Its COP stayed above three")
         a = got["n-noon"]["anchor"]
         self.assertEqual((a["unit"], a["sents"], self.words_at(pid, a)), (v["sec-tuesday"][0], [0], "emptied by noon"))
@@ -257,7 +262,7 @@ class Notes(Base):
             "unit": None, "section": None, "on": "paper", "lang": "en", "level": 2, "tokens": None, "sents": None, "quote": {"exact": ""}}})
         local.replace_text(pid, TEXT.replace("## Monday", "## Monday, the first day"))
         got = self.notes(pid)
-        self.assertEqual(got["n-title"]["anchor"]["section"], "sec-monday-the-first-day")
+        self.assertEqual(got["n-title"]["anchor"]["section"], "sec-monday")   # renamed, it keeps its id (ids.py)
         self.assertEqual(got["n-summary"]["anchor"]["section"], "sec-tuesday")
         self.assertEqual((got["n-chat"]["anchor"]["section"], got["n-chat"]["anchor"]["on"]), (None, "paper"))
 

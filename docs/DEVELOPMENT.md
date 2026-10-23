@@ -161,7 +161,8 @@ Notes: select text anywhere (a paragraph at any level, a section's summary or it
 or ask the model about it (the answer, in the reading language, cites the paragraphs it rests on; a cite opens that
 paragraph to its full text in place). The reader's own notes sit in the left margin, the conversations with the model
 and the links in the right. Full and Brief show whole cards, Key shows them compact, and Takeaway and Topic show only a
-mark, with the notes on hover. Highlights zoom with the words. `#n=<note id>` opens the reader at a note (`&t=<turn>`: a conversation at that turn), `#u=<id>` at a paragraph (`&to=<id>`: the run of them to that one, flashed together), `#s=<id>` at a section (the whole of it flashed; with `#level=`, at a level). A paragraph, a heading, a section's summary or a message of a conversation (by the handle beside it on hover), a card of the Topic map (grabbed anywhere), a note's card or a selection, dragged into another app, carries its words and a `textfold://` link back to it ([drag-format.md](drag-format.md)).
+mark, with the notes on hover. Highlights zoom with the words. `#n=<note id>` opens the reader at a note (`&t=<turn>`: a conversation at that turn), `#u=<id>` at a paragraph (`&to=<id>`: the run of them to that one, flashed together), `#s=<id>` at a section (the whole of it flashed; with `#level=`, at a level); one no longer in the text opens the
+section it was in, else the top, and the page says so (`ids.py`). A paragraph, a heading, a section's summary or a message of a conversation (by the handle beside it on hover), a card of the Topic map (grabbed anywhere), a note's card or a selection, dragged into another app, carries its words and a `textfold://` link back to it ([drag-format.md](drag-format.md)).
 
 What the model is given for a question (`textfold/notes.py`, `prompt`): the title, the abstract and a line per section
 (with where the reader is); the level they read at and whose words it shows (at Key and below, a warning that the
@@ -239,9 +240,15 @@ images given by a relative path are left out there and shown by name.
 A program that keeps the text where it is written (a note app's plugin) can fold it again after an edit without losing
 the document: `POST /api/import` with the document's `id` replaces its text in place (`local.replace_text`), and
 `/api/generate` with `force` folds it again. The id, the folder, the notes and the model's replies stay. A Markdown
-document's paragraphs are named by their words (`p-<hash>`, `"unit_ids": "text"` in its meta; one stored before keeps
-`u<n>` until its text is replaced), so an edit leaves every other paragraph's id, and a link to it (`#u=`), as it was;
-the notes are found again in the new text (notes-format.md, "When the text changes"). The old text and its levels go
+document's paragraphs are named by their words (`p-<hash>`, `"unit_ids": "text"` in its meta), and every paragraph keeps
+its id for the life of its document (`ids.py`): the ids are written into `source.html` when a text is stored (`data-u`
+on a paragraph, `data-s` on a section; one stored before keeps the ids it is read with), and a text replaced, or a PDF
+converted again, keeps the ids of the paragraphs and sections still there, edited, moved or renamed, so a link to one
+(`#u=`, `#s=`) still lands. A paragraph new in the text gets an id no paragraph had before (a PDF's are named by their
+places, `u<n>`: never the place of one that was there before); one that is gone is kept in `ids.json` with the section
+it was in, where a link to it opens, the page saying so. `GET /api/ids/<id>?u=<id>,…&s=<id>,…` says what each names now:
+`here`, `now` (a section whose paragraphs went to another), `gone` (a paragraph with its `section`) or `unknown`. The
+notes are found again in the new text (notes-format.md, "When the text changes"). The old text and its levels go
 to `previous/` (the last one replaced only), and the levels are made again from the replies kept in `llm-cache/`: the
 model is asked only for the sections whose prompts changed (a section's text; the title, the opening or a heading
 changes them all), and for the argument links when a takeaway changed. A translation's prompt numbers the atoms of the

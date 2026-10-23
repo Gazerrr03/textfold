@@ -10,7 +10,8 @@ A unit's id is the page's own (arXiv's S2.p3), else its place (u12). A
 document stored with "unit_ids": "text" in its meta (a Markdown file,
 local.py) names each unit by its words instead (p-<hash>), so that a
 paragraph keeps its id, and the notes and links on it, when the text
-around it is edited.
+around it is edited. An id written into the page when it was stored
+(data-u on a paragraph, data-s on a section: ids.py) comes first.
 """
 import hashlib
 import re
@@ -45,6 +46,8 @@ class Doc:
         self.targets, self.edges = {}, []
         self.env = None  # the theorem, definition or proof the walk is inside of
         self.by_text, self.seen = meta.get("unit_ids") == "text", {}
+        self.made = None   # (ids.freeze: the units and sections read from each marked element)
+        self.frozen = set()   # every id written into the page (data-u): one worked out here does not take one
 
     def text_id(self, toks):
         """A unit's id made from its words: the same paragraph has it wherever it moves, whatever changes around it.
@@ -182,11 +185,12 @@ def add_units(doc, el, role, uid=None, split=True, **extra):
             grp = sents[i:i + size]
             a, b = grp[0][0], grp[-1][1]
             parts.append((a, b, [[x - a, y - a] for x, y in grp]))
-    base = uid or el.get("id") or f"u{len(doc.units)}"
+    frozen = (el.get("data-u") or "").split()   # the ids it was stored with (ids.py), a part's each
+    base = (frozen[:1] or [None])[0] or uid or el.get("id") or f"u{len(doc.units)}"
     ids = []
     for n, (a, b, ss) in enumerate(parts):
-        u = doc.text_id(toks[a:b]) if doc.by_text else base if n == 0 else f"{base}~{n + 1}"
-        while u in doc.units:
+        u = frozen[n] if n < len(frozen) else doc.text_id(toks[a:b]) if doc.by_text else base if n == 0 else f"{base}~{n + 1}"
+        while u in doc.units or (n >= len(frozen) and u in doc.frozen):
             u += "'"
         home = doc.home()
         doc.units[u] = {"id": u, "role": role, "toks": toks[a:b], "sents": ss,
@@ -200,6 +204,10 @@ def add_units(doc, el, role, uid=None, split=True, **extra):
     para = el.find_parent(class_="ltx_para")
     if para is not None and para.get("id"):  # "see paragraph S2.p3" points at the wrapper; its first text stands for it
         doc.targets.setdefault(para["id"], {"k": "unit", "id": ids[0]})
+    if el.get("id"):   # (named otherwise when it was stored: a reference to the element still finds it)
+        doc.targets.setdefault(el["id"], {"k": "unit", "id": ids[0]})
+    if doc.made is not None and el.get("data-tf-k"):
+        doc.made["units"][el["data-tf-k"]] = ids
     return ids
 
 
@@ -224,8 +232,12 @@ def section(el, doc):
     cls = el.get("class", [])
     level = next((v for k, v in SECTION_LEVEL.items() if k in cls), 5)
     num, title, html = heading(el)
-    cid = el.get("id") or f"c{len(doc.chunks)}"
+    cid = el.get("data-s") or el.get("id") or f"c{len(doc.chunks)}"
     doc.targets.setdefault(cid, {"k": "chunk", "id": cid})
+    if el.get("id"):
+        doc.targets.setdefault(el["id"], {"k": "chunk", "id": cid})
+    if doc.made is not None and el.get("data-tf-k"):
+        doc.made["chunks"][el["data-tf-k"]] = cid
     doc.open_chunk(cid, num, title, html, level)
     walk(el, doc)
 
@@ -348,13 +360,19 @@ def walk(container, doc):
         block(ch, doc)
 
 
-def parse(html, meta):
+def parse(html, meta, made=None):
+    """made: filled with the ids read from each element marked by ids.freeze ({"units": {mark: [ids]}, "chunks":
+    {mark: id}})."""
     try:
         soup = BeautifulSoup(html, "lxml")
     except Exception as e:   # bs4's FeatureNotFound: the parser the page is read with is not installed
         raise RuntimeError("The lxml package is missing: run  python3 -m pip install -r requirements.txt") from e
     art = soup.select_one("article.ltx_document")
     doc = Doc(meta)
+    doc.frozen = {x for el in art.find_all(attrs={"data-u": True}) for x in el["data-u"].split()}
+    if made is not None:
+        made.update(units={}, chunks={})
+        doc.made = made
     # LaTeXML embeds SVG figures as <object>; an <img> shows them as well and can carry a data URI
     for obj in art.find_all("object"):
         if re.search(r"\.(svg|png|jpe?g|gif)$", obj.get("data", ""), re.I):
