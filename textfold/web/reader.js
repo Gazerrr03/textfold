@@ -2160,7 +2160,9 @@
     if (e.key === 'Escape') { e.preventDefault(); closeNote(); return; }
     if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;   // Shift+Enter: a new line, as in the chat
     if (e.target.matches('.np-input')) { e.preventDefault(); sendPop(); }
-    else if (e.target.matches('.np-text')) { e.preventDefault(); closeNote(); }   // a note is kept and closed, as with Escape
+    // a note is kept and closed, as with Escape; not on a phone or a tablet, whose keyboard has no Shift+Enter: Enter
+    // writes a new line there, and a tap outside keeps the note
+    else if (e.target.matches('.np-text') && !matchMedia('(pointer: coarse)').matches) { e.preventDefault(); closeNote(); }
   });
   npop.addEventListener('click', (e) => {
     const b = e.target.closest('button');
