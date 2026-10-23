@@ -98,6 +98,8 @@ def inline_images(doc, app=False):
 
 def payload(doc, app, katex=None, saved=None, pdf=None):
     data = {k: doc[k] for k in ("meta", "atoms", "units", "chunks", "blocks", "bib", "edges", "alias")}
+    if doc.get("gone"):   # the paragraphs and sections no longer in the text, by their ids (ids.py): where a link to one opens
+        data["gone"] = doc["gone"]
     data["app"] = app
     data["langs"] = langs.natives()   # every language the text could be read in, by its own name (the menus)
     data["katex"] = katex   # where the reader finds KaTeX: a folder, "inside" the page, or nowhere (math stays as written)

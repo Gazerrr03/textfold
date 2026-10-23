@@ -82,7 +82,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, agents, bridges, build, engine, fetch, fold, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdffigs, pdftext, pipeline, providers, store, zotero
+from . import __version__, agents, bridges, build, engine, fetch, fold, ids, langs, library, llm, local, models, notes, office, pdf, pdfdoc, pdffigs, pdftext, pipeline, providers, store, zotero
 
 STATIC = {"app.js": "text/javascript", "app.css": "text/css", "reader.js": "text/javascript",
           "reader.css": "text/css", "i18n.js": "text/javascript", "tutorial.js": "text/javascript", "webmcp.js": "text/javascript"}
@@ -494,6 +494,9 @@ def assembled(pid, only=None):
     name = library.name_of(pid)
     if name:
         doc["meta"]["name"] = name
+    gone = ids.load(pid)   # (a link to a paragraph or section no longer in the text opens where it went)
+    if gone["units"] or gone["sections"]:
+        doc["gone"] = gone
     return doc
 
 
@@ -501,6 +504,8 @@ def reader_page(pid):
     layers = store.pdir(pid) / "layers"
     sig = tuple(sorted((f.name, f.stat().st_mtime) for f in layers.glob("*.json"))) if layers.exists() else ()
     sig += ((build.WEB / "template.html").stat().st_mtime, library.name_of(pid))  # a changed page template, or name, re-renders too
+    gone = store.pdir(pid) / ids.FILE
+    sig += (gone.stat().st_mtime_ns if gone.exists() else 0,)
     sig += tuple((name, (build.WEB / name).stat().st_mtime_ns) for name in STATIC)
     hit = PAGES.get(pid)
     if not hit or hit[0] != sig:
@@ -656,6 +661,13 @@ def make_handler(jobs):
                     if lang not in langs.LANGS:
                         return self.json({"error": f"unknown language {lang}"}, 400)
                     return self.json(fold.document(pid, lang))
+                m = re.fullmatch(r"/api/ids/([\w.-]+)", u.path)   # what paragraphs' and sections' ids name now (ids.py)
+                if m:
+                    pid, q = m.group(1), parse_qs(u.query)
+                    if not (store.valid_id(pid) and (store.pdir(pid) / "meta.json").exists() and (store.pdir(pid) / "source.html").exists()):
+                        return self.json({"error": "no such paper"}, 404)
+                    asked = lambda k: [x for v in q.get(k, []) for x in v.split(",") if x][:1000]
+                    return self.json(ids.lookup(pid, store.parsed(pid), asked("u"), asked("s")))
                 m = re.fullmatch(r"/api/pdf/([\w.-]+)", u.path)
                 if m and store.valid_id(m.group(1)) and (store.pdir(m.group(1)) / "meta.json").exists():
                     f = pdf.path(m.group(1)) if pdf.has_source(m.group(1)) else None
