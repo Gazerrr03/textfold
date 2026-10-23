@@ -124,7 +124,7 @@ class AssetCache(unittest.TestCase):
         doc = store.assemble(self.pid)
         with mock.patch.object(build, "fonts_head", return_value=""), mock.patch.object(build, "app_assets", side_effect=AssertionError):
             exported = build.page(doc, app=False)
-        self.assertIn((build.WEB / "reader.js").read_text(), exported)
+        self.assertIn((build.WEB / "reader.js").read_text(encoding="utf-8"), exported)
         self.assertNotIn('/static/reader.js?v=', exported)
 
 
