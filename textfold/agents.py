@@ -113,7 +113,8 @@ def _running_workbuddy():
 def _apps_in(listing):
     """The WorkBuddy apps a list of program paths names, one a line: on a Mac the outermost .app of each ("/Applications/
     WorkBuddy.app/Contents/Frameworks/WorkBuddy Helper (GPU).app/…" is WorkBuddy.app) when it is WorkBuddy's, on
-    Windows the folder of each program."""
+    Windows the folder of each program, or for a helper under the app's resources\\ (its CLI's sandbox, its git) the
+    app's own folder."""
     import ntpath
     out = []
     for line in listing.splitlines():
@@ -121,7 +122,9 @@ def _apps_in(listing):
         if "workbuddy" not in line.lower():
             continue
         if WIN:
-            out.append(ntpath.dirname(line))
+            folder = ntpath.dirname(line)
+            i = (folder + "\\").lower().find("\\resources\\")
+            out.append(folder[:i] if i > 0 else folder)
         else:
             i = line.find(".app/")
             app = line[:i + 4] if i > 0 else ""
@@ -266,8 +269,10 @@ def locate(binary, extra=()):
 def workbuddy_app(path):
     """The WorkBuddy app a CodeBuddy found at `path` is part of, and the app's own program: (folder, program), or None
     for a codebuddy installed on its own. A Mac's: the .app it is in, the program its Info.plist names (Electron, for
-    WorkBuddy 5.3); Windows': the folder of resources/ it is in, WorkBuddy.exe or Electron.exe there, else the one
-    program there that is not an uninstaller or an updater."""
+    WorkBuddy 5.3); Windows': the folder of resources/ it is in whose program is WorkBuddy.exe or Electron.exe, else
+    the one program of the first such folder that is not an uninstaller or an updater. (WorkBuddy 5.8 keeps a folder
+    of resources/ inside its own, resources\\app.asar.unpacked\\resources: the walk goes on up past it.)"""
+    alone = None
     for a in Path(path).parents:
         if not WIN and a.suffix == ".app":
             try:
@@ -280,12 +285,14 @@ def workbuddy_app(path):
             ours = info.get("CFBundleIdentifier") == WORKBUDDY_ID or "workbuddy" in a.name.lower()
             return (str(a), str(exe)) if ours and exe.is_file() else None
         if WIN and (a / "resources").is_dir():
-            named = [a / "WorkBuddy.exe", a / "Electron.exe"]
-            others = sorted(x for x in a.glob("*.exe") if not re.match(r"(?i)un|update|crash|elevate", x.name))
-            exe = next((x for x in named if x.is_file()), others[0] if len(others) == 1 else None)
+            exe = next((x for x in (a / "WorkBuddy.exe", a / "Electron.exe") if x.is_file()), None)
             ours = (a / "WorkBuddy.exe").is_file() or "workbuddy" in str(a).lower()
-            return (str(a), str(exe)) if ours and exe else None
-    return None
+            if ours and exe:
+                return str(a), str(exe)
+            others = sorted(x for x in a.glob("*.exe") if not re.match(r"(?i)un|update|crash|elevate", x.name))
+            if ours and alone is None and len(others) == 1:
+                alone = (str(a), str(others[0]))
+    return alone
 
 
 FUSE_WIRE = b"dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX"   # Electron's fuses: this, a version byte, a count, a byte a fuse ('1' on)

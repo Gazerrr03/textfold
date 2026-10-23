@@ -294,9 +294,11 @@ class Places(unittest.TestCase):
                "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python\n/usr/bin/grep\n")
         with mock.patch.object(agents, "WIN", False):
             self.assertEqual(agents._apps_in(mac), ["/Applications/WorkBuddy.app", "/Users/me/Apps/Work Buddy Beta/WorkBuddy.app"])
-        win = "D:\\Apps\\WorkBuddy\\WorkBuddy.exe\r\nD:\\Apps\\WorkBuddy\\resources\\helper.exe\r\n"
-        with mock.patch.object(agents, "WIN", True):
-            self.assertEqual(agents._apps_in(win), ["D:\\Apps\\WorkBuddy", "D:\\Apps\\WorkBuddy\\resources"])
+        win = ("D:\\Apps\\WorkBuddy\\WorkBuddy.exe\r\nD:\\Apps\\WorkBuddy\\resources\\helper.exe\r\n"
+               "D:\\Apps\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\sandbox\\5.8.6\\sandbox.exe\r\n"
+               "D:\\Apps\\WorkBuddy\\resources\\vendor\\PortableGit\\bin\\..\\usr\\bin\\bash.exe\r\nE:\\WorkBuddy Beta\\WorkBuddy.exe\r\n")
+        with mock.patch.object(agents, "WIN", True):   # (its helpers under resources\: the app's own folder, once)
+            self.assertEqual(agents._apps_in(win), ["D:\\Apps\\WorkBuddy", "E:\\WorkBuddy Beta"])
 
     def test_windows_wherever_it_was_installed(self):
         reg = FakeRegistry({"HKCU": {"{abc}": {"DisplayName": "WorkBuddy 5.3.14", "DisplayIcon": '"D:\\Apps\\WorkBuddy\\WorkBuddy.exe",0'},
@@ -326,6 +328,19 @@ class Places(unittest.TestCase):
                 self.assertEqual(app and app[1], str(root / want) if want else None, exes)
             other = self.windows_app(self.tmp / "SomeApp", "SomeApp.exe")   # another Electron app's CodeBuddy: not WorkBuddy's
             self.assertIsNone(agents.workbuddy_app(str(other)))
+
+    def test_windows_a_folder_of_resources_inside_the_app(self):
+        """WorkBuddy 5.8 keeps resources\\ inside resources\\app.asar.unpacked\\ too (#54): the walk goes past it to the
+        folder of WorkBuddy.exe, whatever programs the inner one holds (many, or one alone)."""
+        with mock.patch.object(agents, "WIN", True):
+            for n, inner in enumerate((["rg.exe", "sandbox.exe", "git.exe"], ["helper.exe"])):
+                root = self.tmp / f"SoftWare-{n}" / "WorkBuddy"
+                cli = self.windows_app(root, "WorkBuddy.exe", "Uninstall WorkBuddy.exe")
+                unpacked = root / "resources" / "app.asar.unpacked"
+                (unpacked / "resources").mkdir()
+                for name in inner:
+                    (unpacked / name).write_bytes(b"MZ")
+                self.assertEqual(agents.workbuddy_app(str(cli)), (str(root), str(root / "WorkBuddy.exe")), inner)
 
     def test_a_mac_app_wherever_spotlight_finds_it(self):
         app = self.tmp / "Downloads" / "WB.app"   # (renamed: Spotlight knows it by its bundle id)
