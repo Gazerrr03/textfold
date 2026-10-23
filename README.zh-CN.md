@@ -20,7 +20,8 @@
 </picture>
 
 **粘贴链接：** 任意网页 · arXiv · PubMed Central · bioRxiv · medRxiv · 维基百科 · GitHub<br>
-**拖入文件（一个或多个）：** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · 图片 · Markdown · 纯文本
+**拖入文件（一个或多个）：** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · 图片 · Markdown · 纯文本<br>
+**接上你的工具：** [Claude Code](#在-claude-code-和-pi-里) · [Pi](#在-claude-code-和-pi-里) · [Zotero](#直接读你的-zotero) · [Obsidian](#接上你的-obsidian)
 
 **[试用演示 →](https://chenxiachan.github.io/textfold/gallery/)** 或者 **[下载软件 ↓](#开始使用)** · [最新 ↓](#最新)
 

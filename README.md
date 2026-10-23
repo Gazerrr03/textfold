@@ -20,7 +20,8 @@
 </picture>
 
 **Paste a link:** any web page · arXiv · PubMed Central · bioRxiv · medRxiv · Wikipedia · GitHub<br>
-**Drop files, one or several:** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · pictures · Markdown · text
+**Drop files, one or several:** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · pictures · Markdown · text<br>
+**Works with:** [Claude Code](#in-claude-code-and-pi) · [Pi](#in-claude-code-and-pi) · [Zotero](#works-on-your-zotero) · [Obsidian](#works-with-your-obsidian)
 
 **[Try the demo →](https://chenxiachan.github.io/textfold/gallery/)** or **[download the app ↓](#get-started)** · [What's new ↓](#whats-new)
 
