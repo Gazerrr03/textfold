@@ -159,7 +159,7 @@ class Notes(Base):
         new = self.store([self.HOUSE, self.HEAT, self.TANK], replace=True)   # converted again: one more paragraph first
         anchor = notes.read(PID)["notes"][0]["anchor"]
         self.assertEqual(anchor["unit"], self.unit_with(new, "buffer tank"))
-        self.assertNotEqual(anchor["unit"], uid)   # (its old place names another paragraph now)
+        self.assertEqual(anchor["unit"], uid)   # its id stays, though its place is another now (ids.py)
         self.assertFalse(anchor.get("lost"))
         self.assertEqual(notes._quoted(new["units"][anchor["unit"]]["toks"], new["atoms"], *anchor["tokens"]), "buffer tank")
 

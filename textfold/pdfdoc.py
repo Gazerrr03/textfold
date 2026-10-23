@@ -16,7 +16,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import local, markdown, store
+from . import ids, local, markdown, store
 
 DROP = {"header", "footer", "page_number", "aside_text"}
 CAPTION = re.compile(r"^\s*(?:fig(?:ure)?\.?|table|tab\.|scheme|chart|abb(?:ildung)?\.?|tabelle|图|表)\s*[A-Z]?\d+", re.I)
@@ -423,13 +423,13 @@ def store_pdf(pid, folder, sc, name, tier, replace=False):
     if replace and d.exists():
         shutil.rmtree(keep, ignore_errors=True)
         keep.mkdir(parents=True)
-        for f in [source_of(pid), d / "notes.json"]:
+        for f in [source_of(pid), d / "notes.json", d / ids.FILE]:
             if f and f.exists():
                 shutil.copy2(f, keep / f.name)
         if (d / "source.html").exists():
             (d / "source.html").unlink()   # so that store_doc writes the document again
     try:
-        local.store_doc(pid, html, meta, "source.md", text, lambda f: local.Images(f, Path(folder)).resolve, sizes=True)
+        local.store_doc(pid, html, meta, "source.md", text, lambda f: local.Images(f, Path(folder)).resolve, sizes=True, old=old)
         from . import zotero
         zotero.apply(pid)   # read from a Zotero item's file: the item's own title, authors and citekey
         (d / "layout.json").write_text(json.dumps(layout_of(sc), ensure_ascii=False), encoding="utf-8")
@@ -441,7 +441,9 @@ def store_pdf(pid, folder, sc, name, tier, replace=False):
             shutil.rmtree(keep)
     if old is not None:
         from . import notes
-        notes.reanchor(pid, old, store.parsed(pid))
+        new = store.parsed(pid)
+        ids.remember(pid, old, new)
+        notes.reanchor(pid, old, new)
     return pid
 
 

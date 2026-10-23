@@ -2453,18 +2453,34 @@
     const base = D.app ? `${location.origin}/p/${D.meta.id}?lang=${encodeURIComponent(lang)}` : location.href.split('#')[0];
     return `${base}#n=${n.id}`;
   }
+  // a link to a paragraph or section no longer in the text (ids.py: D.gone, by their ids): a section whose paragraphs
+  // went to another opens that one; a paragraph, the section it was in, else the top of the text, and the page says so
+  const GONE = D.gone || { units: {}, sections: {} };
+  let linkMsg = null;
+  function sayLink(text) {
+    if (!linkMsg) { linkMsg = h('div', 'linkmsg'); linkMsg.setAttribute('role', 'status'); document.body.append(linkMsg); }
+    linkMsg.textContent = text;
+    linkMsg.classList.add('on');
+    clearTimeout(linkMsg._t);
+    linkMsg._t = setTimeout(() => linkMsg.classList.remove('on'), 6000);
+  }
   function openFromHash() {
     const m = /[#&]n=([\w-]+)/.exec(location.hash), n = m && notes.find((x) => x.id === m[1]);
-    const u = n ? n.anchor.unit : (/[#&]u=([^&]+)/.exec(location.hash) || [])[1];
-    const s = !n && !u && (/[#&]s=([^&]+)/.exec(location.hash) || [])[1], sc = s && secs.get(decodeURIComponent(s));
-    const el = n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(decodeURIComponent(u)) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null;
+    const arg = (k) => { const x = new RegExp(`[#&]${k}=([^&]+)`).exec(location.hash); return x ? decodeURIComponent(x[1]) : null; };
+    let u = n ? n.anchor.unit : arg('u'), s = !n && !u ? arg('s') : null, lost = false;
+    if (u && !n && !unitEl.has(u) && unitEl.has(ALIAS[u])) u = ALIAS[u];
+    if (u && !n && !unitEl.has(u)) { s = (GONE.units[u] || {}).section || arg('s'); u = null; lost = true; }
+    if (s && !secs.get(s)) { const now = (GONE.sections[s] || {}).now; s = now && secs.get(now) ? now : null; lost = lost || !s; }
+    const sc = s && secs.get(s);
+    if (lost) sayLink(sc ? T[ui].link_gone : T[ui].link_gone_top);
+    const el = n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(u) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null;
     if (!el) return;
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
     // all that the link names, flashed together: a run of paragraphs (#u=<first>&to=<last>), a section with the
     // subsections under it (#s=)
-    const to = !n && u && (/[#&]to=([^&]+)/.exec(location.hash) || [])[1];
-    const all = to ? unitsBetween(decodeURIComponent(u), decodeURIComponent(to)).map((x) => unitEl.get(x)) : sc ? sectionWith(sc.c).map((x) => secs.get(x.id).sec) : [el];
+    const to = !n && u && arg('to');
+    const all = to ? unitsBetween(u, to).map((x) => unitEl.get(x)) : sc ? sectionWith(sc.c).map((x) => secs.get(x.id).sec) : [el];
     for (const x of all) { if (x._stale) renderUnit(x.dataset.u, true); flash(x); }
     const tm = n && /[#&]t=(\d{1,3})(?:&|$)/.exec(location.hash);
     if (n) setTimeout(() => { openNote(n); if (tm) showTurn(n, +tm[1]); }, 300);

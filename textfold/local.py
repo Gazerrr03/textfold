@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import markdown, notes, picture, semantic, store
+from . import ids, markdown, notes, picture, semantic, store
 from .fetch import UA
 from .parse import parse
 
@@ -159,10 +159,10 @@ def _replace(pid, text, name, base):
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     try:
-        (tmp / "source.html").write_text(semantic.normalize(html, resolve_img=Images(tmp / "img", base).resolve, sizes=True), encoding="utf-8")
+        page, new = ids.freeze(semantic.normalize(html, resolve_img=Images(tmp / "img", base).resolve, sizes=True), meta, old, ids.load(pid))
+        (tmp / "source.html").write_text(page, encoding="utf-8")
         (tmp / "source.md").write_text(text, encoding="utf-8")
         (tmp / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-        new = parse(store.read_text(tmp / "source.html"), meta)
         prev = d / "previous"
         shutil.rmtree(prev, ignore_errors=True)
         prev.mkdir()
@@ -175,21 +175,25 @@ def _replace(pid, text, name, base):
                 (tmp / f).rename(d / f)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    ids.remember(pid, old, new)
     notes.reanchor(pid, old, new)
     return title
 
 
-def store_doc(pid, html, meta, raw_name, raw, resolver, sizes=False):
+def store_doc(pid, html, meta, raw_name, raw, resolver, sizes=False, old=None):
     """A document's semantic HTML stored as a paper: normalized (with its images, through resolver(img folder)) into
-    papers/<pid>/, written whole or not at all. A paper already stored stays as it is."""
+    papers/<pid>/, written whole or not at all, with its paragraphs' ids (ids.freeze; old: the document it replaces,
+    whose paragraphs still there keep theirs). A paper already stored stays as it is."""
     d = store.pdir(pid)
     if (d / "meta.json").exists() and (d / "source.html").exists():
         return pid
+    gone = ids.load(pid) if old is not None else None
     tmp = d.with_name(d.name + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
     try:
-        (tmp / "source.html").write_text(semantic.normalize(html, resolve_img=resolver(tmp / "img"), sizes=sizes), encoding="utf-8")
+        page, _ = ids.freeze(semantic.normalize(html, resolve_img=resolver(tmp / "img"), sizes=sizes), meta, old, gone)
+        (tmp / "source.html").write_text(page, encoding="utf-8")
         (tmp / raw_name).write_text(raw, encoding="utf-8")
         (tmp / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
         shutil.rmtree(d, ignore_errors=True)
