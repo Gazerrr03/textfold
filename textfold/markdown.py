@@ -60,19 +60,43 @@ def _convert(text):
 
 def front_matter(src):
     """The few fields a document's YAML front matter is read for: title, author(s), date, license."""
-    meta, key = {}, None
+    meta, key, block = {}, None, None
     for line in src.splitlines():
+        if block is not None:
+            # the lines of a `key: >` / `key: |` block scalar are the ones indented under it
+            if not line.strip() or line[:1] in " \t":
+                block[1].append(line.strip())
+                continue
+            meta[block[0]] = (" " if block[2] == ">" else "\n").join(x for x in block[1] if x).strip()
+            block = None
         m = re.match(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$", line)
         if m:
             key, val = m.group(1).lower(), m.group(2).strip()
+            if val[:1] not in "\"'":
+                val = re.sub(r"\s+#.*$", "", val)   # a YAML comment after the value
             if val.startswith("[") and val.endswith("]"):
                 meta[key] = [_unquote(x) for x in re.split(r",\s*(?=(?:[^\"']*[\"'][^\"']*[\"'])*[^\"']*$)", val[1:-1]) if x.strip()]
+            elif re.fullmatch(r"[>|][+-]?", val):
+                block = (key, [], val[0])
             elif val:
                 meta[key] = _unquote(val)
             else:
                 meta[key] = []
         elif key and re.match(r"^\s*-\s+", line) and isinstance(meta.get(key), list):
-            meta[key].append(_unquote(re.sub(r"^\s*-\s+", "", line)))
+            item = re.sub(r"^\s*-\s+", "", line)
+            # Quarto/pandoc list authors as mappings (`- name: Jane Doe` with affiliation etc. under it):
+            # keep the name, and wait for a later `name:` line when the mapping starts with another field
+            entry = re.match(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$", item)
+            if entry:
+                meta[key].append(_unquote(entry.group(2)) if entry.group(1).lower() == "name" else None)
+            else:
+                meta[key].append(_unquote(item))
+        elif key and isinstance(meta.get(key), list) and meta[key] and meta[key][-1] is None:
+            name = re.match(r"^\s+name\s*:\s*(.*)$", line)
+            if name:
+                meta[key][-1] = _unquote(name.group(1))
+    if block is not None:
+        meta[block[0]] = (" " if block[2] == ">" else "\n").join(x for x in block[1] if x).strip()
     authors = meta.get("authors") or meta.get("author") or []
     return {"title": meta.get("title") if isinstance(meta.get("title"), str) else "",
             "authors": [authors] if isinstance(authors, str) else [a for a in authors if isinstance(a, str)],
