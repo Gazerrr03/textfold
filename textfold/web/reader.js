@@ -2158,7 +2158,9 @@
   });
   npop.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); closeNote(); return; }
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.target.matches('.np-input')) { e.preventDefault(); sendPop(); }   // Shift+Enter: a new line, as in the chat
+    if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;   // Shift+Enter: a new line, as in the chat
+    if (e.target.matches('.np-input')) { e.preventDefault(); sendPop(); }
+    else if (e.target.matches('.np-text')) { e.preventDefault(); closeNote(); }   // a note is kept and closed, as with Escape
   });
   npop.addEventListener('click', (e) => {
     const b = e.target.closest('button');
