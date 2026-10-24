@@ -22,11 +22,15 @@
   --r-context: #A39C93; --r-gap: #D9822B; --r-claim: #6B5CE7; --r-method: #3B82C4;
   --r-setup: #7C8BA1; --r-result: #2E9E6A; --r-analysis: #0F8B8D; --r-limitation: #C2453D;
   --rel-supports: #2E9E6A; --rel-builds_on: #3B82C4; --rel-qualifies: #C2453D; --rel-explains: #6B5CE7; --rel-ref: #A39C93;
-  --hl: #FFE07A; --hl-ink: #D9A400;   /* the reader's highlights: made at Full or Brief */
-  --hl-key: #D3CAFF; --hl-take: #C6E2F7;   /* made on the written line at Key, at Takeaway */
-  /* the colours a reader may give a highlight of their own (note.color), each a fill and an ink; .hc-<name> below */
-  --c-yellow: #FFE07A; --c-yellow-ink: #D9A400; --c-green: #BDE8A8; --c-green-ink: #4E9A3A; --c-blue: #BFDDF7; --c-blue-ink: #3B82C4;
-  --c-pink: #F9C4D8; --c-pink-ink: #D0487A; --c-purple: #D9CCFF; --c-purple-ink: #6B5CE7; --c-orange: #FFCB99; --c-orange-ink: #E07A1F;
+  /* the colours a level's highlights may be given (the Aa menu), each a fill and an ink (reader.js, HUES: the same) */
+  --c-yellow: #FFE07A; --c-yellow-ink: #D9A400; --c-orange: #FFCB99; --c-orange-ink: #E07A1F; --c-red: #FFC2BA; --c-red-ink: #D2493B;
+  --c-pink: #F9C4D8; --c-pink-ink: #D0487A; --c-purple: #D3CAFF; --c-purple-ink: #6B5CE7; --c-blue: #C6E2F7; --c-blue-ink: #3B82C4;
+  --c-teal: #B8E6E1; --c-teal-ink: #2A9187; --c-green: #BDE8A8; --c-green-ink: #4E9A3A;
+  /* the reader's highlights, in the colour of the level they were made at: Full and Brief (the author's words), the
+     written line at Key, at Takeaway; reader.js (applyType) sets --lv-* to the reader's choice of each */
+  --lv-src: var(--c-yellow); --lv-src-ink: var(--c-yellow-ink); --lv-key: var(--c-purple); --lv-key-ink: var(--c-purple-ink);
+  --lv-take: var(--c-blue); --lv-take-ink: var(--c-blue-ink);
+  --hl: var(--lv-src); --hl-ink: var(--lv-src-ink); --hl-key: var(--lv-key); --hl-take: var(--lv-take);
   /* the type as the reader set it (reader.js, the type): its size (--fs, every size in the column scales with it), the
      column's width (html[data-width]: narrow, standard, wide, at this size: a line holds as many words at any size, as
      long as the margins keep their room) and the font of the author's words (--text) */
@@ -41,9 +45,10 @@
   :root:not([data-theme]) {
     --surface: #1B1915; --card: #24211C; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B;
     --faint: #5E5850; --line: #3A362F; --line-2: #2E2B25; --accent: #A79FF4; --accent-soft: #2D2850;
-    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A; --hl-key: #4A3F94; --hl-take: #2B5675;
-    --c-yellow: #8A7024; --c-yellow-ink: #E8C04A; --c-green: #3E6B33; --c-green-ink: #8FD27A; --c-blue: #2B5675; --c-blue-ink: #7DB8EA;
-    --c-pink: #7A3550; --c-pink-ink: #F08CB4; --c-purple: #4A3F94; --c-purple-ink: #B1A6EE; --c-orange: #85501F; --c-orange-ink: #F2A65E;
+    --accent-deep: #CFC9FA; --rule: #8A847C;
+    --c-yellow: #8A7024; --c-yellow-ink: #E8C04A; --c-orange: #85501F; --c-orange-ink: #F2A65E; --c-red: #84403A; --c-red-ink: #F2958A;
+    --c-pink: #7A3550; --c-pink-ink: #F08CB4; --c-purple: #4A3F94; --c-purple-ink: #B1A6EE; --c-blue: #2B5675; --c-blue-ink: #7DB8EA;
+    --c-teal: #2E615C; --c-teal-ink: #7FD3C8; --c-green: #3E6B33; --c-green-ink: #8FD27A;
     --btn: #6B5CE7; --btn-hover: #7B6DF0; --on-btn: #fff;
     --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65);
   }
@@ -55,9 +60,10 @@
     color-scheme: dark;
     --surface: #1B1915; --card: #24211C; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B;
     --faint: #5E5850; --line: #3A362F; --line-2: #2E2B25; --accent: #A79FF4; --accent-soft: #2D2850;
-    --accent-deep: #CFC9FA; --rule: #8A847C; --hl: #8A7024; --hl-ink: #E8C04A; --hl-key: #4A3F94; --hl-take: #2B5675;
-    --c-yellow: #8A7024; --c-yellow-ink: #E8C04A; --c-green: #3E6B33; --c-green-ink: #8FD27A; --c-blue: #2B5675; --c-blue-ink: #7DB8EA;
-    --c-pink: #7A3550; --c-pink-ink: #F08CB4; --c-purple: #4A3F94; --c-purple-ink: #B1A6EE; --c-orange: #85501F; --c-orange-ink: #F2A65E;
+    --accent-deep: #CFC9FA; --rule: #8A847C;
+    --c-yellow: #8A7024; --c-yellow-ink: #E8C04A; --c-orange: #85501F; --c-orange-ink: #F2A65E; --c-red: #84403A; --c-red-ink: #F2958A;
+    --c-pink: #7A3550; --c-pink-ink: #F08CB4; --c-purple: #4A3F94; --c-purple-ink: #B1A6EE; --c-blue: #2B5675; --c-blue-ink: #7DB8EA;
+    --c-teal: #2E615C; --c-teal-ink: #7FD3C8; --c-green: #3E6B33; --c-green-ink: #8FD27A;
     --btn: #6B5CE7; --btn-hover: #7B6DF0; --on-btn: #fff;
     --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65);
   }
@@ -68,11 +74,11 @@
    every colour the default does, so either brightness combines with it */
 @media screen {
   /* warm, unbleached: a book's page in daylight; the text in the default's colours, so that a page reads alike in either */
-  :root[data-style="paper"] { --surface: #F3EEE4; --card: #F9F6EF; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --faint: #B6AC9D; --line: #DDD5C7; --line-2: #E9E3D7; --accent: #5E55C6; --accent-soft: #E6E1F0; --accent-deep: #352D85; --rule: #8B8174; --hl: #F5D97F; --hl-ink: #BF9000; --pop: 0 1px 2px rgba(60, 45, 20, .07), 0 14px 36px -14px rgba(60, 45, 20, .38); }
-  :root[data-style="paper"][data-theme="dark"] { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
+  :root[data-style="paper"] { --surface: #F3EEE4; --card: #F9F6EF; --ink: #1A1A1A; --ink-2: #4A4540; --muted: #6B6560; --faint: #B6AC9D; --line: #DDD5C7; --line-2: #E9E3D7; --accent: #5E55C6; --accent-soft: #E6E1F0; --accent-deep: #352D85; --rule: #8B8174; --c-yellow: #F5D97F; --c-yellow-ink: #BF9000; --pop: 0 1px 2px rgba(60, 45, 20, .07), 0 14px 36px -14px rgba(60, 45, 20, .38); }
+  :root[data-style="paper"][data-theme="dark"] { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --c-yellow: #7A6227; --c-yellow-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
 }
 @media screen and (prefers-color-scheme: dark) {
-  :root[data-style="paper"]:not([data-theme]) { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --hl: #7A6227; --hl-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
+  :root[data-style="paper"]:not([data-theme]) { --surface: #221E19; --card: #2A251F; --ink: #EDE9E3; --ink-2: #C9C3BA; --muted: #9C958B; --faint: #675E50; --line: #40382E; --line-2: #332D25; --accent: #B1A6EE; --accent-soft: #352F4D; --accent-deep: #D5CEF8; --rule: #998D7A; --c-yellow: #7A6227; --c-yellow-ink: #E0BA56; --pop: 0 1px 2px rgba(0, 0, 0, .3), 0 18px 44px -14px rgba(0, 0, 0, .65); }
 }
 
 * { box-sizing: border-box; }
@@ -569,15 +575,19 @@ html[lang="zh-TW"] .u[data-l="4"], html[lang="zh-TW"] .u[data-l="3"] { line-heig
 .tk.hls, .tr.hls, .hlsp.hls { background-color: color-mix(in srgb, var(--hl) 36%, transparent); }
 .tk.hlk, .tr.hlk, .hlsp.hlk { background-color: color-mix(in srgb, var(--hl-key) 85%, transparent); }
 .tk.hlt, .tr.hlt, .hlsp.hlt { background-color: color-mix(in srgb, var(--hl-take) 90%, transparent); }
-/* a colour the reader chose (note.color): it stands for the level's, on a mark and on everything of its note's */
-.hc-yellow { --hl: var(--c-yellow); --hl-key: var(--c-yellow); --hl-take: var(--c-yellow); --hl-ink: var(--c-yellow-ink); }
-.hc-green { --hl: var(--c-green); --hl-key: var(--c-green); --hl-take: var(--c-green); --hl-ink: var(--c-green-ink); }
-.hc-blue { --hl: var(--c-blue); --hl-key: var(--c-blue); --hl-take: var(--c-blue); --hl-ink: var(--c-blue-ink); }
-.hc-pink { --hl: var(--c-pink); --hl-key: var(--c-pink); --hl-take: var(--c-pink); --hl-ink: var(--c-pink-ink); }
-.hc-purple { --hl: var(--c-purple); --hl-key: var(--c-purple); --hl-take: var(--c-purple); --hl-ink: var(--c-purple-ink); }
-.hc-orange { --hl: var(--c-orange); --hl-key: var(--c-orange); --hl-take: var(--c-orange); --hl-ink: var(--c-orange-ink); }
-/* a paragraph with notes keeps a mark at every level, also where the passage itself is not shown: a band of each
-   colour its marks have (reader.js, noteBar) */
+/* a highlight's shade (note.shade: 1 light, 3 deep; the usual 2 is none): its level's colour nearer the page, or
+   nearer its ink */
+.hl.sh1 { --hl: color-mix(in oklab, var(--lv-src) 45%, var(--surface)); } .hl.sh3 { --hl: color-mix(in oklab, var(--lv-src) 68%, var(--lv-src-ink)); }
+.hlk.sh1 { --hl-key: color-mix(in oklab, var(--lv-key) 45%, var(--surface)); } .hlk.sh3 { --hl-key: color-mix(in oklab, var(--lv-key) 68%, var(--lv-key-ink)); }
+.hlt.sh1 { --hl-take: color-mix(in oklab, var(--lv-take) 45%, var(--surface)); } .hlt.sh3 { --hl-take: color-mix(in oklab, var(--lv-take) 68%, var(--lv-take-ink)); }
+/* what carries a note's colour (its card, its line in the notes list, the peek, a dot for a shade): the level it was
+   made at (tn-src: Full and Brief; tn-key, tn-take) in its shade, as the --hl and --hl-ink the rules for them use */
+.tn-src { --t: var(--lv-src); --ti: var(--lv-src-ink); } .tn-key { --t: var(--lv-key); --ti: var(--lv-key-ink); } .tn-take { --t: var(--lv-take); --ti: var(--lv-take-ink); }
+.tn-src, .tn-key, .tn-take { --hl: var(--t); --hl-ink: var(--ti); }
+.tn-src.sh1, .tn-key.sh1, .tn-take.sh1 { --hl: color-mix(in oklab, var(--t) 45%, var(--surface)); }
+.tn-src.sh3, .tn-key.sh3, .tn-take.sh3 { --hl: color-mix(in oklab, var(--t) 68%, var(--ti)); }
+/* a paragraph with notes keeps a mark at every level, also where the passage itself is not shown: a band for each
+   level its notes were made at, in their colours (reader.js, noteBar) */
 .u.has-notes::after { content: ""; position: absolute; left: -13px; top: .4em; bottom: .4em; width: 3px; border-radius: 2px; background: var(--note-bar, var(--hl-ink)); opacity: .75; }
 li.u.has-notes::after { left: calc(-1.3em - 13px); }
 .u[data-l="2"].has-notes::after, .u[data-l="1"].has-notes::after { left: -10px; }
@@ -603,7 +613,6 @@ html[data-hide~="links"] .side-links, html[data-hide~="asks"] .side-notes, html[
   box-shadow: 0 16px 44px -18px rgba(40, 30, 10, .45); font: 13.5px/1.5 var(--sans); color: var(--ink-2); max-height: 70vh; overflow: auto; }
 .npop .np-quote { font-family: var(--serif); font-size: 13.5px; color: var(--muted); border-left: 2px solid var(--hl-ink); padding-left: 8px; margin-bottom: 8px; }
 .npop .np-quote.ai { font-family: var(--sans); font-size: 13px; }   /* the model's words, as on its line */
-.npop .np-quote.l2 { border-left-color: color-mix(in srgb, var(--hl-key) 60%, var(--accent)); } .npop .np-quote.l1 { border-left-color: color-mix(in srgb, var(--hl-take) 55%, #3B82C4); }
 .npop .np-where { font-family: var(--sans); font-weight: 650; color: var(--faint); margin-right: 3px; }
 .npop textarea, .npop input { width: 100%; font: 14px/1.5 var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 9px; outline: none; resize: vertical; }
@@ -696,7 +705,8 @@ html.morphing .chatbtn { pointer-events: none; }
 .npop .np-acts { display: flex; gap: 4px; justify-content: flex-end; margin-top: 8px; }
 .npop .np-acts button { font: 600 12.5px var(--sans); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
 .npop .np-acts button:hover { color: var(--ink); border-color: var(--ink-2); }
-/* the colours a note may be given (reader.js, swatches): in the bar over a selection, and in a note opened */
+/* a dot for each shade a highlight may have, in its level's colour (reader.js, swatches): in the bar over a selection
+   (after Highlight, which takes the shade last chosen: its dot ringed), and in a note opened */
 .sws { display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; }
 .sws button.sw, .sws button.sw:hover { width: 15px; height: 15px; flex: none; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
   background: var(--hl); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl-ink) 55%, transparent); transition: transform .12s var(--ease); }
@@ -704,6 +714,7 @@ html.morphing .chatbtn { pointer-events: none; }
 .sws button.sw.on { outline: 2px solid var(--ink-2); outline-offset: 1.5px; }
 .selbar .sws { gap: 6px; border-right: 1px solid color-mix(in srgb, var(--card) 22%, transparent); padding: 0 9px 0 7px; }
 .selbar .sws button.sw, .selbar .sws button.sw:hover { width: 18px; height: 18px; }
+.selbar .sws button.sw.last { outline: 1.5px solid color-mix(in srgb, var(--card) 65%, transparent); outline-offset: 2px; }
 .npop .np-acts .sws { margin-right: auto; padding-left: 0; }
 
 .notespick { position: relative; order: 3; flex: none; }
@@ -784,7 +795,6 @@ html.morphing .chatbtn { pointer-events: none; }
 .nl-go b { font-weight: 600; }
 .nl-hl { font-family: var(--serif); font-size: 13.5px; color: var(--ink-2); }
 .nl-item.ai .nl-hl, .nl-item.ai .nl-q { font-family: var(--sans); }
-.nl-item.l2 .nl-go::before { background: var(--hl-key); } .nl-item.l1 .nl-go::before { background: var(--hl-take); }
 .nl-gone { display: block; font: italic 11.5px var(--sans); color: var(--muted); margin-top: 2px; }
 .nl-t { color: var(--ink); }
 .nl-a { color: var(--ink-2); }
@@ -981,6 +991,19 @@ html.compare .chunk > .side, html.compare .chunk > .lside { position: static; }
 .ty-seg button[aria-checked="true"], .ty-seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(30, 22, 8, .1), 0 0 0 1px var(--line-2); }
 .ty-seg [data-font="serif"] { font-family: var(--serif); font-size: 13.5px; }
 .ty-reset { justify-self: end; border: 0; background: none; padding: 2px 4px; font: 550 12px var(--sans); color: var(--accent); cursor: pointer; }
+/* the colour of the reader's highlights at each level, chosen among the hues (reader.js, renderTypeMenu: data-hl) */
+.ty-hl { display: grid; gap: 7px; }
+.ty-hrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ty-hrow > span { font: 550 12.5px var(--sans); color: var(--ink-2); white-space: nowrap; }
+.ty-hues { display: flex; gap: 5px; }
+.ty-hues button { width: 16px; height: 16px; flex: none; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--hl); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl-ink) 55%, transparent); }
+.ty-hues button[aria-checked="true"] { outline: 2px solid var(--ink-2); outline-offset: 1.5px; }
+.ty-same { margin: 0; font: 12px/1.4 var(--sans); color: var(--muted); }
+.hue-yellow { --hl: var(--c-yellow); --hl-ink: var(--c-yellow-ink); } .hue-orange { --hl: var(--c-orange); --hl-ink: var(--c-orange-ink); }
+.hue-red { --hl: var(--c-red); --hl-ink: var(--c-red-ink); } .hue-pink { --hl: var(--c-pink); --hl-ink: var(--c-pink-ink); }
+.hue-purple { --hl: var(--c-purple); --hl-ink: var(--c-purple-ink); } .hue-blue { --hl: var(--c-blue); --hl-ink: var(--c-blue-ink); }
+.hue-teal { --hl: var(--c-teal); --hl-ink: var(--c-teal-ink); } .hue-green { --hl: var(--c-green); --hl-ink: var(--c-green-ink); }
 /* the styles in the Aa menu, each with a dot of its tone (the pages themselves are too near each other to tell at
    this size): light on the left, dark on the right */
 .ty-seg [data-style] { display: inline-flex; align-items: center; gap: 5px; }
