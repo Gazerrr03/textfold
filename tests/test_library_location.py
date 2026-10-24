@@ -130,8 +130,8 @@ class Migration(unittest.TestCase):
         with mock.patch.object(store, 'DATA', second):
             store.initialize_storage()
             self.assertEqual(store.library_root(), second.resolve())
-            self.assertFalse((second / 'storage.json').exists())
-        self.assertTrue((first / 'storage.json').exists())
+            self.assertFalse(storage_settings.config_path(second).exists())
+        self.assertTrue(storage_settings.config_path(first).exists())
 
     def test_existing_library_validation_failure_keeps_old_library(self):
         self.target.mkdir(); (self.target / 'papers').mkdir()
@@ -139,3 +139,72 @@ class Migration(unittest.TestCase):
         (self.target / 'papers').rmdir()
         self.assertEqual(storage_settings.activate(self.source, self.home), self.source)
         self.assertIn('existing TextFold', storage_settings.status(self.source, self.home)['error'])
+
+    def test_desktop_and_pip_selection_do_not_share_even_the_same_data_root(self):
+        with mock.patch.dict(os.environ, {'TEXTFOLD_RUNTIME_ID': 'desktop'}):
+            storage_settings.schedule(self.source, self.home, str(self.target))
+        with mock.patch.dict(os.environ, {'TEXTFOLD_RUNTIME_ID': 'pip-fixture'}):
+            self.assertEqual(storage_settings.load(self.home), {})
+
+    def test_damaged_settings_are_preserved_and_default_library_remains_available(self):
+        path = storage_settings.config_path(self.source)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'{broken configuration')
+        self.assertEqual(storage_settings.activate(self.source, self.source), self.source)
+        self.assertEqual(storage_settings.active_path(self.source, self.source), self.source)
+        self.assertIn('could not be read', storage_settings.status(self.source, self.source)['error'])
+        self.assertEqual(path.read_bytes(), b'{broken configuration')
+
+    def test_relocated_arxiv_fetch_uses_the_selected_library(self):
+        from textfold import pipeline, local
+        target = self.target
+        (target / 'papers').mkdir(parents=True)
+        with mock.patch.object(store, 'DATA', self.source):
+            store.schedule_storage(str(target), mode='existing'); store.initialize_storage()
+            def fetched(identity, root):
+                self.assertEqual(root.resolve(), target.resolve())
+                folder = root / 'papers' / identity; folder.mkdir()
+                (folder / 'meta.json').write_text(json.dumps({'id': identity, 'title': 'Arxiv fixture', 'authors': []}))
+                (folder / 'source.html').write_text('<article class="ltx_document"><p class="ltx_p">Fixture text.</p></article>')
+                return folder
+            with mock.patch.object(pipeline, 'fetch', side_effect=fetched):
+                with self.assertRaisesRegex(RuntimeError, 'No model'):
+                    pipeline.generate('2306.03310', 'en', None)
+            self.assertTrue((target / 'papers/2306.03310/source.html').exists())
+
+    def test_restart_resumes_a_copy_after_abrupt_process_exit(self):
+        import subprocess, sys
+        script = r"""
+import os, sys
+from pathlib import Path
+from unittest import mock
+from textfold import storage_settings
+source, target = map(Path, sys.argv[1:])
+def killed(src, dst):
+    Path(dst).write_bytes(b'partial copy')
+    os._exit(17)
+with mock.patch.object(storage_settings.shutil, 'copy2', side_effect=killed):
+    storage_settings.copy_library(source, target)
+"""
+        child = subprocess.run([sys.executable, '-c', script, str(self.source), str(self.target)], capture_output=True, timeout=20)
+        self.assertEqual(child.returncode, 17, child.stderr.decode('utf-8', 'replace'))
+        self.assertTrue(any(self.target.glob('.textfold-copy-*')))
+        storage_settings.copy_library(self.source, self.target)
+        self.assertFalse(any(self.target.glob('.textfold-copy-*')))
+        self.assertEqual((self.target / 'papers/2306.03310/source.pdf').read_bytes(), b'%PDF-1.4\x00\xff')
+
+    def test_old_journal_cannot_claim_an_existing_document_as_temporary(self):
+        storage_settings.copy_library(self.source, self.target)
+        marker = self.target / storage_settings.MARKER
+        value = json.loads(marker.read_text()); value.update(version=2, temporary='papers/2306.03310/notes.json')
+        marker.write_text(json.dumps(value))
+        path = self.target / 'papers/2306.03310/notes.json'; before = path.read_bytes()
+        with self.assertRaises(ValueError): storage_settings.copy_library(self.source, self.target)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_malformed_settings_and_staging_journals_fail_safely(self):
+        path = storage_settings.config_path(self.source); path.parent.mkdir(parents=True)
+        path.write_text('{"path": [], "pending": {}}')
+        self.assertEqual(storage_settings.activate(self.source, self.source), self.source)
+        self.target.mkdir(); (self.target / storage_settings.NEXT).write_text('[]')
+        with self.assertRaises(ValueError): storage_settings.copy_library(self.source, self.target)

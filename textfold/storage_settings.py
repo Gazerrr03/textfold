@@ -8,7 +8,9 @@ import hashlib
 import json
 import os
 import shutil
-import tempfile
+import uuid
+import sys
+import re
 import threading
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from ._storage_layout import DirectoryFiles
 _lock = threading.RLock()
 NAMES = ("papers", "library.json", "zotero.json")
 MARKER = ".textfold-migration.json"
+NEXT = ".textfold-migration-next.json"
 
 
 def _process_alive(pid):
@@ -59,27 +62,57 @@ def _check_other_server(runtime):
         raise OSError("Close other TextFold instances, then restart to copy the library")
 
 
+def config_path(runtime):
+    from . import store
+    identity = os.environ.get("TEXTFOLD_RUNTIME_ID") or ("source:" + str(store.ROOT.resolve()) if store.SOURCE else "pip:" + str(Path(sys.prefix).resolve()))
+    key = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+    return Path(runtime) / ".storage" / (key + ".json")
+
+
+def _journal(destination, value):
+    # The established journal owns this exact staging name. No glob cleanup.
+    next_path = destination / NEXT
+    if next_path.is_symlink() or getattr(next_path, "is_junction", lambda: False)():
+        raise ValueError("Migration journal must not follow links")
+    with next_path.open("w", encoding="utf-8") as output:
+        json.dump(value, output, ensure_ascii=False)
+        output.flush()
+        os.fsync(output.fileno())
+    os.replace(next_path, destination / MARKER)
+
+
 def load(home):
     """home is the runtime data directory, never the global settings home."""
-    path = Path(home) / "storage.json"
+    path = config_path(home)
     if not path.exists():
         return {}
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or value.get("backend", "local") != "local":
         raise ValueError("Unsupported document storage configuration")
+    if any(key in value and not isinstance(value[key], str) for key in ("path", "pending", "pending_mode", "error")):
+        raise ValueError("Invalid library location settings")
+    if value.get("pending_mode", "copy") not in ("copy", "existing"):
+        raise ValueError("Invalid library location action")
     return value
 
 
 def active_path(default, home):
-    return Path(load(home).get("path") or default).expanduser().resolve()
+    try:
+        return Path(load(home).get("path") or default).expanduser().resolve()
+    except (OSError, ValueError, TypeError):
+        return Path(default).resolve()
 
 
 def _save(home, value):
-    DirectoryFiles(home).write("storage.json", json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
+    path = config_path(home)
+    DirectoryFiles(path.parent).write(path.name, json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
 def status(root, home):
-    config = load(home)
+    try:
+        config = load(home)
+    except (OSError, ValueError, TypeError) as error:
+        config = {"error": "Library location settings could not be read: " + str(error)}
     return {"backend": "local", "path": str(Path(root).resolve()),
             "pending": config.get("pending") or "", "mode": config.get("pending_mode", "copy"), "error": config.get("error") or ""}
 
@@ -161,14 +194,33 @@ def copy_library(source, destination):
     marker = destination / MARKER
     if marker.exists():
         journal = json.loads(marker.read_text(encoding="utf-8"))
-        if not isinstance(journal, dict) or journal.get("source") != str(source) or journal.get("version") not in (1, 2):
+        if not isinstance(journal, dict) or journal.get("source") != str(source) or journal.get("version") not in (1, 2, 3):
             raise ValueError("This folder belongs to another migration")
     else:
+        if not marker.exists() and (destination / NEXT).exists():
+            candidate = json.loads((destination / NEXT).read_text(encoding="utf-8"))
+            if not isinstance(candidate, dict) or candidate.get("source") != str(source) or candidate.get("version") != 3:
+                raise ValueError("Unrecognized migration staging journal")
+            os.replace(destination / NEXT, marker)
+            return copy_library(source, destination)
         _target(source, str(destination))
         destination.mkdir(parents=True, exist_ok=True)
-        journal = {"source": str(source), "version": 2, "files": {}}
-    if any(p.name not in (*NAMES, MARKER) for p in destination.iterdir()):
+        journal = {"source": str(source), "version": 3, "files": {}, "next": NEXT}
+    temporary = journal.get("temporary")
+    extras = {MARKER}
+    if temporary and (journal.get("version") != 3 or journal.get("next") != NEXT):
+        raise ValueError("Unrecognized temporary migration ownership")
+    if journal.get("version") == 3 and journal.get("next") == NEXT:
+        extras.add(NEXT)
+        if temporary:
+            if not isinstance(temporary, str) or not re.fullmatch(r"\.textfold-copy-[0-9a-f]{32}", temporary):
+                raise ValueError("Invalid temporary migration path")
+            extras.add(temporary)
+    if any(p.name not in (*NAMES, *extras) for p in destination.iterdir()):
         raise ValueError("Migration stopped: unexpected files in destination")
+    target = DirectoryFiles(destination)
+    if temporary:
+        target.path(temporary).unlink(missing_ok=True)
     before = {p.relative_to(source).as_posix(): _digest(p) for p in _files(source)}
     existing = {p.relative_to(destination).as_posix(): _digest(p) for p in _files(destination)}
     owned = journal.get("files", {})
@@ -184,7 +236,8 @@ def copy_library(source, destination):
     planned = {key: list(values) for key, values in owned.items()}
     for key, digest in before.items():
         planned[key] = sorted(set(planned.get(key, []) + [digest]))
-    target.write(MARKER, json.dumps({"source": str(source), "version": 2, "files": planned}).encode("utf-8"))
+    journal = {"source": str(source), "version": 3, "files": planned, "next": NEXT}
+    _journal(destination, journal)
     for key in existing.keys() - before.keys():
         out = target.path(key)
         if _digest(out) != existing[key]:
@@ -195,9 +248,12 @@ def copy_library(source, destination):
             continue
         out = target.path(key)
         out.parent.mkdir(parents=True, exist_ok=True)
-        fd, name = tempfile.mkstemp(prefix=out.name + ".", suffix=".textfold-copy", dir=out.parent)
-        os.close(fd)
-        temp = Path(name)
+        temporary = ".textfold-copy-" + uuid.uuid4().hex
+        journal["temporary"] = temporary
+        _journal(destination, journal)  # durable ownership before creating it
+        temp = target.path(temporary)
+        with temp.open("xb"):
+            pass
         try:
             shutil.copy2(source / key, temp)
             if _digest(temp) != digest:
@@ -207,6 +263,8 @@ def copy_library(source, destination):
             os.replace(temp, out)
         finally:
             temp.unlink(missing_ok=True)
+        journal.pop("temporary", None)
+        _journal(destination, journal)
     after = {p.relative_to(source).as_posix(): _digest(p) for p in _files(source)}
     if before != after:
         raise OSError("The original library changed during copying; close other TextFold instances and retry")
@@ -219,7 +277,10 @@ def copy_library(source, destination):
 def activate(default, home):
     """Startup only. A failed copy leaves the old library active and readable."""
     with _lock:
-        config = load(home)
+        try:
+            config = load(home)
+        except (OSError, ValueError, TypeError):
+            return Path(default).resolve()  # preserve the damaged file for recovery
         if not config.get("pending"):
             return active_path(default, home)
         source = Path(config.get("path") or default).resolve()

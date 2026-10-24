@@ -134,6 +134,7 @@ function startServer(port) {
     ...process.env,
     [key]: [...extra, process.env[key] || (WIN ? '' : '/usr/bin:/bin')].filter(Boolean).join(path.delimiter),
     TEXTFOLD_DATA: app.getPath('userData'),
+    TEXTFOLD_RUNTIME_ID: 'desktop',
     PYTHONNOUSERSITE: '1',
     PYTHONDONTWRITEBYTECODE: '1',
     // the locale's codepage (cp936 on a Chinese Windows) is otherwise the default for open() and the pipes, and the
