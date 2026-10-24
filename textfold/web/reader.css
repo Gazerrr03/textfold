@@ -514,6 +514,18 @@ li.u > .side { left: calc(100% + 34px); }
   border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; box-shadow: var(--pop); font: 13px/1.5 var(--sans); color: var(--ink-2);
   pointer-events: none; opacity: 0; transform: translate(-50%, -4px); transition: opacity .2s, transform .2s; }
 .linkmsg.on { opacity: 1; transform: translate(-50%, 0); }
+/* find in the text (reader.js, ⌘F): its bar, and the words found, the one stepped to more strongly */
+.findbar { position: fixed; z-index: 46; top: 64px; right: 20px; display: flex; align-items: center; gap: 2px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; padding: 3px 3px 3px 10px; box-shadow: var(--pop); font: 13px/1.4 var(--sans); color: var(--ink-2); }
+.findbar[hidden] { display: none; }
+.findbar input { width: 190px; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: var(--ink); }
+.findbar .fd-n { min-width: 4.8em; padding: 0 6px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.findbar.none .fd-n { color: var(--r-limitation); }
+.findbar button { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font: inherit; cursor: pointer; }
+.findbar button:hover { background: var(--line-2); color: var(--ink); }
+.tk.fd, .tr.fd, .fdsp { background-color: color-mix(in srgb, var(--warm) 28%, transparent); border-radius: 2px; }
+.tk.fdc, .tr.fdc, .fdsp.fdc { background-color: color-mix(in srgb, var(--warm) 62%, transparent); }
+@media print { .findbar { display: none; } .tk.fd, .tr.fd, .fdsp { background: none; } }
 .peek img { display: block; max-width: 100%; max-height: 220px; margin: 6px auto; border-radius: 4px; }
 .peek .pk-where { font-size: 12px; display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
 .peek .pk-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
