@@ -145,7 +145,8 @@ def repository():
     global _repository, _repository_default
     default = Path(DATA)
     if _repository is None or (_repository_default is not None and _repository_default != default):
-        _repository = DocumentStore(LocalDirectoryBackend(default))
+        from .storage_settings import active_path
+        _repository = DocumentStore(LocalDirectoryBackend(active_path(default, default)))
         _repository_default = default
     return _repository
 
@@ -213,10 +214,31 @@ def readable(pid):
     return repository().info(pid).readable if _nonlocal() else has(pid, 'meta.json') and has(pid, 'source.html')
 
 
+def library_root():
+    return repository().backend.root
+
+
+def storage_status():
+    from .storage_settings import status
+    return status(library_root(), DATA)
+
+
+def schedule_storage(path=None, cancel=False, mode="copy"):
+    from .storage_settings import schedule
+    return schedule(library_root(), DATA, path, cancel, mode)
+
+
+def initialize_storage():
+    global _repository, _repository_default
+    from .storage_settings import activate
+    _repository = DocumentStore(LocalDirectoryBackend(activate(DATA, DATA)))
+    _repository_default = Path(DATA)
+
+
 def pdir(pid):
     if _custom():
         return repository().local_path(pid)
-    return DATA / "papers" / pid
+    return library_root() / "papers" / pid
 
 
 def _file(pid, name):
@@ -344,7 +366,7 @@ def papers():
                       key=lambda item: -item['updated'])
     """Every paper on disk, newest layer first."""
     out = []
-    root = (repository().backend.root if _custom() else DATA) / "papers"
+    root = library_root() / "papers"
     for d in root.iterdir() if root.exists() else []:
         mf = d / "meta.json"
         if d.name.startswith(".") or not mf.exists():

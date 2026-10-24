@@ -164,7 +164,7 @@ def models_payload():
                        "hasKey": bool(p["api_key"]) and p["api_key"] not in ("none", "ollama")} for p in provs],
         "presets": providers.PRESETS[:-1] + [models.ANTHROPIC_PRESET, providers.PRESETS[-1]],
         "useThoughtdagEnv": s.get("use_thoughtdag_env", True), "thoughtdagEnv": providers.THOUGHTDAG_ENV.exists(),
-        "pdfTier": s.get("pdf_tier") or "fast", "engine": engine.status(),
+        "pdfTier": s.get("pdf_tier") or "fast", "engine": engine.status(), "storage": store.storage_status(),
         "lang": s.get("lang") if s.get("lang") in langs.LANGS else None,
     }
 
@@ -625,6 +625,8 @@ def make_handler(jobs):
                     return self.json([{"code": code, "name": name} for code, name in langs.natives().items()])
                 if u.path == "/api/jobs":
                     return self.json(jobs.list())
+                if u.path == "/api/storage":
+                    return self.json(store.storage_status())
                 if u.path in ("/api/models", "/api/settings"):
                     return self.json(models_payload())
                 m = re.fullmatch(r"/api/pdfmap/([\w.-]+)", u.path)   # a converted PDF's paragraphs on its pages
@@ -704,6 +706,12 @@ def make_handler(jobs):
                     return self.json({"error": "too-large"}, 413)
                 body = json.loads(self.rfile.read(size) or b"{}")
                 s = models.load_settings()
+                if u.path == "/api/storage":
+                    try:
+                        return self.json(store.schedule_storage(body.get("path"), bool(body.get("cancel")), body.get("mode", "copy")))
+                    except (OSError, ValueError) as error:
+                        return self.json({"error": str(error)}, 400)
+
                 if u.path == "/api/generate":
                     lang = body.get("lang") or "en"
                     if lang not in langs.LANGS:
@@ -1011,6 +1019,7 @@ def withdraw(f):
 def serve(port=3017):
     if os.name == "nt":
         _quiet_children()
+    store.initialize_storage()
     jobs = Jobs()
     # look for the agents on this computer while the server comes up, and erase what was deleted 30 days ago
     threading.Thread(target=agents.scan, kwargs={"log": print}, daemon=True).start()
