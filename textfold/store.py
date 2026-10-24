@@ -346,7 +346,7 @@ def papers():
                       key=lambda item: -item['updated'])
     """Every paper on disk, newest layer first."""
     out = []
-    root = DATA / "papers"
+    root = (repository().backend.root if _custom() else DATA) / "papers"
     for d in root.iterdir() if root.exists() else []:
         mf = d / "meta.json"
         if d.name.startswith(".") or not mf.exists():

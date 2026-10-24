@@ -141,6 +141,36 @@ class LocalDefault(unittest.TestCase):
             with store.repository().workspace(self.pid) as folder:
                 self.assertEqual(folder.resolve(), store.pdir(self.pid).resolve())
 
+    def test_snapshot_retries_external_writes_during_read(self):
+        backend = LocalDirectoryBackend(store.DATA)
+        original = backend._read_legacy
+        changed = False
+        def read(folder, keys=None):
+            nonlocal changed
+            raw = original(folder, keys)
+            if not changed:
+                changed = True
+                (folder / 'notes.json').write_text(json.dumps({'notes': [{'text': 'External writer'}]}), encoding='utf-8')
+            return raw
+        with mock.patch.object(backend, '_read_legacy', side_effect=read):
+            doc = backend.get(self.pid)
+        self.assertEqual(doc.notes['notes'][0]['text'], 'External writer')
+        doc.meta['title'] = 'Title edit'
+        backend.save(doc)
+        self.assertEqual(backend.get(self.pid).notes, doc.notes)
+
+    def test_explicit_local_backend_lists_and_trashes_its_own_library(self):
+        with tempfile.TemporaryDirectory() as other:
+            with store.use_backend(LocalDirectoryBackend(other)):
+                identity = local.import_text('# Other library\n\nOther paragraph.\n')
+                self.assertEqual([p['id'] for p in store.papers()], [identity])
+                self.assertTrue(store.has(identity))
+                store.trash(identity)
+                self.assertEqual(store.papers(), [])
+                self.assertIsNotNone(store.untrash(identity))
+                self.assertEqual(store.papers()[0]['id'], identity)
+            self.assertEqual(store.papers()[0]['id'], self.pid)
+
     def test_paid_reply_survives_sigterm_before_any_generation_checkpoint(self):
         root = Path(self.temp.name)
         ready = root / 'child-ready.json'

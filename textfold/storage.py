@@ -63,12 +63,15 @@ class LocalDirectoryBackend:
 
     def get(self, document_id):
         with self._lock:
-            entries = self._entries(document_id)
-            if not entries:
-                raise FileNotFoundError(document_id)
-            raw = self._read_legacy(self._path(document_id))
-            entries = self._entries(document_id)
-            return LegacyLayout.decode(document_id, raw, revision=self._revision(entries), entries=entries)
+            for attempt in range(4):
+                before = self._revision(self._entries(document_id))
+                if before is None:
+                    raise FileNotFoundError(document_id)
+                raw = self._read_legacy(self._path(document_id))
+                entries = self._entries(document_id)
+                if before == self._revision(entries):
+                    return LegacyLayout.decode(document_id, raw, revision=before, entries=entries)
+            raise ConflictError(f"Document changed while reading: {document_id}")
 
     @classmethod
     def _folder_info(cls, folder, identity):
