@@ -18,13 +18,11 @@ import json
 import locale
 import os
 import re
-import shutil
 import sys
 import time
 from pathlib import Path
 
 from . import ladder
-from .documents import Document
 from ._storage_layout import DirectoryFiles
 from .storage import DocumentStore, LocalDirectoryBackend
 
@@ -371,36 +369,14 @@ def papers():
 def trash(pid, kept=None):
     """Delete a paper from the list: its folder (source, layers, model replies, notes) moves to papers/.trash, from
     where it can be moved back (untrash, or by hand) for 30 days (empty_trash). kept: its place in the library, kept
-    with it."""
-    if _nonlocal():
-        return repository().backend.trash(pid, kept)
-    to = (repository().backend.root if _custom() else DATA) / "papers" / ".trash" / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
-    to.parent.mkdir(parents=True, exist_ok=True)
-    pdir(pid).rename(to)
-    if kept:
-        (to / "library.json").write_text(json.dumps(kept, ensure_ascii=False), encoding="utf-8")
-    return to
+    with it. The library's backend keeps the trash: for papers/, LocalDirectoryBackend.trash."""
+    return Path(repository().backend.trash(pid, kept))
 
 
 def untrash(pid):
     """A paper deleted last back in the list, as it was (its latest time in papers/.trash), and its place in the
     library as trash kept it ({} when none); None when there is none there, or a paper of that id is listed again."""
-    if _nonlocal():
-        return repository().backend.restore(pid)
-    if not valid_id(pid) or pdir(pid).exists():
-        return None
-    at = re.compile(re.escape(pid) + r"-\d{8}-\d{6}")
-    gone = sorted(d for d in ((repository().backend.root if _custom() else DATA) / "papers" / ".trash").glob(f"{pid}-*") if at.fullmatch(d.name) and (d / "meta.json").exists())
-    if not gone:
-        return None
-    kept_f = gone[-1] / "library.json"
-    try:
-        kept = json.loads(read_text(kept_f)) if kept_f.exists() else {}
-    except (OSError, ValueError):
-        kept = {}
-    gone[-1].rename(pdir(pid))
-    (pdir(pid) / "library.json").unlink(missing_ok=True)
-    return kept if isinstance(kept, dict) else {}
+    return repository().backend.restore(pid)
 
 
 TRASH_DAYS = 30
@@ -409,23 +385,4 @@ TRASH_DAYS = 30
 def empty_trash(days=TRASH_DAYS, now=None):
     """Papers deleted more than `days` ago erased from papers/.trash, by the time in their folder's name (trash's);
     nothing else there is touched. The server does it as it starts. Their names, erased."""
-    if _nonlocal():
-        return repository().backend.purge((time.time() if now is None else now) - days * 86400)
-    root = (repository().backend.root if _custom() else DATA) / "papers" / ".trash"
-    if not root.is_dir():
-        return []
-    cut = (time.time() if now is None else now) - days * 86400
-    gone = []
-    for d in sorted(root.iterdir()):
-        m = re.fullmatch(r"(.+)-(\d{8}-\d{6})", d.name)
-        if not (m and valid_id(m.group(1)) and d.is_dir() and not d.is_symlink()):
-            continue
-        try:
-            at = time.mktime(time.strptime(m.group(2), "%Y%m%d-%H%M%S"))
-        except (ValueError, OverflowError):
-            continue
-        if at < cut:
-            shutil.rmtree(d, ignore_errors=True)
-            if not d.exists():
-                gone.append(d.name)
-    return gone
+    return repository().backend.purge((time.time() if now is None else now) - days * 86400)

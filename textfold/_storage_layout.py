@@ -1,4 +1,4 @@
-"""Private legacy directory IO. This is not the storage plugin interface."""
+"""Private legacy directory IO. This is not the storage backend interface."""
 import json
 import os
 import tempfile
@@ -113,7 +113,7 @@ def decode_text(raw):
 class LegacyLayout:
     """The old layout lives only here and in file-based parser integrations.
 
-    Plugins receive semantic Document values. This codec is also the private
+    Backends receive semantic Document values. This codec is also the private
     bridge between those values and tools requiring a temporary directory.
     Unchanged text/JSON retains its exact original bytes and formatting.
     """

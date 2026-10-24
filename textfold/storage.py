@@ -1,8 +1,6 @@
 """Document repositories. File layout and parser workspaces stay internal."""
 import contextlib
-import hashlib
 import json
-import os
 import re
 import shutil
 import tempfile
@@ -11,7 +9,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .documents import ConflictError, Document, DocumentInfo, LibraryState, StorageBackend
+from .documents import ConflictError, Document, DocumentInfo, LibraryState
 from ._storage_layout import DirectoryFiles, LegacyLayout, checked_id, checked_key, decode_text, rename_directory
 
 
@@ -141,9 +139,10 @@ class LocalDirectoryBackend:
             shutil.rmtree(path)
 
     def trash(self, document_id, placement=None):
+        # The paper's own folder moves, by its name: a link to a folder kept elsewhere goes to the trash as a link
         with self._lock:
-            folder = self._path(document_id)
-            target = self._files.path(f"papers/.trash/{document_id}-{time.strftime('%Y%m%d-%H%M%S')}")
+            folder = self.root / "papers" / checked_id(document_id)
+            target = self.root / "papers" / ".trash" / f"{document_id}-{time.strftime('%Y%m%d-%H%M%S')}"
             target.parent.mkdir(parents=True, exist_ok=True)
             rename_directory(folder, target)
             if placement:
@@ -152,13 +151,15 @@ class LocalDirectoryBackend:
 
     def restore(self, document_id):
         from .store import valid_id
+        if not valid_id(document_id):
+            return None
         with self._lock:
-            folder = self._path(document_id)
-            if not valid_id(document_id) or folder.exists():
+            folder = self.root / "papers" / document_id
+            if folder.exists():
                 return None
             pattern = re.compile(re.escape(document_id) + r"-\d{8}-\d{6}")
-            gone = sorted(d for d in self._files.path("papers/.trash").glob(f"{document_id}-*")
-                          if pattern.fullmatch(d.name) and not d.is_symlink() and (d / "meta.json").exists())
+            gone = sorted(d for d in (self.root / "papers" / ".trash").glob(f"{document_id}-*")
+                          if pattern.fullmatch(d.name) and (d / "meta.json").exists())   # (a linked paper comes back as its link)
             if not gone:
                 return None
             kept_file = gone[-1] / "library.json"
@@ -173,7 +174,7 @@ class LocalDirectoryBackend:
     def purge(self, before):
         from .store import valid_id
         with self._lock:
-            root = self._files.path("papers/.trash")
+            root = self.root / "papers" / ".trash"
             gone = []
             for folder in sorted(root.iterdir()) if root.is_dir() else []:
                 match = re.fullmatch(r"(.+)-(\d{8}-\d{6})", folder.name)
@@ -285,7 +286,7 @@ class DocumentStore:
     def save_library(self, state):
         self.backend.save_library(state)
 
-    # Compatibility for old importers only. Plugins don't implement these.
+    # Compatibility for old importers only. A backend doesn't implement these.
     def has(self, identity, name="meta.json"):
         if isinstance(self.backend, LocalDirectoryBackend) and identity not in self._active():
             return DirectoryFiles(self.backend._path(identity)).exists(name)
@@ -341,7 +342,7 @@ class DocumentStore:
     def workspace(self, identity, write=True):
         """Parser bridge: materialize a document and merge completed changes.
 
-        This is application code, never a plugin requirement. Model replies
+        This is application code, never something a backend provides. Model replies
         survive failed generations; conflicting concurrent edits are rejected.
         """
         checked_id(identity)

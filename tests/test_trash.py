@@ -75,6 +75,48 @@ class EmptyTrash(unittest.TestCase):
             self.assertEqual(store.empty_trash(), [])
 
 
+
+class TrashAndBack(unittest.TestCase):
+    """store.trash and store.untrash go through the library's backend (LocalDirectoryBackend) and do what they did."""
+
+    def test_a_paper_and_its_place(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(store, "DATA", Path(tmp) / "data"):
+            folder = store.DATA / "papers" / "md-notes-1"
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text("{}", encoding="utf-8")
+            to = store.trash("md-notes-1", {"folder": "Reading"})
+            self.assertFalse(folder.exists())
+            self.assertEqual(to.parent.name, ".trash")
+            self.assertTrue((to / "meta.json").exists() and (to / "library.json").exists())
+            self.assertIsNone(store.untrash("md-other-1"))   # (none of that id there)
+            self.assertEqual(store.untrash("md-notes-1"), {"folder": "Reading"})
+            self.assertTrue((folder / "meta.json").exists())
+            self.assertFalse((folder / "library.json").exists())
+            self.assertIsNone(store.untrash("md-notes-1"))   # (it is listed again)
+
+    def test_a_linked_folder_goes_as_its_link(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(store, "DATA", Path(tmp) / "data"):
+            elsewhere = Path(tmp) / "elsewhere" / "md-big-1"
+            elsewhere.mkdir(parents=True)
+            (elsewhere / "meta.json").write_text("{}", encoding="utf-8")
+            (store.DATA / "papers").mkdir(parents=True)
+            link = store.DATA / "papers" / "md-big-1"
+            try:
+                link.symlink_to(elsewhere, target_is_directory=True)
+            except OSError:   # (Windows without the right to make one)
+                self.skipTest("no symbolic links here")
+            to = store.trash("md-big-1")
+            self.assertTrue(to.is_symlink())
+            self.assertFalse(link.is_symlink())
+            self.assertEqual(store.untrash("md-big-1"), {})
+            self.assertTrue(link.is_symlink() and (elsewhere / "meta.json").exists())
+
+    def test_not_an_id(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(store, "DATA", Path(tmp)):
+            for pid in ("", "../md-notes-1", ".trash", "md-notes-1/../x"):
+                self.assertIsNone(store.untrash(pid), pid)
+
+
 class AtStart(unittest.TestCase):
     def test_server_erases_old_ones(self):
         now = time.time()

@@ -73,7 +73,7 @@ class LibraryState:
 
 
 class StorageBackend(Protocol):
-    """Plugins exchange whole documents. No file/path/workspace methods.
+    """Backends exchange whole documents. No file/path/workspace methods.
 
     get raises FileNotFoundError. save compares document.revision with the
     current token (None creates only), then refreshes it. Competing writes
