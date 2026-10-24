@@ -27,6 +27,9 @@ ESCAPE = {"#": r"\#", "$": r"\$", "%": r"\%", "&": r"\&", "_": r"\_", "{": r"\{"
           # the spaces a formula is set with (\quad, \,): KaTeX does not take them as characters
           "\u2001": r"\quad ", "\u2003": r"\quad ", "\u2002": r"\enspace ", "\u2004": r"\;", "\u2005": r"\:",
           "\u2006": r"\,", "\u2009": r"\,", "\u200a": r"\,", "\u205f": r"\:", "\u00a0": "~"}
+# the characters a \text{...} run has to escape (in text mode too, % starts a comment and _ ^ & # $ are errors)
+TEXT_ESCAPE = {"\\": r"\textbackslash{}", "{": r"\{", "}": r"\}", "%": r"\%", "&": r"\&", "#": r"\#",
+               "$": r"\$", "_": r"\_", "^": r"\textasciicircum{}", "~": r"\textasciitilde{}"}
 STYLE = {"p": r"\mathrm", "b": r"\mathbf", "bi": r"\boldsymbol"}
 SCRIPT = {"double-struck": r"\mathbb", "script": r"\mathcal", "fraktur": r"\mathfrak", "sans-serif": r"\mathsf",
           "monospace": r"\mathtt"}
@@ -78,7 +81,8 @@ class _Latex:
     def run_text(self, s, style=None, scr=None, normal=False):
         s = _plain(s)
         if normal:
-            return r"\text{" + s.replace("\\", r"\textbackslash{}").replace("{", r"\{").replace("}", r"\}") + "}"
+            # one pass, so the braces of \textbackslash{} are not escaped again
+            return r"\text{" + "".join(TEXT_ESCAPE.get(c, c) for c in s) + "}"
         out = "".join("&" if c == "&" and self.align else ESCAPE.get(c, c) for c in s)
         if out.strip() in FUNCS:
             return "\\" + out.strip() + " "
