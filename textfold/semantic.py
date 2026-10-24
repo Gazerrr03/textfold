@@ -119,17 +119,54 @@ def tex_math(latex, display=False):
     """LaTeX as MathML that carries its source (alttext), as LaTeXML writes formulas: the browser draws it with no
     script, and the model reads the LaTeX. A formula the converter cannot read stays as its source."""
     latex = latex.strip()
+    texts, plain = _texts(latex)
     try:
         from latex2mathml.converter import convert
-        m = BeautifulSoup(convert(latex, display="block" if display else "inline"), "lxml").find("math")
+        m = BeautifulSoup(convert(plain, display="block" if display else "inline"), "lxml").find("math")
     except Exception:
         m = None
     if m is None:
         span = BeautifulSoup("<code></code>", "lxml").find("code")
         span.string = f"${latex}$"
         return span
+    for t in m.find_all("mtext"):
+        if t.get_text() in texts:
+            t.string = texts[t.get_text()]
     m["alttext"] = latex
     return m
+
+
+TEXT_CMD = re.compile(r"\\(?:text|textrm|textnormal|mbox)\s*\{")
+TEXT_ESC = {"textbackslash": "\\", "textasciicircum": "^", "textasciitilde": "~"}
+
+
+def _texts(latex):
+    """The words of each \\text{...} of a formula as they read, and the formula with a placeholder for each. latex2mathml
+    ends \\text at its first } and keeps its escapes as they are written (50\\% off, x\\textasciicircum{), so the words
+    are put back in its <mtext> afterwards. A \\text holding math or a command of its own is left to latex2mathml."""
+    texts, out, pos = {}, [], 0
+    for m in TEXT_CMD.finditer(latex):
+        if m.start() < pos:
+            continue
+        i, depth = m.end(), 1
+        while i < len(latex) and depth:   # to the brace closing it (an escaped one is a character of the text)
+            if latex[i] == "\\":
+                i += 2
+                continue
+            depth += {"{": 1, "}": -1}.get(latex[i], 0)
+            i += 1
+        if depth:
+            break
+        body = latex[m.end():i - 1]
+        words = re.sub(r"\\(textbackslash|textasciicircum|textasciitilde)\b(?:\{\})?|\\([{}%&#$_ ])|~",
+                       lambda x: TEXT_ESC[x.group(1)] if x.group(1) else x.group(2) or "\u00a0", body)
+        if "$" in body.replace("\\$", "") or re.search(r"\\[A-Za-z]", re.sub(r"\\(textbackslash|textasciicircum|textasciitilde)\b", "", body)):
+            continue
+        key = f"TFTEXT{len(texts)}X"
+        texts[key] = words.replace(" ", "\u00a0")   # (as latex2mathml keeps a text's spaces: a MathML token trims its own)
+        out.append(latex[pos:m.start()] + r"\text{" + key + "}")
+        pos = i
+    return texts, "".join(out) + latex[pos:]
 
 
 def _strip_delims(s):
