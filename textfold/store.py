@@ -12,6 +12,8 @@ The layers are what makes a paper read the same every time it is opened: a reade
 from them without any model call, and "regenerate" replaces one layer with a new version.
 A translation whose English base has since been regenerated is reported as stale.
 """
+import contextlib
+import functools
 import json
 import locale
 import os
@@ -22,6 +24,9 @@ import time
 from pathlib import Path
 
 from . import ladder
+from .documents import Document
+from ._storage_layout import DirectoryFiles
+from .storage import DocumentStore, LocalDirectoryBackend
 
 
 def codepage():
@@ -105,7 +110,7 @@ def resolve(ref):
     from . import biorxiv, epmc, github, wiki   # (they store through this module)
     ref = (ref or "").strip()
     if ref.startswith(("md-", "pdf-", "doc-")):
-        if not (IMPORTED_ID.fullmatch(ref) and (pdir(ref) / "meta.json").exists()):
+        if not (IMPORTED_ID.fullmatch(ref) and has(ref)):
             raise ValueError(f"no such document: {ref}")
         return ref
     owner, repo = github.ref_of(ref)
@@ -133,7 +138,86 @@ def resolve(ref):
     return paper_id(ref)
 
 
+_repository = None
+_repository_default = None
+
+
+def repository():
+    """Whole-document storage; default libraries keep their existing location."""
+    global _repository, _repository_default
+    default = Path(DATA)
+    if _repository is None or (_repository_default is not None and _repository_default != default):
+        _repository = DocumentStore(LocalDirectoryBackend(default))
+        _repository_default = default
+    return _repository
+
+
+def _custom():
+    return _repository is not None and _repository_default is None
+
+
+def _nonlocal():
+    return _custom() and not isinstance(_repository.backend, LocalDirectoryBackend)
+
+
+@contextlib.contextmanager
+def use_backend(backend):
+    """Choose a backend explicitly, without changing persisted user settings."""
+    global _repository, _repository_default
+    previous = _repository, _repository_default
+    _repository, _repository_default = DocumentStore(backend), None
+    try:
+        yield _repository
+    finally:
+        _repository, _repository_default = previous
+
+
+def in_document(fn):
+    """Private bridge for parsers that require a working directory."""
+    @functools.wraps(fn)
+    def wrapped(pid, *args, **kw):
+        identity = pid['meta']['id'] if isinstance(pid, dict) else pid
+        with repository().workspace(identity):
+            return fn(pid, *args, **kw)
+    return wrapped
+
+
+def document(pid):
+    return repository().get(pid)
+
+
+def edit(pid, create=False):
+    return repository().edit(pid, create=create)
+
+
+def asset(pid, name):
+    if not _nonlocal():
+        return DirectoryFiles(pdir(pid)).read(name)
+    return repository().read_asset(pid, name)
+
+
+def text(pid, name):
+    if not _nonlocal():
+        return read_text(DirectoryFiles(pdir(pid)).path(name))
+    from ._storage_layout import decode_text
+    return decode_text(asset(pid, name))
+
+
+def put_asset(pid, name, value):
+    repository().write_asset(pid, name, value)
+
+
+def has(pid, name='meta.json'):
+    return repository().has(pid, name) if _nonlocal() else DirectoryFiles(pdir(pid)).exists(name)
+
+
+def readable(pid):
+    return repository().info(pid).readable if _nonlocal() else has(pid, 'meta.json') and has(pid, 'source.html')
+
+
 def pdir(pid):
+    if _custom():
+        return repository().local_path(pid)
     return DATA / "papers" / pid
 
 
@@ -142,11 +226,18 @@ def _file(pid, name):
 
 
 def read(pid, name):
+    if _nonlocal():
+        try: return document(pid).layers.get(name)
+        except FileNotFoundError: return None
     f = _file(pid, name)
     return json.loads(read_text(f)) if f.exists() else None
 
 
 def write(pid, name, data):
+    if _nonlocal():
+        with edit(pid, create=True) as saved:
+            saved.layers[name] = data
+        return
     f = _file(pid, name)
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(".tmp")
@@ -199,11 +290,16 @@ def apply_tr(doc, lang, tr):
 
 
 def languages(pid):
+    if _nonlocal():
+        return sorted(k[3:] for k in document(pid).layers if k.startswith('tr-'))
     d = pdir(pid) / "layers"
     return sorted(f.stem[3:] for f in d.glob("tr-*.json")) if d.exists() else []
 
 
 def parsed(pid):
+    if _nonlocal():
+        saved = document(pid)
+        return parse(saved.source.html, saved.meta)
     d = pdir(pid)
     return parse(read_text(d / "source.html"), json.loads(read_text(d / "meta.json")))
 
@@ -243,9 +339,14 @@ def assemble(pid, only=None):
 
 
 def papers():
+    if _nonlocal():
+        return sorted([{'id': i.id, 'title': i.meta['title'], 'titles': i.titles,
+                        'authors': i.meta.get('authors', []), 'langs': i.languages,
+                        'updated': i.updated, 'notes': i.note_count} for i in repository().list()],
+                      key=lambda item: -item['updated'])
     """Every paper on disk, newest layer first."""
     out = []
-    root = DATA / "papers"
+    root = (repository().backend.root if _custom() else DATA) / "papers"
     for d in root.iterdir() if root.exists() else []:
         mf = d / "meta.json"
         if d.name.startswith(".") or not mf.exists():
@@ -271,7 +372,9 @@ def trash(pid, kept=None):
     """Delete a paper from the list: its folder (source, layers, model replies, notes) moves to papers/.trash, from
     where it can be moved back (untrash, or by hand) for 30 days (empty_trash). kept: its place in the library, kept
     with it."""
-    to = DATA / "papers" / ".trash" / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
+    if _nonlocal():
+        return repository().backend.trash(pid, kept)
+    to = (repository().backend.root if _custom() else DATA) / "papers" / ".trash" / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
     to.parent.mkdir(parents=True, exist_ok=True)
     pdir(pid).rename(to)
     if kept:
@@ -282,10 +385,12 @@ def trash(pid, kept=None):
 def untrash(pid):
     """A paper deleted last back in the list, as it was (its latest time in papers/.trash), and its place in the
     library as trash kept it ({} when none); None when there is none there, or a paper of that id is listed again."""
+    if _nonlocal():
+        return repository().backend.restore(pid)
     if not valid_id(pid) or pdir(pid).exists():
         return None
     at = re.compile(re.escape(pid) + r"-\d{8}-\d{6}")
-    gone = sorted(d for d in (DATA / "papers" / ".trash").glob(f"{pid}-*") if at.fullmatch(d.name) and (d / "meta.json").exists())
+    gone = sorted(d for d in ((repository().backend.root if _custom() else DATA) / "papers" / ".trash").glob(f"{pid}-*") if at.fullmatch(d.name) and (d / "meta.json").exists())
     if not gone:
         return None
     kept_f = gone[-1] / "library.json"
@@ -304,7 +409,9 @@ TRASH_DAYS = 30
 def empty_trash(days=TRASH_DAYS, now=None):
     """Papers deleted more than `days` ago erased from papers/.trash, by the time in their folder's name (trash's);
     nothing else there is touched. The server does it as it starts. Their names, erased."""
-    root = DATA / "papers" / ".trash"
+    if _nonlocal():
+        return repository().backend.purge((time.time() if now is None else now) - days * 86400)
+    root = (repository().backend.root if _custom() else DATA) / "papers" / ".trash"
     if not root.is_dir():
         return []
     cut = (time.time() if now is None else now) - days * 86400
