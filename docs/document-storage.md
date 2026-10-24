@@ -1,0 +1,11 @@
+# Document storage (local foundation)
+
+A storage backend exchanges detached `Document` values, indexed by document ID. Its public contract is `StorageBackend` in `textfold/documents.py`: get/info/save/list, delete/trash/restore/purge, and get_library/save_library. Source material, generated layers, notes, model replies and unknown extension bytes travel together. Backends own their physical layout; callers do not implement file-level reads against a plugin.
+
+`save` checks the opaque revision token before changing a document. `None` creates only; stale snapshots raise `ConflictError`. A library snapshot has its own revision. Index rows do not load original PDFs or attachments. Implementations must return detached values, preserve unknown extension data, and retain trash until explicit expiry.
+
+The built-in `LocalDirectoryBackend` reads existing `papers/<id>` directories in place. The private legacy codec preserves unchanged bytes, including unknown files and old notes. Saving a detached document writes only changed files, using atomic file replacement; it is not a multi-file database transaction. Existing application helpers keep the upstream local paths and I/O: no temporary generation directory, whole-folder copies, new settings, cloud requests or dependencies. Each model reply reaches the original llm-cache immediately and survives abrupt process termination.
+
+New integrations can use `store.document`, `store.edit` or `DocumentStore`. `store.use_backend` provides explicit scoped embedding for integrations and contract tests; it is process-wide and must not be changed during concurrent requests. File-based parsers can borrow `DocumentStore.workspace`: a direct durable directory locally, or a temporary compatibility workspace with revision checking for a pathless adapter. This bridge is application code, not a plugin requirement. Wiring every legacy importer to a remote service is outside this foundation change.
+
+No library relocation, migration, notes format change, synchronization or cloud UI is enabled here. Existing `thread` arrays, Markdown update imports and turn deletion retain upstream behavior. Location selection and optional cloud storage are separate follow-ups.
