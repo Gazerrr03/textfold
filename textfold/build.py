@@ -123,8 +123,8 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
         head, scripts = app_assets(head), app_assets(scripts)
         side, cls, katex = '<aside id="sidebar" class="collapsed"></aside>', "app", APP_ASSETS + "katex/"
     else:
-        head = fonts_head(assets) + f"<style>{(WEB / 'reader.css').read_text(encoding="utf-8")}</style>"
-        scripts = f"<script>{(WEB / 'i18n.js').read_text(encoding="utf-8")}</script><script>{(WEB / 'reader.js').read_text(encoding="utf-8")}</script>"
+        head = fonts_head(assets) + f"<style>{(WEB / 'reader.css').read_text(encoding='utf-8')}</style>"
+        scripts = f"<script>{(WEB / 'i18n.js').read_text(encoding='utf-8')}</script><script>{(WEB / 'reader.js').read_text(encoding='utf-8')}</script>"
         side, cls, katex = "", "static", (assets + "katex/") if assets else None
         if not assets and (_has_tex(doc) or (saved and saved.get("notes"))):   # (an answer's formulas need it too)
             head += _katex_inside()
