@@ -6,11 +6,30 @@ stay whole. Every token remembers whether whitespace followed it in the
 source, so a verbatim level renders exactly as the author wrote it.
 """
 import re
+import unicodedata
 
 # a token: {"t": text} or {"a": atom id}; optional "s": 1 (space after), "f": font classes
 # a CJK character (Han or kana) is a token of its own (the morph slides characters, as ThoughtDAG's Chinese plaques do)
 CJK = "\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f"  # kana too: Japanese is not spaced
-WORD = re.compile(rf"[{CJK}]|\d+(?:[.,]\d+)+%?|[^\W_{CJK}]+(?:['’\-][^\W_{CJK}]+)*|\S", re.U)
+
+
+def _marks():
+    """Combining marks (Unicode category M), which re's \\w does not match: the vowel signs of Hindi
+    (पहला is प ह ल + ा) would otherwise split a word into pieces."""
+    out, start = [], None
+    for cp in range(0x300, 0x10000):
+        is_mark = unicodedata.category(chr(cp)).startswith("M")
+        if is_mark and start is None:
+            start = cp
+        elif not is_mark and start is not None:
+            out.append(f"{chr(start)}-{chr(cp - 1)}")
+            start = None
+    return "".join(out)
+
+
+MARKS = _marks()
+_LETTER = rf"[^\W_{CJK}](?:[^\W_{CJK}]|[{MARKS}])*"
+WORD = re.compile(rf"[{CJK}]|\d+(?:[.,]\d+)+%?|{_LETTER}(?:['’\-]{_LETTER})*|\S", re.U)
 ABBREV = {
     "e", "g", "i", "al", "etc", "vs", "cf", "fig", "figs", "eq", "eqs", "sec", "secs", "tab",
     "ref", "refs", "no", "approx", "resp", "ca", "viz", "dr", "mr", "ms", "prof", "st", "jr",
@@ -48,7 +67,8 @@ def tokenize_text(text, font=None, out=None):
 def split_sentences(toks):
     """Sentence ranges [start, end) over a token list."""
     cjk_stops = {"。", "！", "？"}
-    stops = {".", "?", "!"} | cjk_stops
+    dandas = {"।", "॥"}   # Hindi's full stops; Devanagari has no capitals to start the next sentence
+    stops = {".", "?", "!"} | cjk_stops | dandas
     closers = {")", "]", "}", "）", "］", "｝", "】", "〕", "〉", "》", "」", "』", "”", '"', "’", "'"}
     tails = stops | closers
     bounds, start, n = [], 0, len(toks)
@@ -71,7 +91,8 @@ def split_sentences(toks):
         cjk = any(toks[j].get("t") in cjk_stops for j in range(i, end)) or is_cjk(prev) or is_cjk(head)
         if cjk and t == "." and i == start + 1 and prev.isdigit():
             cjk = False   # "1.研究背景": a number and its stop open a heading or a list item, they end no sentence
-        if cjk or (toks[end - 1].get("s") and ("a" in nxt or re.match(r"[A-Z0-9(\[“\"‘]", head))):
+        danda = any(toks[j].get("t") in dandas for j in range(i, end))
+        if cjk or danda or (toks[end - 1].get("s") and ("a" in nxt or re.match(r"[A-Z0-9(\[“\"‘]", head))):
             bounds.append((start, end))
             start = end
     if start < n:

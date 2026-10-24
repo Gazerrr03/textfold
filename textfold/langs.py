@@ -58,7 +58,7 @@ def cjk(code):
 
 def stop(code):
     """The full stop that joins the takeaway and the reason in Brief."""
-    return "。" if cjk(code) else "."
+    return "。" if cjk(code) else "।" if LANGS[code][2] == "devanagari" else "."
 
 
 def punctuation_rule(code):
