@@ -105,7 +105,13 @@ class LocalDirectoryBackend:
             old = document._legacy if document._legacy else LegacyLayout.read_folder(folder)
             files = DirectoryFiles(folder)
             for key in old.keys() - raw.keys():
-                files.path(key).unlink(missing_ok=True)
+                path = files.path(key)
+                path.unlink(missing_ok=True)
+                parent = path.parent
+                while parent != folder:
+                    try: parent.rmdir()
+                    except OSError: break
+                    parent = parent.parent
             for key, value in raw.items():
                 if old.get(key) != value:
                     files.write(key, value)
