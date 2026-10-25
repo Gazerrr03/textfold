@@ -16,9 +16,9 @@ The others are reported when found, but not driven yet. A model id is ThoughtDAG
 `claude/claude-code/opus`, `codex/codex/<model>`, `pi/<provider>/<model>`; CodeBuddy's `codebuddy/codebuddy/<model>`.
 Agents run here as one-shot text generators: no tools, no session, a scratch working directory. A question about a
 text can be looked up on the web (tools=True: the switch beside a question; models.ask_spec): the agent's own web
-tools, its own system prompt with ours after it, and nothing that reads or changes a file or runs a command (Claude
-Code and CodeBuddy: WebSearch and WebFetch alone, no MCP server; Codex: its web search in its read-only sandbox; Pi:
-its extensions' tools, none of its own). Still no session, and the scratch directory to start in.
+tools, its own system prompt with ours after it, and nothing that changes a file (Claude Code and CodeBuddy: WebSearch
+and WebFetch alone, no MCP server; Pi: its extensions' tools, none of its own; Codex: its web search, in the read-only
+sandbox it always runs in, where it may read but writes nothing). Still no session, and the scratch directory to start in.
 """
 import glob
 import json

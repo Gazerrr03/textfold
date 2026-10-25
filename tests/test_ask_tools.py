@@ -1,7 +1,7 @@
 """A question looked up on the web (#66). An agent on this computer runs as a one-shot text generator: no tools, a
 scratch folder. With the switch beside a question on (a passage's or the whole text's, as the reader needs it), it
-answers with its own web tools and nothing else: no tool that reads or changes a file or runs a command, no MCP
-server, its own system prompt with ours after it. A service has no tools of its own: nothing changes for it. The answer
+answers with its own web tools: nothing that changes a file (Claude Code, CodeBuddy and Pi no tool that reads one or
+runs a command either, no MCP server; Codex its read-only sandbox), its own system prompt with ours after it. A service has no tools of its own: nothing changes for it. The answer
 cites the pages it drew on as links, says it was made so, and its time to answer is longer. The commands are looked
 at, not run: no agent and no network.
 

@@ -178,7 +178,8 @@ text is opened, shown only where questions go to an agent: `app.js` askAgent; `/
 Then the agent looks it up on the web with its own tools, and nothing else (`agents.py`): Claude Code with
 `--tools WebSearch,WebFetch`, allowed without asking and no MCP server; CodeBuddy the same, with its StructuredOutput;
 Codex with `--search` in its read-only sandbox; Pi with `--no-builtin-tools`, its extensions' tools alone. None of them
-reads or changes a file or runs a command; each keeps its own system prompt, ours appended. The prompt adds that what
+changes a file (Claude Code, CodeBuddy and Pi read none and run no command either; Codex may read, in its sandbox); each
+keeps its own system prompt, ours appended. The prompt adds that what
 comes from outside the paper ends with [[?]], each page drawn on given as a Markdown link (the reader draws links in
 answers: `reader.js`, `mdLite`); such an answer may take up to 15 minutes, is kept apart from one without the web
 (`llm.call`'s key), and its turn keeps `tools: true`. A service (an API) has no tools of its own: there is no switch
