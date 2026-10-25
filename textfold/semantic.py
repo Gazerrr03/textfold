@@ -206,11 +206,7 @@ def _equation(soup, math, number=None, eid=None):
         tr.append(soup.new_tag("td", attrs={"class": cls}))
     tr.find_all("td")[1].append(math)
     if number:
-        no = soup.new_tag("td", attrs={"class": "ltx_eqn_cell ltx_eqn_eqno"})
-        tag = soup.new_tag("span", attrs={"class": "ltx_tag ltx_tag_equation"})
-        tag.string = number
-        no.append(tag)
-        tr.append(no)
+        tr.append(_eqno(soup, number))
     tbody = soup.new_tag("tbody")
     tbody.append(tr)
     t.append(tbody)
@@ -248,6 +244,35 @@ def _numbered(latex, auto):
     return latex, number or ("" if off or not auto else None), label.group(1).strip() if label else None
 
 
+def _eqno(soup, number):
+    no = soup.new_tag("td", attrs={"class": "ltx_eqn_cell ltx_eqn_eqno"})
+    tag = soup.new_tag("span", attrs={"class": "ltx_tag ltx_tag_equation"})
+    tag.string = number
+    no.append(tag)
+    return no
+
+
+def _label_id(label):
+    """A labelled formula's id: eq-heat for \\label{eq:heat}, and for \\label{heat}."""
+    name = re.sub(r"[^\w-]+", "-", label).strip("-")
+    return name if name.startswith("eq-") else "eq-" + name
+
+
+def _ref(m, labels):
+    """What \\eqref{x} (m: a REF match) reads: the number of the formula x names, (2); \\ref{x} without the brackets."""
+    number = labels.get(m.group(2).strip(), ("(?)",))[0]
+    return number if m.group(1) else number.strip("()")
+
+
+def _ref_link(soup, m, labels):
+    """$\\eqref{eq:heat}$ alone: "(1)", a link to the formula, as arXiv's "Eq. (1)"."""
+    a = soup.new_tag("a", attrs={"class": "ltx_ref"})
+    if m.group(2).strip() in labels:
+        a["href"] = "#" + labels[m.group(2).strip()][1]
+    a.string = _ref(m, labels)
+    return a
+
+
 def _math(soup, root):
     """markdown-it's and Pandoc's math (span.math.inline, div.math.block, span.math.display) becomes MathML; MathML
     that came as such keeps its LaTeX annotation as its alttext. markdown-it's display formulas (a Markdown file's $$)
@@ -262,21 +287,15 @@ def _math(soup, root):
             if number is None:
                 n += 1
                 number = f"({n})"
-            if label:   # its id: eq-heat for \label{eq:heat}, and for \label{heat}
-                name = re.sub(r"[^\w-]+", "-", label).strip("-")
-                labels[label] = (number, name if name.startswith("eq-") else "eq-" + name)
+            if label:
+                labels[label] = (number, _label_id(label))
         found.append((el, display, latex, number, label))
-    ref = lambda m: labels.get(m.group(2).strip(), ("(?)",))[0] if m.group(1) else labels.get(m.group(2).strip(), ("?",))[0].strip("()")
     for el, display, latex, number, label in found:
         alone = None if display else REF.fullmatch(latex.strip())
-        if alone:   # $\eqref{eq:heat}$: "(1)", a link to the formula, as arXiv's "Eq. (1)"
-            a = soup.new_tag("a", attrs={"class": "ltx_ref"})
-            if alone.group(2).strip() in labels:
-                a["href"] = "#" + labels[alone.group(2).strip()][1]
-            a.string = ref(alone)
-            el.replace_with(a)
+        if alone:
+            el.replace_with(_ref_link(soup, alone, labels))
             continue
-        m = tex_math(REF.sub(lambda r: r"\text{" + ref(r) + "}", latex), display)
+        m = tex_math(REF.sub(lambda r: r"\text{" + _ref(r, labels) + "}", latex), display)
         el.replace_with(_equation(soup, m, number, label and labels[label][1]) if display else m)
     for m in root.find_all("math"):
         if not m.get("alttext"):
@@ -287,6 +306,41 @@ def _math(soup, root):
             ph = soup.new_tag("span")
             m.replace_with(ph)
             ph.replace_with(_equation(soup, m))
+
+
+def upgrade(soup, root):
+    """A Markdown document stored before 0.10.34, read as one stored now: each display formula numbered (its \\label,
+    \\tag and environment read as _math reads them), $\\eqref{}$ its number and a link, every formula marked for KaTeX
+    (pf-tex), every table ruled (pf-grid). Only how they look: its paragraphs keep their ids (ids.freeze marked them)
+    and their words, so their levels and notes stay theirs, and the file stays as it was stored (parse.py)."""
+    labels, n, eqs = {}, 0, []
+    for t in root.find_all("table", class_="ltx_equation"):
+        m = t.find("math")
+        if m is None or not m.get("alttext") or t.find(class_="ltx_eqn_eqno"):
+            continue
+        latex, number, label = _numbered(m["alttext"], auto=True)
+        if number is None:
+            n += 1
+            number = f"({n})"
+        if label:
+            labels[label] = (number, t.get("id") or _label_id(label))
+            t["id"] = labels[label][1]
+        eqs.append((t, m, latex, number))
+    for t, m, latex, number in eqs:
+        m["alttext"] = latex
+        if number:
+            t.find("tr").append(_eqno(soup, number))
+    for m in root.find_all("math"):
+        if not m.get("alttext"):
+            continue
+        alone = None if m.get("display") == "block" else REF.fullmatch(m["alttext"].strip())
+        if alone:
+            m.replace_with(_ref_link(soup, alone, labels))
+            continue
+        m["alttext"] = REF.sub(lambda r: r"\text{" + _ref(r, labels) + "}", m["alttext"])
+        m["class"] = ["pf-tex"]
+    for t in root.find_all("table", class_="ltx_tabular"):
+        t["class"] = [c for c in t.get("class", []) if c != "pf-grid"] + ["pf-grid"]
 
 
 # ── footnotes ─────────────────────────────────────────────────────────

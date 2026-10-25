@@ -119,6 +119,52 @@ class Drawn(unittest.TestCase):
         self.assertIn('<table class="ltx_tabular ltx_centering pf-grid">', semantic.normalize(html, sizes=True))
 
 
+def eq_table(latex):
+    return ('<table class="ltx_equation ltx_eqn_table"><tbody><tr class="ltx_equation ltx_eqn_row"><td class="ltx_eqn_cell '
+            'ltx_eqn_center_padleft"></td><td class="ltx_eqn_cell ltx_align_center"><math alttext="' + latex + '" display="block">'
+            '<mi>u</mi></math></td><td class="ltx_eqn_cell ltx_eqn_center_padright"></td></tr></tbody></table>')
+
+
+# a Markdown document as 0.10.33 stored it: no numbers, no marks, \label in its formula, $\eqref{}$ a formula
+STORED = ('<article class="ltx_document"><section class="ltx_section" id="sec-a"><h2 class="ltx_title">A</h2>'
+          '<p class="ltx_p">The rate is <math alttext="\\alpha"><mi>α</mi></math>, and see <math alttext="\\eqref{eq:heat}">'
+          '<mi>x</mi></math>.</p>' + eq_table("u_t = \\alpha u_{xx} \\label{eq:heat}") + '<p class="ltx_p">Then two more.</p>'
+          + eq_table("a = b \\notag") + eq_table("\\begin{align} c &amp;= d \\end{align}")
+          + '<figure class="ltx_table"><table class="ltx_tabular ltx_centering"><tr><td class="ltx_td">x</td></tr></table></figure>'
+          '</section></article>')
+
+
+class Stored(unittest.TestCase):
+    """A Markdown document stored before 0.10.34 reads as one stored now (semantic.upgrade, from parse), with no new
+    import: its paragraphs as they were, so its levels and notes stay where they are."""
+    def test_its_formulas_are_numbered_and_drawn_and_its_tables_ruled(self):
+        doc = parse(STORED, {"id": "md-old"})
+        eqs = [b for b in doc["blocks"] if b["k"] == "eq"]
+        self.assertEqual([numbers(b["html"]) for b in eqs], [["(1)"], [], ["(2)"]])
+        self.assertEqual(eqs[0]["id"], "eq-heat")
+        self.assertIn(r'alttext="\begin{aligned} c &amp;= d \end{aligned}"', eqs[2]["html"])
+        self.assertNotIn(r"\label", eqs[0]["html"])
+        self.assertTrue(all('class="pf-tex"' in b["html"] for b in eqs))
+        atoms = list(doc["atoms"].values())
+        self.assertIn('class="pf-tex"', atoms[0]["html"])
+        self.assertEqual((atoms[1]["kind"], atoms[1]["html"]), ("ref", '<a class="ltx_ref" href="#eq-heat">(1)</a>'))
+        self.assertIn("pf-grid", next(b for b in doc["blocks"] if b["k"] == "fig")["html"])
+
+    def test_its_paragraphs_stay_as_they_were(self):
+        with mock.patch("textfold.parse.upgrade", lambda *a: None):
+            before = parse(STORED, {"id": "md-old"})
+        after = parse(STORED, {"id": "md-old"})
+        self.assertEqual({k: u["toks"] for k, u in before["units"].items()}, {k: u["toks"] for k, u in after["units"].items()})
+        self.assertEqual(list(before["atoms"]), list(after["atoms"]))
+
+    def test_only_a_markdown_document_stored_before(self):
+        self.assertEqual([numbers(b["html"]) for b in parse(STORED, {"id": "2512.23916"})["blocks"] if b["k"] == "eq"], [[], [], []])
+        html, _ = markdown.to_html(TEXT)
+        new = semantic.normalize(html, sizes=True)
+        with mock.patch("textfold.parse.upgrade", side_effect=AssertionError("read twice")):
+            parse(new, {"id": "md-new"})   # (stored by 0.10.34: already so)
+
+
 class Page(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()

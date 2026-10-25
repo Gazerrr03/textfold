@@ -382,7 +382,10 @@
     });
   }
   for (const a of Object.values(A)) if (a.kind === 'math') a.html = drawTex(a.html);
-  for (const b of D.blocks) if (b.html) b.html = drawTex(b.html);
+  for (const b of D.blocks) { if (b.html) b.html = drawTex(b.html); if (b.title) b.title = drawTex(b.title); }   // (a box's title too)
+  // a section's title keeps its MathML, which mathify reads for the formulas of its translations: drawn as it is shown
+  const drawnTitles = new Map();
+  const titleTex = (html) => { if (!drawnTitles.has(html)) drawnTitles.set(html, drawTex(html)); return drawnTitles.get(html); };
 
   // ── a diagram written in Mermaid (semantic.py: pre.pf-mermaid, its source): drawn by Mermaid, loaded only for a text
   //    that has one, from where the page keeps it (D.mermaid, as D.katex), light or dark as the page is, and drawn
@@ -668,7 +671,7 @@
       if (tk.s) st.append(mk && mk.has(i) && mk.has(i + 1) ? h('span', `hlsp${mk.get(i) === mk.get(i + 1) ? mk.get(i) : ''}`, ' ') : ' ');
     });
   }
-  function chunkTitle(c) { const z = trOf(c); return z ? mathify(z.title, c.html) : c.html; }
+  function chunkTitle(c) { const z = trOf(c); return titleTex(z ? mathify(z.title, c.html) : c.html); }
 
   // Every unit at the current level: the ones in `hot` as tokens, the ones in `band` as text, and the rest
   // later. A unit far from the viewport keeps its old drawing for now (stale) and is redrawn when the browser

@@ -19,7 +19,7 @@ import re
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from .latexml_safe import make_safe
-from .semantic import _equation
+from .semantic import _equation, upgrade
 from .tokens import plain, split_sentences, tokenize_text
 
 SECTION_LEVEL = {
@@ -393,6 +393,10 @@ def parse(html, meta, made=None):
         if (p.name == "p" and "ltx_p" in p.get("class", []) and not p.find_parent(["table", "figure"])
                 and [x for x in p.contents if not (isinstance(x, NavigableString) and not x.strip())] == [m]):
             p.replace_with(_equation(soup, m.extract()))
+    # a Markdown document stored before 0.10.34: its formulas numbered and drawn, its tables ruled, as a new one is
+    # (semantic.upgrade), with no new import
+    if str(meta.get("id", "")).startswith("md-") and not art.find(class_=["pf-tex", "pf-grid"]):
+        upgrade(soup, art)
     make_safe(art)   # arXiv's page reaches the reader as it is, so what could run script is taken out here (latexml_safe.py)
     doc.images = sorted({img["src"] for img in art.find_all("img") if img.get("src") and not img["src"].startswith("data:")})
     for ch in art.find_all(recursive=False):
