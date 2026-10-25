@@ -384,7 +384,13 @@ figure.fig[data-l="1"] figcaption.u { padding: 0; }
 figure.fig[data-l="2"]:has(.ltx_flex_cell + .ltx_flex_cell) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 figure.fig[data-l="2"] .ltx_flex_cell, figure.fig[data-l="1"] .ltx_flex_cell { min-width: 0; }
 figure.fig[data-l="2"] .fbody :is(.ltx_minipage, .ltx_parbox), figure.fig[data-l="1"] .fbody :is(.ltx_minipage, .ltx_parbox) { max-width: 100%; }
-figure.fig[data-l="1"] .ltx_flex_figure { flex-wrap: nowrap; gap: 6px; }
+figure.fig[data-l="1"] /* a table from Markdown, a web page or a document (semantic.py: pf-grid), as Typora draws one: as wide as the text,
+   in its type, every cell ruled, the header and every other row shaded. A paper's keeps its booktabs rules */
+.ltx_tabular.pf-grid { display: table; width: 100%; font-family: var(--text); font-size: calc(15px * var(--fs)); line-height: 1.5; }
+.pf-grid .ltx_td { padding: 6px 13px; border: 1px solid var(--line); }
+.pf-grid .ltx_th { font-weight: 650; }
+.pf-grid thead tr, .pf-grid tbody tr:nth-child(2n) { background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+.ltx_flex_figure { flex-wrap: nowrap; gap: 6px; }
 figure.fig[data-l="1"] .ltx_flex_break { display: none; }
 figure.fig[data-l="2"] .ltx_flex_cell .ltx_caption > :not(.ltx_tag) { display: none; }
 figure.fig[data-l="1"] .ltx_flex_cell .ltx_caption, figure.fig[data-l="1"] .ltx_flex_cell:not(:has(img, svg)) { display: none; }
@@ -433,7 +439,12 @@ figure.fig[data-l="0"] .flabel { font-weight: 600; color: var(--muted); }
 .ltx_font_typewriter { font-family: var(--mono); font-size: .88em; }
 .ltx_font_smallcaps { font-variant: small-caps; }
 .ltx_font_upright { font-style: normal; }
-math { font-size: 1.04em; }
+/* formulas in TeX's own type, as LaTeX and Typora set them: MathML in Latin Modern Math (vendor/fonts), a formula
+   written in LaTeX drawn by KaTeX (reader.js drawTex), each a little larger than the words around it, so that its
+   letters stand as high as theirs (Computer Modern's x-height is lower than Source Serif's) */
+math { font-family: 'Latin Modern Math', 'STIX Two Math', math; font-size: 1.1em; }
+.katex { font-size: 1.1em; }
+.eq .katex-display { margin: 0; }
 .ltx_tabular { border-collapse: collapse; display: inline-table; font-family: var(--sans); font-size: calc(13px * var(--fs)); line-height: 1.4; }
 .ltx_tabular.ltx_centering { display: table; margin-inline: auto; }
 .ltx_thead, .ltx_tbody, .ltx_tfoot { display: table-row-group; }
@@ -448,7 +459,14 @@ math { font-size: 1.04em; }
 .ltx_eqn_cell { padding: .25rem .2rem; }
 .ltx_eqn_center_padleft, .ltx_eqn_center_padright { width: 50%; }
 .ltx_eqn_left_padright, .ltx_eqn_right_padleft { width: 100%; }
-.ltx_eqn_eqno { white-space: nowrap; width: 3em; text-align: right; color: var(--muted); font-size: .85em; font-family: var(--sans); }
+/* an equation's number, (1), on the right in the type of the formula, as Typora and LaTeX set it */
+.ltx_eqn_eqno { white-space: nowrap; width: 3em; text-align: right; color: var(--ink-2); font-family: KaTeX_Main, 'Latin Modern Math', var(--serif); font-size: 1.1em; }
+/* a table from Markdown, a web page or a document (semantic.py: pf-grid), as Typora draws one: as wide as the text,
+   in its type, every cell ruled, the header and every other row shaded. A paper's keeps its booktabs rules */
+.ltx_tabular.pf-grid { display: table; width: 100%; font-family: var(--text); font-size: calc(15px * var(--fs)); line-height: 1.5; }
+.pf-grid .ltx_td { padding: 6px 13px; border: 1px solid var(--line); }
+.pf-grid .ltx_th { font-weight: 650; }
+.pf-grid thead tr, .pf-grid tbody tr:nth-child(2n) { background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
 .ltx_flex_figure { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: .5rem; }
 .ltx_flex_cell { flex: 1 1 0; } .ltx_flex_break { flex-basis: 100%; height: 0; }
 .ltx_rule { display: none; }
@@ -591,6 +609,7 @@ html[lang="zh-TW"] .u[data-l="4"], html[lang="zh-TW"] .u[data-l="3"] { line-heig
 /* ── the reader's notes (docs/notes-format.md) ──────────────── */
 .tk.hl, .tr.hl, .hlsp { background-color: color-mix(in srgb, var(--hl) 78%, transparent); border-radius: 2px; cursor: pointer; }
 .tk.hls, .tr.hls, .hlsp.hls { background-color: color-mix(in srgb, var(--hl) 36%, transparent); }
+.eq.hl { background-color: color-mix(in srgb, var(--hl) 55%, transparent); border-radius: 6px; cursor: pointer; }   /* an equation marked whole */
 .tk.hlk, .tr.hlk, .hlsp.hlk { background-color: color-mix(in srgb, var(--hl-key) 85%, transparent); }
 .tk.hlt, .tr.hlt, .hlsp.hlt { background-color: color-mix(in srgb, var(--hl-take) 90%, transparent); }
 /* a highlight's shade (note.shade: 1 light, 3 deep; the usual 2 is none): its level's colour nearer the page, or

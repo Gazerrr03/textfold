@@ -207,7 +207,11 @@ def prompt(doc, note, question, lang, earlier=(), ui=None, tools=False):
         near = order[max(0, at - 8): at + 9]
         where = (f"They are reading at the {name} level of a zoomable reader, which shows {whose}, and selected text in a "
                  f"paragraph of section {sec_name}.")
-        if level <= 2:
+        if a.get("eq"):   # an equation set apart (reader.js eqEls): the selection is the formula, beside its paragraph
+            where = (f"They are reading at the {name} level of a zoomable reader, which shows {whose}, and selected an "
+                     f"equation set apart from the text in section {sec_name}, next to the paragraph below. The "
+                     "selected text is that equation, in LaTeX.")
+        elif level <= 2:
             where += (" The selection is the model's wording, not the authors': answer from the authors' text below, "
                       "and say so if that text does not bear the summary out.")
         body = f"The paragraph, in the authors' words:\n{plain(unit['toks'], atoms)}"

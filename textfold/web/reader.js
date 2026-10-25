@@ -66,6 +66,7 @@
   const lvBlocks = [];                    // blocks that show or hide by level: equations, raw blocks, title-page leftovers, bare figures
   const chunkOf = {};                     // uid -> chunk
   const headEls = [];                     // [chunk, heading element, stake element]
+  const eqEls = [];                       // the equations set apart, each with the paragraph it goes with (_unit)
   D.chunks.forEach((c) => c.units.forEach((uid) => { chunkOf[uid] = c; }));
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } } };
   // the type as this reader likes it, for every text (kept in this browser): its size, the column's width, the font
@@ -368,6 +369,20 @@
     if (katexLib) { try { katexLib.render(src, el, { throwOnError: false }); } catch { /* keep the source */ } return; }   // loaded: at once, so it is measured drawn
     loadKatex().then((k) => { if (k) try { k.render(src, el, { throwOnError: false }); } catch { /* keep the source */ } });
   }
+  // ── formulas written in LaTeX (semantic.py: math.pf-tex, a Markdown file's): drawn by KaTeX, as Typora draws them
+  //    with MathJax, once, before anything is laid out; the page has KaTeX before this script (build.py). Without it,
+  //    their MathML stays ──
+  const attrText = (x) => x.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+  function drawTex(html) {
+    if (!katexLib || !html.includes('pf-tex')) return html;
+    return html.replace(/<math\b([^>]*)>[\s\S]*?<\/math>/g, (m, attrs) => {
+      const src = /\balttext="([^"]*)"/.exec(attrs);
+      if (!/\bclass="pf-tex"/.test(attrs) || !src) return m;
+      try { return katexLib.renderToString(attrText(src[1]), { displayMode: /\bdisplay="block"/.test(attrs), throwOnError: false }); } catch { return m; }
+    });
+  }
+  for (const a of Object.values(A)) if (a.kind === 'math') a.html = drawTex(a.html);
+  for (const b of D.blocks) if (b.html) b.html = drawTex(b.html);
 
   // ── a diagram written in Mermaid (semantic.py: pre.pf-mermaid, its source): drawn by Mermaid, loaded only for a text
   //    that has one, from where the page keeps it (D.mermaid, as D.katex), light or dark as the page is, and drawn
@@ -491,6 +506,10 @@
     const chunkById = Object.fromEntries(D.chunks.map((c) => [c.id, c]));
     let body = chunksEl, list = null, listId = null, front = null;
     const boxes = [];       // open theorem / definition / proof frames
+    // an equation goes with the paragraph that brings it in (the one before it in its section), or, first in its
+    // section, the one after it: a note on it is that paragraph's (selectionAnchors)
+    let lastU = null;
+    const eqWait = [];
     for (const b of D.blocks) {
       if (b.k === 'box') {
         const cat = b.kind === 'proof' ? 'proof' : /^def/.test(b.kind) ? 'def' : /rem|exa|note|obs/.test(b.kind) ? 'rem' : 'thm';
@@ -504,6 +523,7 @@
       if (b.k === 'box_end') { boxes.pop(); list = null; continue; }
       if (b.k === 'h') {
         boxes.length = 0;
+        lastU = null; eqWait.length = 0;
         const c = chunkById[b.chunk];
         // An empty section whose title is a reference itself ([EB/OL], a URL): the converter read a footnote as a
         // section heading. Full keeps it as written; every folded level drops the section, or Takeaway shows a
@@ -525,6 +545,8 @@
       const target = boxes.length ? boxes[boxes.length - 1] : b.chunk ? body : front;
       if (b.k === 'u') {
         const u = U[b.u];
+        lastU = b.u;
+        for (const e of eqWait.splice(0)) e._unit = b.u;
         if (u.role === 'item') {
           if (!list || listId !== u.list) { list = h('ul', 'list'); listId = u.list; target.append(list); }
           list.append(unitNode(b.u, 'li'));
@@ -550,7 +572,10 @@
       } else if (b.k === 'eq' || b.k === 'raw') {
         list = null;
         const e = h('div', b.k, b.html); e.dataset.id = `${b.k}:${b.id || Math.random().toString(36).slice(2)}`;
-        if (b.k === 'eq') { e.dataset.eq = b.id; e.dataset.chunk = b.chunk; }
+        if (b.k === 'eq') {
+          e.dataset.eq = b.id; e.dataset.chunk = b.chunk; eqEls.push(e);
+          if (lastU) e._unit = lastU; else eqWait.push(e);
+        }
         e.dataset.l = level; lvBlocks.push(e);
         target.append(e);
       }
@@ -1976,6 +2001,21 @@
     }
     return exact.size || soft.size || line.size ? { exact, soft, old, line, sh, lineSh } : null;
   }
+  // an equation's LaTeX: its MathML's (alttext, LaTeXML's and semantic.py's), or KaTeX's annotation
+  const eqTex = (e) => `$${[...e.querySelectorAll('math')].map((m) => m.getAttribute('alttext')
+    || (m.querySelector('annotation[encoding="application/x-tex"]') || {}).textContent || '').filter(Boolean).join(' ')}$`;
+  // the equations of a paragraph's notes on them (anchor.eq): lit whole, in the note's shade, in any language (the
+  // formula is the same in every one); a conversation leaves it as it was, as it leaves words
+  function eqMarks(uid) {
+    const list = (notesOf.get(uid) || []).filter((n) => n.anchor.eq && n.kind !== 'ask');
+    for (const e of eqEls) {
+      if (e._unit !== uid) continue;
+      const n = list.filter((x) => x.anchor.eq === e.dataset.eq).pop();
+      e.classList.toggle('hl', !!n);
+      e.classList.toggle('sh1', !!n && shadeOf(n) === 1);
+      e.classList.toggle('sh3', !!n && shadeOf(n) === 3);
+    }
+  }
   function indexNotes() {
     notesOf.clear();
     for (const n of notes) {
@@ -1988,7 +2028,7 @@
   // the mark of a paragraph (or heading) with notes: a band in the colour of each level its notes were made at, from
   // Full and Brief to Takeaway; a conversation alone leaves it as it was
   function noteBar(el, key) {
-    const tones = new Set((notesOf.get(key) || []).filter((n) => n.kind !== 'ask').map(toneOf));
+    const tones = new Set((notesOf.get(key) || []).filter((n) => n.kind !== 'ask' && !n.anchor.eq).map(toneOf));   // (an equation's: lit itself)
     const inks = ['src', 'key', 'take'].filter((g) => tones.has(g)).map((g) => `var(--lv-${g}-ink)`);
     if (!inks.length) { el.style.removeProperty('--note-bar'); return; }
     const k = inks.length;
@@ -2012,6 +2052,7 @@
       el.classList.toggle('has-notes', notesOf.has(uid));
       noteBar(el, uid);
       if (!el._stale) renderUnit(uid, el._mode === 'tok');
+      eqMarks(uid);
       renderNoteCards(uid);
     }
     capEpoch++;
@@ -2116,6 +2157,13 @@
         : { exact: text.slice(from, to).replace(/[\u200b\s]+/g, ' ').trim(), prefix: '', suffix: '' };
       return { unit: uid, section: chunkOf[uid] ? chunkOf[uid].id : null, lang, level: L >= 1 && L <= 2 && !line && tokens ? 4 : L, tokens, sents, quote, ...(shown ? { shown } : {}) };
     });
+    // an equation set apart, selected: marked whole, as a note on the paragraph it goes with; its quote the formula,
+    // in LaTeX (the model is asked about the formula, with that paragraph)
+    for (const e of eqEls) {
+      if (!e._unit || !range.intersectsNode(e) || !e.getClientRects().length) continue;
+      anchors.push({ unit: e._unit, section: chunkOf[e._unit] ? chunkOf[e._unit].id : null, lang, level, tokens: null, sents: null,
+        eq: e.dataset.eq, quote: { exact: eqTex(e), prefix: '', suffix: '' } });
+    }
     // a section's one-line summary (written by the model; its words are counted in the summary) or its title
     for (const [c, hd, st] of headEls) {
       for (const [el, on] of [[st, 'summary'], [hd, 'title']]) {
@@ -2309,7 +2357,7 @@
       body = `<textarea class="np-text" rows="3" placeholder="${esc(t.n_note_ph)}">${esc(n.text || '')}</textarea>`;
     }
     const q = passage(a), at = a.shown ? lineAt(a) + (lineGone(a) ? ` · ${t.n_line_changed}` : '') : ask ? askedAt(a) : '';
-    npop.innerHTML = `<div class="np-quote${a.shown ? ` ai l${a.level}` : ''}${ask ? ` tn-${toneOf(n)}` : toneCls(n)}"><span class="np-where">${esc(whereA(a))}</span> ${esc(q.length > 160 ? q.slice(0, 157) + '…' : q)}` +
+    npop.innerHTML = `<div class="np-quote${a.shown ? ` ai l${a.level}` : ''}${ask ? ` tn-${toneOf(n)}` : toneCls(n)}"><span class="np-where">${esc(whereA(a))}</span> ${texLite(clipTex(q, 160))}` +
       `${at ? `<span class="np-at">${esc(at)}</span>` : ''}</div>${body}` +
       (draft ? '' : `<div class="np-acts">${!ask && !whole(a) ? `${swatches('shade', toneOf(n), shadeOf(n))}<button type="button" data-act="ask">${esc(t.n_ask)}</button>` : ''}` +
         `<button type="button" data-act="link">${esc(t.n_copy)}</button><button type="button" data-act="del">${esc(t.n_delete)}</button></div>`);
@@ -2592,6 +2640,7 @@
   }
   // the note under a mark: the one whose passage holds the clicked word (the latest, when several do)
   function noteAt(mark) {
+    if (mark.classList.contains('eq')) return (notesOf.get(mark._unit) || []).filter((n) => n.anchor.eq === mark.dataset.eq).pop() || null;
     let piece = mark.closest('[data-id]');
     if (!piece && mark.classList.contains('hlsp')) piece = mark.previousElementSibling;
     const i = piece ? piece._i : undefined, st = mark.closest('.stake');
@@ -3044,7 +3093,10 @@
   const secOf = (a) => (whole(a) ? null : a.unit ? chunkOf[a.unit] : (secs.get(a.section) || {}).c);
   const groupOf = (a) => (whole(a) ? T[ui].n_whole : secOf(a) ? secName(secOf(a)) : '');
   // text with $formulas$ set as math, shortened without cutting a formula in two
-  const clipTex = (x, n) => { if (x.length <= n) return x; let c = x.slice(0, n - 1); if ((c.match(/\$/g) || []).length % 2) c = c.slice(0, c.lastIndexOf('$')); return c.trimEnd() + '…'; };
+  const clipTex = (x, n) => {
+    if (x.length <= n || /^\$[^$]+\$$/.test(x)) return x;   // (an equation alone: whole)
+    let c = x.slice(0, n - 1); if ((c.match(/\$/g) || []).length % 2) c = c.slice(0, c.lastIndexOf('$')); return c.trimEnd() + '…';
+  };
   const texLite = (x) => esc(x).replace(/\$([^$]+)\$/g, (m, t) => `<span class="texsrc">${t}</span>`);
   const secName = (c) => `${c.num ? c.num + ' ' : ''}${(trOf(c) || c).title.replace(/\$/g, '')}`;
   function renderNotesMenu() {
