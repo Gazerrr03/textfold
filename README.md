@@ -61,10 +61,10 @@ Your agent writes more than you have time to read. A [Claude Code mod](https://c
 - **Zoom under your fingers.** Stop halfway, turn back, or open one paragraph alone.
 
 - **Beside the original.** Open a paper's or a PDF's own pages next to the text, each paragraph shown where it stands on its page.
-- **Ask AI about exactly what you read.** Select a passage, or ask about the whole text. The answer comes structured: the short answer first, then the evidence, each point citing the paragraph it rests on, one click away.
+- **Ask AI about exactly what you read.** Select a passage, or ask about the whole text. The answer comes structured: the short answer first, then the evidence, each point citing the paragraph it rests on, one click away. Turn on **Look it up on the web** beside a question, and an agent on your computer searches the web too, with the pages it drew on as links.
 - **Notes that zoom with the text.** Highlight and write in the margin; what you marked stays as you zoom out, and is saved with the page.
 
-- **Your language.** Read in many languages, translated sentence by sentence, with every formula as typeset.
+- **Your language.** Read in many languages, translated sentence by sentence, with every formula as typeset. A document's own levels are written in its own language.
 
 - **Your library, in order.** Search it with ⌘K, keep documents in folders (drag one in, or right-click it), and list it by kind, by when each came in, or by when you last opened it.
 
@@ -173,7 +173,7 @@ Your questions can go to a stronger model than the one that writes the levels: *
 | `F` | focus: the text alone, the bars back at the screen's edge |
 | **Full screen**, in **Aa** | the window fills the screen (⌃⌘F on a Mac, F11 on Windows) |
 | Select text | highlight, write a note, or ask |
-| **Ask the paper**, bottom right | ask about the whole text |
+| **Ask the paper**, bottom right | ask about the whole text (**Look it up on the web**, beside the question: an agent on your computer searches the web too) |
 | `L` | next language |
 | `⌘F` (Ctrl+F) | find words in the text: at the level you read, and in the author's words that level leaves out (the paragraph opens at Full while you are there); Enter and ⇧Enter step through them |
 | `⌘K` (Ctrl+K) or `/` | search your library |
