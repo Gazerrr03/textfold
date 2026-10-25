@@ -2,6 +2,8 @@
 
 The interface speaks fewer of them (web/i18n.js): a text read in one it does not speak has the interface in English.
 Budgets are per script: languages written without spaces count characters, the rest count words.
+Thai has no spaces between words but does between sentences and clauses: it counts characters like Chinese, and joins
+its sentences with a space like English (tokens.py cuts it into syllables for the reader).
 Arabic and Hebrew are left out for now: the reader lays text out left to right.
 """
 
@@ -30,10 +32,12 @@ LANGS = {
     "tr": ("Turkish", "Türkçe", "latin"),
     "id": ("Indonesian", "Bahasa Indonesia", "latin"),
     "vi": ("Vietnamese", "Tiếng Việt", "latin"),
+    "th": ("Thai", "ภาษาไทย", "thai"),
 }
 
 _CHARS = {"takeaway": 28, "reason": 50, "topic": 6, "section": 32, "unit": "characters"}
 _WORDS = {"takeaway": 16, "reason": 26, "topic": 4, "section": 18, "unit": "words"}
+_THAI = {"takeaway": 80, "reason": 130, "topic": 18, "section": 90, "unit": "characters"}   # counted in characters, about as many as the English has
 _HANGUL = {"takeaway": 12, "reason": 22, "topic": 3, "section": 14, "unit": "words"}
 _SYLLABLES = {"takeaway": 24, "reason": 40, "topic": 6, "section": 27, "unit": "words"}   # Vietnamese spaces its syllables
 
@@ -49,7 +53,8 @@ def natives():
 
 def budget(code):
     script = LANGS[code][2]
-    return _CHARS if script == "cjk" else _HANGUL if script == "hangul" else _SYLLABLES if code == "vi" else _WORDS
+    return (_CHARS if script == "cjk" else _HANGUL if script == "hangul" else _THAI if script == "thai"
+            else _SYLLABLES if code == "vi" else _WORDS)
 
 
 def cjk(code):
@@ -67,4 +72,6 @@ def punctuation_rule(code):
         return f"{n} full-width punctuation; no dashes (——)."
     if code == "ja":
         return "Japanese punctuation (、。); no dashes (——)."
+    if code == "th":
+        return "Thai writing: no spaces between the words of a clause, one space between clauses; no em or en dashes as punctuation."
     return f"Standard {n} punctuation; no em or en dashes as punctuation, use commas or colons."

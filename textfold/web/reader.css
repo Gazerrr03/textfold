@@ -476,6 +476,9 @@ math { font-size: 1.04em; }
 html[data-lang="zh"] .u[data-l="4"], html[data-lang="zh"] .u[data-l="3"] { line-height: calc(1.85 * var(--lh, 1)); font-size: calc(17.5px * var(--fs)); }
 html[data-lang="zh"] .u[data-l="2"] { line-height: calc(1.7 * var(--lh, 1)); }
 html[data-lang="zh"] .paper-head h1 { letter-spacing: 0; }
+html[data-lang="th"] .u[data-l="4"], html[data-lang="th"] .u[data-l="3"] { line-height: calc(1.85 * var(--lh, 1)); }   /* (tone marks stand above the line) */
+html[data-lang="th"] .u[data-l="2"] { line-height: calc(1.7 * var(--lh, 1)); }
+html[data-lang="th"] .u[data-l="1"] { line-height: calc(1.6 * var(--lh, 1)); }
 
 /* ── links ──────────────────────────────────────────────── */
 .rel-supports { --rel: var(--rel-supports); } .rel-builds_on { --rel: var(--rel-builds_on); } .rel-qualifies { --rel: var(--rel-qualifies); }
