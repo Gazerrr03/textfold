@@ -771,6 +771,21 @@ window.DR_I18N = (() => {
     "ru": { n_chat: "Спросить текст", n_chat_ph: "Вопрос по всему тексту…", n_chat_hint: "Ответы берутся из текста, с абзацами, на которые они опираются.", n_whole: "Весь текст", n_infer_tip: "Не из текста: собственный вывод модели или общие знания", n_cite_bad: "Эта ссылка не указывает ни на один абзац текста", n_export_pdf_paper: "Экспорт в PDF: текст на уровне «{level}» с заметками", n_starters: ["О чём это, в нескольких предложениях?", "Каковы главные мысли?", "Просят ли меня что-то сделать или решить?", "Что осталось неясным или не сказано?", "Какая часть важнее всего и почему?"], n_pstarters: ["Объясни это проще", "На чём это основано?", "Как это связано с главной мыслью?"] },
     "hi": { n_chat: "पूरे पाठ से पूछें", n_chat_ph: "पूरे पाठ के बारे में पूछें…", n_chat_hint: "उत्तर पाठ से आते हैं, उन अनुच्छेदों के साथ जिन पर वे टिके हैं।", n_whole: "पूरा पाठ", n_infer_tip: "पाठ में नहीं: मॉडल का अपना अनुमान या सामान्य ज्ञान", n_cite_bad: "यह उद्धरण पाठ के किसी अनुच्छेद की ओर संकेत नहीं करता", n_export_pdf_paper: "PDF निर्यात करें: {level} स्तर पर पाठ, नोट्स के साथ", n_starters: ["यह किस बारे में है, कुछ वाक्यों में?", "इसकी मुख्य बातें क्या हैं?", "क्या यह मुझसे कुछ करने या तय करने को कहता है?", "क्या अस्पष्ट रह गया या कहा नहीं गया?", "कौन-सा हिस्सा सबसे ज़रूरी है, और क्यों?"], n_pstarters: ["इसे आसान शब्दों में समझाइए", "यह किस आधार पर कहा गया है?", "यह मुख्य बात से कैसे जुड़ता है?"] },
   };
+  // find in the text (reader.js, ⌘F): its bar (English with the rest, above)
+  const FIND = {
+    zh: { find_ph: "在文中查找", find_n: "{i}/{n}", find_none: "没有找到", find_prev: "上一个（⇧Enter）", find_next: "下一个（Enter）", find_close: "关闭（Esc）" },
+    "zh-Hant": { find_ph: "在文中尋找", find_n: "{i}/{n}", find_none: "沒有找到", find_prev: "上一個（⇧Enter）", find_next: "下一個（Enter）", find_close: "關閉（Esc）" },
+    ja: { find_ph: "本文を検索", find_n: "{i}/{n}", find_none: "見つかりません", find_prev: "前へ（⇧Enter）", find_next: "次へ（Enter）", find_close: "閉じる（Esc）" },
+    ko: { find_ph: "본문에서 찾기", find_n: "{i}/{n}", find_none: "찾을 수 없음", find_prev: "이전 (⇧Enter)", find_next: "다음 (Enter)", find_close: "닫기 (Esc)" },
+    es: { find_ph: "Buscar en el texto", find_n: "{i} de {n}", find_none: "No encontrado", find_prev: "Anterior (⇧Enter)", find_next: "Siguiente (Enter)", find_close: "Cerrar (Esc)" },
+    fr: { find_ph: "Rechercher dans le texte", find_n: "{i} sur {n}", find_none: "Introuvable", find_prev: "Précédent (⇧Entrée)", find_next: "Suivant (Entrée)", find_close: "Fermer (Échap)" },
+    de: { find_ph: "Im Text suchen", find_n: "{i} von {n}", find_none: "Nicht gefunden", find_prev: "Zurück (⇧Enter)", find_next: "Weiter (Enter)", find_close: "Schließen (Esc)" },
+    pt: { find_ph: "Procurar no texto", find_n: "{i} de {n}", find_none: "Não encontrado", find_prev: "Anterior (⇧Enter)", find_next: "Próximo (Enter)", find_close: "Fechar (Esc)" },
+    it: { find_ph: "Cerca nel testo", find_n: "{i} di {n}", find_none: "Nessun risultato", find_prev: "Precedente (⇧Invio)", find_next: "Successivo (Invio)", find_close: "Chiudi (Esc)" },
+    ru: { find_ph: "Найти в тексте", find_n: "{i} из {n}", find_none: "Не найдено", find_prev: "Назад (⇧Enter)", find_next: "Далее (Enter)", find_close: "Закрыть (Esc)" },
+    hi: { find_ph: "पाठ में खोजें", find_n: "{n} में से {i}", find_none: "नहीं मिला", find_prev: "पिछला (⇧Enter)", find_next: "अगला (Enter)", find_close: "बंद करें (Esc)" },
+  };
+  for (const [code, words] of Object.entries(FIND)) Object.assign(S[code], words);
   // text: the document is not a paper, and the questions about it say so
   const STORAGE = {
   "en": {
