@@ -264,13 +264,14 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 25 日：文档用它自己的语言，提问可以上网查，加入泰语。** 文档的各层级用它本身的语言写，语言菜单也用这个名字：中文文档显示为“简体中文”，用中文读时不再让模型把它再翻译成中文一遍。英文和其他语言一样，是一份翻译。提问时打开 **上网查找**，本机的 Agent（Claude Code、Codex、CodeBuddy，或装了网页扩展的 Pi）会搜索、打开网页来回答，用到的网页附上链接；它不会改动任何文件。在设置里选好的文献库文件夹会立刻保存。泰语加入可读的语言。感谢 [@mingrath1](https://github.com/mingrath1)、[@MacMillan1225](https://github.com/MacMillan1225)、[@RocStone](https://github.com/RocStone) 和 [@QAbot-zh](https://github.com/QAbot-zh)。
 - **2026 年 10 月 25 日：在文中查找，画出图表，文献库放在你选的文件夹。** ⌘F（Ctrl+F）在文中查找：查当前层级显示的文字，也查这一层折叠掉的原文，跳到这样一处时，那一段原地展开到全文。Markdown 文件或网页里用 Mermaid 写的图会画出来，页面是浅色就画成浅色，是深色就画成深色。在设置的 **文献库位置** 里，可以把文献库复制到另一个文件夹，以后用那里的；也可以打开一个文件夹里已有的文献库。TextFold 下次启动时切换，原来那份文献库保持原样。感谢 [@adalach](https://github.com/adalach)、[@Yanksi](https://github.com/Yanksi) 和 [@kvistgaard](https://github.com/kvistgaard)。
 - **2026 年 10 月 24 日：高光分深浅；印地语按印地语来读。** 高光仍是划它的那一层的颜色，再分浅、中、深三档：在选中文字上方的工具条里点 **高光** 旁边的圆点，或者打开笔记再改。**Aa** 里每一层的颜色可以从八种里选。把主题卡片拖进笔记时，标题下面的摘要也一起带过去。印地语的词不再被拆开，句子在 danda（।）处结束。公式里 `\text{}` 中的文字照原样显示（50% off，而不是 `50\% off`），Word 公式里的普通文本也不会再让整个公式出错。Markdown 文档的 front matter 按 Quarto 的写法给出作者，不再把作者单位当成作者。Python 包在 Python 3.9、3.10 和 3.11 上又能启动了。感谢 [@vcdim](https://github.com/vcdim)、[@Pharex38](https://github.com/Pharex38) 和 [@adalach](https://github.com/adalach)。
-- **2026 年 10 月 23 日：链接一直指得准；Windows 上找得到 WorkBuddy。** 段落和章节的 id 在文档的整个生命周期里都不变：改了文字、PDF 重新转换、TextFold 升级以后都一样。所以从 Obsidian 或笔记里点过来的链接，还能打开原来的地方。指向已经不在文中的段落的链接，会打开它原来所在的章节，并提示一句。在 Windows 上，WorkBuddy 5.8 又能找到了，装在哪个盘都行。感谢 [@adalach](https://github.com/adalach) 和 [@LyotoDS](https://github.com/LyotoDS)。
 
 <details>
 <summary>更早</summary>
 
+- **2026 年 10 月 23 日：链接一直指得准；Windows 上找得到 WorkBuddy。** 段落和章节的 id 在文档的整个生命周期里都不变：改了文字、PDF 重新转换、TextFold 升级以后都一样。所以从 Obsidian 或笔记里点过来的链接，还能打开原来的地方。指向已经不在文中的段落的链接，会打开它原来所在的章节，并提示一句。在 Windows 上，WorkBuddy 5.8 又能找到了，装在哪个盘都行。感谢 [@adalach](https://github.com/adalach) 和 [@LyotoDS](https://github.com/LyotoDS)。
 - **2026 年 10 月 23 日：划了什么就亮什么。** 在关键句和要点层划的高光，选中的字全部亮起，模型写的词也亮。以前只亮由原文来的词，只选了模型的话时一个都不亮。每层一种颜色：全文和简述是黄色，关键句是紫色，要点是蓝色。层与层不再互相点亮，**保留我的高光** 照旧把原文的高光带到关键句和要点层。笔记框里按 Enter 保存并关闭，Shift+Enter 换行（手机上按 Enter 换行）。换一篇文档时不再重新下载应用的脚本和样式，在服务器上部署、用手机读时最明显。感谢 [@adalach](https://github.com/adalach) 和 [@LumenYoung](https://github.com/LumenYoung)。
 - **2026 年 10 月 22 日：精确转换后语言和笔记都在；手机上更好读。** PDF 重新精确转换后，原来有的每种语言都会按新文本重新生成，你在上面做的笔记也会跟着原文找到新的位置。快速转换时的翻译不会再落到新文本上（显示为已过期，而且对不上段落）。过期的翻译在语言菜单最上面有 **更新**。在手机上，打开侧栏的按钮不再压住标志，很宽的公式在自己的框里横向滚动。Markdown 文档和转换来的 PDF 里的长公式在任何屏幕上都保留公式框，在列表里也会显示。指向拆开的段落后半部分的 `textfold://` 链接能打开了。感谢 [@LumenYoung](https://github.com/LumenYoung) 和 [@adalach](https://github.com/adalach)。
 - **2026 年 10 月 22 日：按 TeX 原样显示的图；全屏。** arXiv 论文里由浏览器排字的图（TikZ 画的图）有时字会溢出框，arXiv 自己的网页也一样。这类图下面有一个按钮，点了就从论文的 PDF 里取 TeX 排好的原图，不点就不下载；换过的图下面可以一键换回来。**Aa** 里可以 **全屏**；对照原文时也能打开主题层的导图。简述层里进入下一层的词和其他词的深浅差小了一些，纸张风格的字色和默认风格一致。
