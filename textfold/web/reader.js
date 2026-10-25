@@ -56,6 +56,8 @@
   let level = 4;
   let lang = 'en';
   const localLevel = new Map();           // uid -> level the reader opened it to
+  const findMarks = new Map();            // uid -> Map(piece id -> 1, 2 for the one stepped to): the words found (⌘F)
+  const finder = { open: false, q: '', hits: [], at: -1, opened: null };   // (opened: the paragraph a step opened at Full)
   const unitEl = new Map();               // uid -> element
   const spans = new Map();                // uid -> Map(piece id -> span)
   const figOf = new Map();                // caption uid -> figure element
@@ -200,6 +202,8 @@
       seen.set(base, n + 1);
       x.id = n ? `${base}#${n}` : base;
     }
+    const fm = findMarks.get(uid);   // the words found (find in the text, below)
+    if (fm) for (const x of out) x.fd = fm.get(x.id) || 0;
     return out;
   }
 
@@ -231,8 +235,9 @@
       el.className = 'tk' + (p.gap ? ' gap' : '') + atCls(t) + (t.f ? ' ' + t.f : '');
       el._base = el.className;
     }
-    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + hlCls(p);
+    el.className = el._base + (p.lead ? ' lead' : '') + (p.kept ? ' kept' : '') + hlCls(p) + fdCls(p);
   }
+  const fdCls = (p) => (p.fd ? (p.fd === 2 ? ' fd fdc' : ' fd') : '');
 
   // where a line may break between two pieces written without a space: between Chinese characters yes (except
   // before closing or after opening punctuation), inside a Latin word or formula group no
@@ -288,8 +293,9 @@
       else if (group) { group.appendChild(s); group = null; }
       else frag.appendChild(s);
       if (space) {   // a space inside a highlight is highlighted too
-        const both = p.hl && !last && pcs[n + 1].hl;
-        frag.appendChild(both ? h('span', `hlsp${p.hl === pcs[n + 1].hl && p.sh === pcs[n + 1].sh ? hlCls(p).replace(' hl', '') : ''}`, ' ') : document.createTextNode(' '));
+        const both = p.hl && !last && pcs[n + 1].hl, found = p.fd && !last && pcs[n + 1].fd;
+        frag.appendChild(both ? h('span', `hlsp${p.hl === pcs[n + 1].hl && p.sh === pcs[n + 1].sh ? hlCls(p).replace(' hl', '') : ''}`, ' ')
+          : found ? h('span', `fdsp${p.fd === 2 && pcs[n + 1].fd === 2 ? ' fdc' : ''}`, ' ') : document.createTextNode(' '));
       }
     });
     el._tx.replaceChildren(frag);
@@ -302,11 +308,11 @@
     const flush = () => { if (buf) html += run ? `<span class="${run}">${buf}</span>` : buf; buf = ''; };
     pcs.forEach((p, n) => {
       const t = p.tok || {};
-      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${hlCls(p)}`;
+      const cls = p.gap ? 'tr gap' : `tr${p.lead ? ' lead' : ''}${p.kept ? ' kept' : ''}${t.f ? ' ' + t.f : ''}${hlCls(p)}${fdCls(p)}`;
       if (cls !== run) { flush(); run = cls; }
       buf += p.gap ? '…' : t.a ? A[t.a].html : t.x ? `<span class="texsrc">${esc(t.x)}</span>` : esc(t.t);
       if (n < pcs.length - 1 && (p.gap || t.s || pcs[n + 1].gap)) {
-        if (p.hl && !pcs[n + 1].hl) { flush(); run = null; }   // a highlight ends on its last word, not the space after it
+        if ((p.hl && !pcs[n + 1].hl) || (p.fd && !pcs[n + 1].fd)) { flush(); run = null; }   // a highlight ends on its last word, not the space after it
         buf += ' ';
       }
     });
@@ -789,6 +795,7 @@
   function done() {
     busy = false;
     document.documentElement.classList.remove('morphing');
+    findStale();
     if (mapReady) mapSync();
     relayout();
     refreshStale();
@@ -3952,6 +3959,7 @@ math { font-size: 1.05em; }
   bar.setAttribute('aria-valuemin', '0');
   bar.setAttribute('aria-valuemax', '4');
   function updateBar() {
+    findStale();
     if (mapReady) { tview.hidden = level !== 0; mapSync(); savePosSoon(); }
     barButtons().forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.l === level)));
     bar.setAttribute('aria-valuenow', String(level));
@@ -4321,6 +4329,168 @@ math { font-size: 1.05em; }
     kick();
   });
   addEventListener('gestureend', (e) => { e.preventDefault(); release(); });
+  // ── find in the text (⌘F, Ctrl+F) ────────────────────────────────────
+  // The words as the page reads them, each paragraph at its level (the model's line at Key, Takeaway and Topic), and
+  // the author's words that level leaves out: a step to one of those opens its paragraph at Full in place, as a note's
+  // does. Section titles too. Case and accents aside. Enter and ⇧Enter (⌘G, ⇧⌘G) step through them, Esc closes.
+  const fbar = h('div', 'findbar'), finput = h('input'), fcount = h('span', 'fd-n');
+  fbar.hidden = true;
+  fbar.setAttribute('role', 'search');
+  finput.type = 'text';
+  finput.enterKeyHint = 'search';
+  finput.spellcheck = false;
+  const fbtn = (f, text) => { const b = h('button', '', text); b.type = 'button'; b.dataset.f = f; return b; };
+  fbar.append(finput, fcount, fbtn('prev', '↑'), fbtn('next', '↓'), fbtn('close', '×'));
+  document.body.append(fbar);
+  const fold = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // the places a unit's pieces hold the words k (folded): the pieces of each
+  function hitsIn(pcs, k) {
+    let s = '';
+    const at = pcs.map((p, n) => {
+      const a = s.length;
+      s += p.gap ? '' : fold(typeof p.tok === 'string' ? p.tok : tokPlain(p.tok));
+      const b = s.length;
+      if (n < pcs.length - 1 && (p.gap || (p.tok && p.tok.s) || pcs[n + 1].gap)) s += ' ';
+      return [a, b];
+    });
+    const out = [];
+    for (let i = s.indexOf(k); i >= 0; i = s.indexOf(k, i + k.length)) out.push(pcs.filter((p, n) => at[n][1] > i && at[n][0] < i + k.length));
+    return out;
+  }
+  // every place in reading order: { uid, ids (its pieces), open (left out at the paragraph's level) } or { sec }
+  function findAll(q) {
+    const k = fold(q.replace(/\s+/g, ' ').trim()), hits = [];
+    if (!k) return hits;
+    const inUnit = (uid) => {
+      const el = unitEl.get(uid);
+      if (!el) return;
+      const L = levelOf(uid), seen = new Set();
+      if (!el.hidden) for (const ps of hitsIn(pieces(uid, L), k)) {
+        for (const p of ps) if (p.i !== undefined) seen.add(p.i);
+        hits.push({ uid, ids: ps.map((p) => p.id) });
+      }
+      if (L < 4 || el.hidden) for (const ps of hitsIn(pieces(uid, 4), k)) {   // (on the page already, in the line's words: once)
+        if (!ps.some((p) => seen.has(p.i))) hits.push({ uid, ids: ps.map((p) => p.id), open: true });
+      }
+    };
+    const inSec = new Set(D.chunks.flatMap((c) => c.units));
+    IDS.filter((uid) => !inSec.has(uid)).forEach(inUnit);
+    for (const c of D.chunks) {
+      const sc = secs.get(c.id);
+      if (sc && !sc.hd.hidden && fold(headingOf(c)).includes(k)) hits.push({ sec: c.id });
+      c.units.forEach(inUnit);
+    }
+    return hits;
+  }
+  // the words found marked (the one stepped to more strongly), drawn again where that changed (only, the units given)
+  function paintFound(only) {
+    const was = new Set(findMarks.keys());
+    findMarks.clear();
+    finder.hits.forEach((x, n) => {
+      if (!x.uid) return;
+      const m = findMarks.get(x.uid) || new Map();
+      for (const id of x.ids) m.set(id, n === finder.at ? 2 : Math.max(m.get(id) || 0, 1));
+      findMarks.set(x.uid, m);
+    });
+    for (const uid of only || new Set([...was, ...findMarks.keys()])) {
+      const el = uid && unitEl.get(uid);
+      if (el && !el._stale) renderUnit(uid, el._mode === 'tok');
+    }
+    capEpoch++;
+    warmSoon();
+  }
+  function showFound() {
+    const t = T[ui], n = finder.hits.length, q = finder.q.trim();
+    fcount.textContent = !q ? '' : n ? t.find_n.replace('{i}', finder.at + 1).replace('{n}', n) : t.find_none;
+    fbar.classList.toggle('none', !!q && !n);
+  }
+  const hitEl = (x) => (x.sec ? secs.get(x.sec).hd : unitEl.get(x.uid));
+  function stepTo(n) {
+    const H = finder.hits;
+    if (!H.length) { showFound(); return; }
+    const before = H[finder.at];
+    finder.at = (n + H.length) % H.length;
+    const x = H[finder.at];
+    if (mapShown) mapAway();
+    // words the paragraph's level leaves out: the paragraph at Full, in place, while it holds the one stepped to (one
+    // at a time, so stepping through does not leave the page unfolded; the last stays open when the search closes)
+    const was = finder.opened, keep = x.open ? x.uid : null;
+    if (was && was !== keep) {
+      finder.opened = null;
+      if (localLevel.get(was) === 4) { localLevel.delete(was); renderUnit(was, unitEl.get(was)._mode === 'tok'); }
+    }
+    if (x.open && levelOf(x.uid) < 4) { localLevel.set(x.uid, 4); finder.opened = x.uid; renderUnit(x.uid, true); }
+    if (was !== finder.opened) relayout();
+    paintFound([before && before.uid, x.uid]);
+    showFound();
+    const el = hitEl(x);
+    if (x.uid && el._mode !== 'tok') renderUnit(x.uid, true);
+    const s = x.uid && spans.get(x.uid).get(x.ids[0]), r = (s && s.isConnected ? s : el).getBoundingClientRect();
+    if (r.top < 80 || r.bottom > innerHeight - 100) window.scrollTo({ top: scrollY + r.top - innerHeight * 0.35, behavior: 'auto' });
+    if (x.sec) flash(el);
+  }
+  // the places found again: for new words, from the first on screen on; for the page read at another level or in
+  // another language, from the one stepped to before
+  function refind(fresh) {
+    if (busy) { clearTimeout(findTimer); findTimer = setTimeout(() => refind(fresh), 120); return; }
+    const was = finder.hits[finder.at], same = (x) => was && x.uid === was.uid && x.sec === was.sec && (!x.ids || x.ids[0] === was.ids[0]);
+    finder.hits = findAll(finder.q);
+    finder.at = -1;
+    paintFound();
+    const H = finder.hits;
+    let n = fresh ? -1 : H.findIndex(same);
+    if (n < 0) n = Math.max(0, H.findIndex((x) => hitEl(x).getBoundingClientRect().bottom > 80));
+    if (!H.length) showFound();
+    else if (fresh) stepTo(n);
+    else { finder.at = n; paintFound([H[n].uid]); showFound(); }
+  }
+  let findTimer = 0;
+  function findStale() { if (finder.open) { clearTimeout(findTimer); findTimer = setTimeout(() => refind(false), 80); } }
+  function openFind() {
+    const t = T[ui], sel = String(getSelection()).replace(/\s+/g, ' ').trim();
+    finput.placeholder = t.find_ph;
+    for (const [f, label] of [['prev', t.find_prev], ['next', t.find_next], ['close', t.find_close]]) {
+      const b = fbar.querySelector(`[data-f="${f}"]`);
+      b.title = label;
+      b.setAttribute('aria-label', label);
+    }
+    if (sel && sel.length <= 80) finput.value = sel;
+    fbar.hidden = false;
+    finder.open = true;
+    finput.focus();
+    finput.select();
+    if (finput.value !== finder.q || sel) { finder.q = finput.value; refind(true); }
+  }
+  function closeFind() {
+    fbar.hidden = true;
+    finder.open = false;
+    finder.opened = null;
+    finder.hits = [];
+    finder.at = -1;
+    clearTimeout(findTimer);
+    paintFound();
+  }
+  finput.addEventListener('input', () => {
+    clearTimeout(findTimer);
+    findTimer = setTimeout(() => { finder.q = finput.value; refind(true); }, 120);
+  });
+  finput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeFind(); return; }
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (finput.value !== finder.q) { clearTimeout(findTimer); finder.q = finput.value; refind(true); } else stepTo(finder.at + (e.shiftKey ? -1 : 1));
+  });
+  fbar.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.f === 'close') closeFind(); else stepTo(finder.at + (b.dataset.f === 'prev' ? -1 : 1));
+  });
+  addEventListener('keydown', (e) => {
+    const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
+    if (mod && !e.shiftKey && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(); }
+    else if (mod && (e.key === 'g' || e.key === 'G') && finder.open) { e.preventDefault(); stepTo(finder.at + (e.shiftKey ? -1 : 1)); }
+  });
+
   addEventListener('keydown', (e) => {
     if (!lightbox.hidden) {   // an enlarged figure takes the keys: Esc closes it, the rest do nothing behind it
       if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }

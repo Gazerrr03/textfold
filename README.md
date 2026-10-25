@@ -175,6 +175,7 @@ Your questions can go to a stronger model than the one that writes the levels: *
 | Select text | highlight, write a note, or ask |
 | **Ask the paper**, bottom right | ask about the whole text |
 | `L` | next language |
+| `⌘F` (Ctrl+F) | find words in the text: at the level you read, and in the author's words that level leaves out (the paragraph opens at Full while you are there); Enter and ⇧Enter step through them |
 | `⌘K` (Ctrl+K) or `/` | search your library |
 | ⌘ / Ctrl or Shift + click in the sidebar | pick several documents, to move into a folder or delete together |
 | The pin, at the top of the sidebar | keep the sidebar open beside the text |
