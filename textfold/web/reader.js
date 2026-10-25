@@ -2001,9 +2001,18 @@
     }
     return exact.size || soft.size || line.size ? { exact, soft, old, line, sh, lineSh } : null;
   }
-  // an equation's LaTeX: its MathML's (alttext, LaTeXML's and semantic.py's), or KaTeX's annotation
-  const eqTex = (e) => `$${[...e.querySelectorAll('math')].map((m) => m.getAttribute('alttext')
-    || (m.querySelector('annotation[encoding="application/x-tex"]') || {}).textContent || '').filter(Boolean).join(' ')}$`;
+  // an equation's LaTeX: its MathML's (alttext, LaTeXML's and semantic.py's), or KaTeX's annotation; the rows of one
+  // that has several (LaTeXML's eqnarray, align), gathered; and its number, (1), as \tag{1}, so a page that draws it
+  // (Obsidian's) numbers it the same
+  const texOf = (m) => m.getAttribute('alttext') || (m.querySelector('annotation[encoding="application/x-tex"]') || {}).textContent || '';
+  function eqTex(e) {
+    const rows = [...e.querySelectorAll('tr')].map((tr) => [...tr.querySelectorAll('math')].map(texOf).filter(Boolean).join(' ')).filter(Boolean);
+    return rows.length > 1 ? `\\begin{gathered} ${rows.join(' \\\\ ')} \\end{gathered}` : rows[0] || '';
+  }
+  function eqTag(e) {
+    const no = ((e.querySelector('.ltx_tag_equation') || {}).textContent || '').trim(), m = /^\((.+)\)$/.exec(no);
+    return m ? ` \\tag{${m[1]}}` : no ? ` \\tag*{${no}}` : '';
+  }
   // the equations of a paragraph's notes on them (anchor.eq): lit whole, in the note's shade, in any language (the
   // formula is the same in every one); a conversation leaves it as it was, as it leaves words
   function eqMarks(uid) {
@@ -2162,7 +2171,7 @@
     for (const e of eqEls) {
       if (!e._unit || !range.intersectsNode(e) || !e.getClientRects().length) continue;
       anchors.push({ unit: e._unit, section: chunkOf[e._unit] ? chunkOf[e._unit].id : null, lang, level, tokens: null, sents: null,
-        eq: e.dataset.eq, quote: { exact: eqTex(e), prefix: '', suffix: '' } });
+        eq: e.dataset.eq, quote: { exact: `$${eqTex(e)}$`, prefix: '', suffix: '' } });
     }
     // a section's one-line summary (written by the model; its words are counted in the summary) or its title
     for (const [c, hd, st] of headEls) {
@@ -2686,14 +2695,16 @@
     if (s && !secs.get(s)) { const now = (GONE.sections[s] || {}).now; s = now && secs.get(now) ? now : null; lost = lost || !s; }
     const sc = s && secs.get(s);
     if (lost) sayLink(sc ? T[ui].link_gone : T[ui].link_gone_top);
-    const el = n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(u) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null;
+    // an equation (#eq=, with the paragraph it goes with as u=): itself, where the level shows it, else that paragraph
+    const eqId = !n && arg('eq'), eqEl = eqId ? eqEls.find((x) => x.dataset.eq === eqId && x.getClientRects().length) : null;
+    const el = eqEl || (n && !n.anchor.unit ? targetEl(n.anchor) : u ? unitEl.get(u) : sc ? (sc.hd.hidden ? sc.sec : sc.hd) : null);
     if (!el) return;
     if (el._stale) renderUnit(el.dataset.u, true);
     el.scrollIntoView({ block: 'center' });
     // all that the link names, flashed together: a run of paragraphs (#u=<first>&to=<last>), a section with the
     // subsections under it (#s=)
     const to = !n && u && arg('to');
-    const all = to ? unitsBetween(u, to).map((x) => unitEl.get(x)) : sc ? sectionWith(sc.c).map((x) => secs.get(x.id).sec) : [el];
+    const all = eqEl ? [eqEl] : to ? unitsBetween(u, to).map((x) => unitEl.get(x)) : sc ? sectionWith(sc.c).map((x) => secs.get(x.id).sec) : [el];
     for (const x of all) { if (x._stale) renderUnit(x.dataset.u, true); flash(x); }
     const tm = n && /[#&]t=(\d{1,3})(?:&|$)/.exec(location.hash);
     if (n) setTimeout(() => { openNote(n); if (tm) showTurn(n, +tm[1]); }, 300);
@@ -2730,7 +2741,7 @@
   const dragImg = h('div', 'dragimg');   // what the pointer carries: a line of what goes, not the whole paragraph
   document.body.append(handle, dragImg);
   let handleFor = null, handleTimer = 0;
-  const HANDLED = '.u, .hd, .stake', SAID = '.np-q, .np-a';   // in the column; in a conversation
+  const HANDLED = '.u, .hd, .stake, .eq', SAID = '.np-q, .np-a';   // in the column (an equation set apart too); in a conversation
   function placeHandle(el, again = false) {
     clearTimeout(handleTimer);
     if (el === handleFor && !handle.hidden && !again) return;
@@ -2813,8 +2824,14 @@
   }
   const headingOf = (c) => `${c.num || ''} ${secTitle(c)}`.trim();
   const summaryOf = (c) => { const lad = (trOf(c) && trOf(c).lad) || c.lad; return lad && lad.take.length ? toksText(lad.take, 0, lad.take.length - 1) : ''; };
-  // what a handle's paragraph, heading or summary gives (a heading: its whole section)
+  // what a handle's paragraph, heading, summary or equation gives (a heading: its whole section; an equation: its
+  // LaTeX, with its number, and a link to it, by way of the paragraph it goes with for a reader that knows no eq=)
   function itemDrag(el) {
+    if (el.classList.contains('eq')) {
+      const uid = el._unit || null;
+      return { kind: 'equation', uid, eq: el.dataset.eq, c: (uid && chunkOf[uid]) || D.chunks.find((x) => x.id === el.dataset.chunk) || null,
+        L: level, text: `$$${eqTex(el)}${eqTag(el)}$$`, written: false, units: uid ? [uid] : [] };
+    }
     if (el.classList.contains('u')) {
       const uid = el.dataset.u, L = levelOf(uid);
       return { kind: 'paragraph', uid, c: chunkOf[uid] || null, L, text: piecesText(pieces(uid, L)), written: L <= 2, units: [uid] };
@@ -2877,9 +2894,10 @@
   // the link names them from the first to the last (in one paragraph, that paragraph; in headings alone, the section)
   function selectionDrag(range) {
     const parts = [];
-    for (const el of docEl.querySelectorAll('.hd, .stake, .u')) {
+    for (const el of docEl.querySelectorAll('.hd, .stake, .u, .eq')) {
       const box = el.classList.contains('u') ? el._tx : el;
       if (!box || el.hidden || !range.intersectsNode(box) || !box.getClientRects().length) continue;   // (a summary the level does not show)
+      if (el.classList.contains('eq')) { parts.push({ el, uid: null, text: `$$${eqTex(el)}${eqTag(el)}$$` }); continue; }   // (an equation: whole)
       const r = range.cloneRange();
       if (!box.contains(range.startContainer)) r.setStart(box, 0);
       if (!box.contains(range.endContainer)) r.setEnd(box, box.childNodes.length);
@@ -2888,6 +2906,8 @@
     }
     if (!parts.length) return null;
     const units = parts.filter((x) => x.uid).map((x) => x.uid), text = parts.map((x) => x.text).join('\n\n');
+    const eqs = parts.filter((x) => x.el.classList.contains('eq'));
+    if (!units.length && eqs.length) return { ...itemDrag(eqs[0].el), kind: 'selection', text, quote: text };   // (equations alone: to the first)
     const sc = units.length ? null : secOfEl(parts[0].el);
     if (!units.length && !sc) return null;
     const L = units.length ? levelOf(units[0]) : level;
@@ -2898,12 +2918,13 @@
     const m = D.meta, title = m.name || (m.titles && m.titles[lang]) || m.title, c = d.c;
     const q = new URLSearchParams({ paper: m.id });
     if (d.note) { q.set('n', d.note.id); if (d.turn !== undefined) q.set('t', d.turn); } else if (d.uid) { q.set('u', d.uid); if (d.to) q.set('to', d.to); } else if (c) q.set('s', c.id);
+    if (d.eq && !d.note) q.set('eq', d.eq);
     if (!d.note) q.set('level', LEVEL_NAMES[d.L]);
     q.set('lang', lang);
     const link = `textfold://open?${q}`, citekey = m.zotero && m.zotero.citekey;
     const json = { format: 'textfold/drag', version: 1, paper: m.id, title, authors: m.authors || [], ...(citekey ? { citekey } : {}),
       section: c ? { id: c.id, num: c.num || '', title: secTitle(c) } : null, ...(d.heading ? { heading: d.heading } : {}), kind: d.kind, level: LEVEL_NAMES[d.L], lang,
-      text: d.text, written: d.written, ...(d.units ? { units: d.units } : {}), ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
+      ...(d.eq ? { equation: d.eq } : {}), text: d.text, written: d.written, ...(d.units ? { units: d.units } : {}), ...(d.quote ? { quote: d.quote } : {}), ...(d.comment ? { comment: d.comment } : {}), link };
     const where = c ? `${title} › ${`${c.num || ''} ${secTitle(c)}`.trim()}` : title;
     // after the quote: a note's text, or a conversation's question (in bold) and its answer (Markdown, the model's)
     const said = (d.part === 'q' ? [[d.text, true]] : d.kind === 'ask' ? [[d.comment, true], [d.text, false, true]] : d.kind === 'note' ? [[d.comment]] : []).filter(([x]) => x);
