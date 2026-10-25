@@ -2,8 +2,9 @@
   app     served by the local server, with the sidebar, the language menu that can generate, settings
   static  one self-contained file (python -m textfold export): CSS, JS, data and images all inside
 
-A page asks no other server for anything. Its fonts (Inter, Source Serif 4) and KaTeX are kept in textfold/web/vendor: the app
-serves them, a gallery keeps them beside its pages (assets), and a single file carries them inside.
+A page asks no other server for anything. Its fonts (Inter, Source Serif 4), KaTeX and Mermaid are kept in
+textfold/web/vendor: the app serves them, a gallery keeps them beside its pages (assets), and a single file carries them
+inside.
 """
 import base64
 import hashlib
@@ -54,6 +55,16 @@ def _katex_inside():
     return f'<style id="katex-css">{css}</style><script>{(VENDOR / "katex" / "katex.min.js").read_text(encoding="utf-8")}</script>'
 
 
+def _mermaid_inside():
+    js = (VENDOR / "mermaid" / "mermaid.min.js").read_text(encoding="utf-8").replace("</script", "<\\/script")
+    return f"<script>{js}</script>"
+
+
+def _has_diagram(doc):
+    """A diagram written in Mermaid (semantic.py: pre.pf-mermaid): only that needs Mermaid, a few megabytes."""
+    return any(b["k"] == "raw" and "pf-mermaid" in b["html"] for b in doc["blocks"])
+
+
 def _has_tex(doc):
     """Math the model wrote that matches no formula of the paper ({"x": latex}): only that needs KaTeX."""
     return '"x":' in json.dumps([doc["units"], doc["chunks"]])
@@ -96,13 +107,14 @@ def inline_images(doc, app=False):
     pdffigs.place(doc, cache, lambda name: f"/p/{pid}/img/{name}" if app else data_uri(cache / name))
 
 
-def payload(doc, app, katex=None, saved=None, pdf=None):
+def payload(doc, app, katex=None, saved=None, pdf=None, mermaid=None):
     data = {k: doc[k] for k in ("meta", "atoms", "units", "chunks", "blocks", "bib", "edges", "alias")}
     if doc.get("gone"):   # the paragraphs and sections no longer in the text, by their ids (ids.py): where a link to one opens
         data["gone"] = doc["gone"]
     data["app"] = app
     data["langs"] = langs.natives()   # every language the text could be read in, by its own name (the menus)
     data["katex"] = katex   # where the reader finds KaTeX: a folder, "inside" the page, or nowhere (math stays as written)
+    data["mermaid"] = mermaid   # and Mermaid, the same way (a diagram stays as its source)
     if pdf:   # a gallery's page: its PDF and PDF.js beside it ({"file", "pdfjs"}, relative to the page)
         data["pdfAt"] = pdf
     if saved:   # saved from the reader: its notes (kept apart from any other page's in the viewer's browser), its language
@@ -122,15 +134,20 @@ def page(doc, app=False, assets=None, saved=None, pdf=None):
                    '<script src="/static/app.js"></script><script src="/static/webmcp.js"></script>')
         head, scripts = app_assets(head), app_assets(scripts)
         side, cls, katex = '<aside id="sidebar" class="collapsed"></aside>', "app", APP_ASSETS + "katex/"
+        mermaid = APP_ASSETS + "mermaid/"
     else:
         head = fonts_head(assets) + f"<style>{(WEB / 'reader.css').read_text(encoding='utf-8')}</style>"
         scripts = f"<script>{(WEB / 'i18n.js').read_text(encoding='utf-8')}</script><script>{(WEB / 'reader.js').read_text(encoding='utf-8')}</script>"
         side, cls, katex = "", "static", (assets + "katex/") if assets else None
+        mermaid = (assets + "mermaid/") if assets else None
         if not assets and (_has_tex(doc) or (saved and saved.get("notes"))):   # (an answer's formulas need it too)
             head += _katex_inside()
             katex = "inside"
+        if not assets and _has_diagram(doc):
+            head += _mermaid_inside()
+            mermaid = "inside"
     return (t.replace("{{TITLE}}", escape(doc["meta"].get("name") or doc["meta"]["title"])).replace("{{HEAD}}", head).replace("{{CLASS}}", cls)
-             .replace("{{SIDEBAR}}", side).replace("{{SCRIPTS}}", scripts).replace("{{DATA}}", payload(doc, app, katex, saved, pdf)))
+             .replace("{{SIDEBAR}}", side).replace("{{SCRIPTS}}", scripts).replace("{{DATA}}", payload(doc, app, katex, saved, pdf, mermaid)))
 
 
 def export(pid):

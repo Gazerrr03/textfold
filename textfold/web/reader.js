@@ -339,6 +339,42 @@
     loadKatex().then((k) => { if (k) try { k.render(src, el, { throwOnError: false }); } catch { /* keep the source */ } });
   }
 
+  // ── a diagram written in Mermaid (semantic.py: pre.pf-mermaid, its source): drawn by Mermaid, loaded only for a text
+  //    that has one, from where the page keeps it (D.mermaid, as D.katex), light or dark as the page is, and drawn
+  //    again when that changes; without it, or where the source does not read, the source stays as the code it is ──
+  let mermaidReady = null, diagramN = 0, diagramsDark = null;
+  function loadMermaid() {
+    if (window.mermaid) return Promise.resolve(window.mermaid);
+    mermaidReady ??= new Promise((res) => {
+      if (!D.mermaid || D.mermaid === 'inside') { res(null); return; }
+      const js = document.createElement('script'); js.src = `${D.mermaid}mermaid.min.js`;
+      js.onload = () => res(window.mermaid || null); js.onerror = () => res(null); document.head.appendChild(js);
+    });
+    return mermaidReady;
+  }
+  async function drawDiagrams() {
+    const pres = [...docEl.querySelectorAll('pre.pf-mermaid')], r = document.documentElement;
+    const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    if (!pres.length || dark === diagramsDark) return;
+    diagramsDark = dark;
+    const lib = await loadMermaid();
+    if (!lib) return;
+    await document.fonts?.ready;   // (the words' boxes are measured in the page's own face)
+    lib.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme: dark ? 'dark' : 'default',
+      fontFamily: getComputedStyle(r).getPropertyValue('--sans').trim() || 'sans-serif' });
+    for (const pre of pres) {
+      let fig = pre.nextElementSibling;
+      try {
+        const { svg } = await lib.render(`pf-mermaid-${++diagramN}`, pre.textContent);
+        if (!fig || !fig.classList.contains('pf-diagram')) { fig = h('div', 'pf-diagram'); pre.after(fig); }
+        fig.innerHTML = svg;
+        for (const el of fig.querySelectorAll('[data-id]')) el.removeAttribute('data-id');   // (the zoom's pieces are ours alone)
+        pre.hidden = true;
+      } catch { /* the source stays */ }
+    }
+    capEpoch++; relayout(); warmSoon();
+  }
+
   // ── skeleton ─────────────────────────────────────────────────────────
   function h(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2871,6 +2907,7 @@
     type = { ...type, ...next };
     store.set(TYPE_KEY, JSON.stringify(type));
     applyType(); mirrorType();
+    drawDiagrams();
     settle(anchor);
     capEpoch++; relayout(); geom = null; placeThumb(); warmSoon();
   }
@@ -4550,6 +4587,8 @@ math { font-size: 1.05em; }
 
   // ── start ────────────────────────────────────────────────────────────
   build();
+  drawDiagrams();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => drawDiagrams());
   for (const [c, hd, st] of headEls) secs.set(c.id, { c, sec: hd.parentNode, hd, st });
   {   // the Topic map's rows (reader.css): a section with sections under it heads theirs, and one after a deeper one starts its own
     const lv = (c) => c.level || 2, top = Math.min(...D.chunks.map(lv));

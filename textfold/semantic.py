@@ -49,6 +49,7 @@ def normalize(html, resolve_img=None, sizes=False):
     for c in root.find_all(string=lambda s: isinstance(s, Comment)):
         c.extract()
     _sanitize(root, sizes)
+    _diagrams(root)
     _math(soup, root)
     _footnotes(soup, root)
     if sizes:   # the Markdown path (a README, a document, a web page, a converted PDF): its tables that are not data
@@ -104,6 +105,24 @@ def _sanitize(root, sizes=False):
             el.attrs.pop("href", None)
         if name == "img" and re.match(r"^(javascript|vbscript|data:(?!image/(png|jpe?g|gif|webp)))", el.get("src", ""), re.I):
             el.attrs.pop("src", None)
+
+
+MERMAID = {"mermaid", "language-mermaid", "language-{mermaid}"}   # (```{mermaid}: Quarto's)
+
+
+def _diagrams(root):
+    """A diagram written in Mermaid (```mermaid in Markdown; <pre class="mermaid"> or <pre lang="mermaid"> on a web page)
+    as <pre class="pf-mermaid"> holding its source alone: the reader draws it (web/vendor/mermaid), and where it cannot,
+    the source shows as the code it is."""
+    for el in root.find_all(["pre", "div"]):
+        code = el.find("code", recursive=False) if el.name == "pre" else None
+        names = {*el.get("class", []), *(code.get("class", []) if code else [])}
+        if not (names & MERMAID or el.get("lang") == "mermaid") or (el.name == "div" and el.find(True)):
+            continue   # (a div: only one holding the source alone, not a page's diagram already drawn)
+        src = el.get_text().strip("\n")
+        if src.strip():
+            el.name, el.attrs = "pre", {"class": ["pf-mermaid"]}
+            el.string = src
 
 
 def _keep_classes(el):

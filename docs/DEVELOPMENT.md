@@ -227,7 +227,11 @@ Markdown (`markdown.py`): CommonMark with GitHub's tables and strikethrough, foo
 matter (title, authors, license) and math, `$...$` and `$$...$$` by Pandoc's rules and `\(...\)`, `\[...\]` as chat
 models write them; formulas become MathML with their LaTeX as `alttext`, as LaTeXML writes them. A lone image is a
 figure, its caption the paragraph after it ("Figure 1: ...") or its alt text; a "Table 1: ..." paragraph next to a
-table is its caption; a numbered heading ("2.1 Methods") keeps its number apart.
+table is its caption; a numbered heading ("2.1 Methods") keeps its number apart. A diagram written in Mermaid
+(` ```mermaid `, Quarto's ` ```{mermaid} `, or a web page's `<pre class="mermaid">`) keeps its source alone as
+`<pre class="pf-mermaid">` (`semantic.py`, `_diagrams`); the reader draws it with Mermaid, loaded only for a text that
+has one, in the light or dark colours of the page, and where it cannot, the source shows as code (`reader.js`,
+`drawDiagrams`). Like code, it shows at Full and Brief.
 
 A document is stored by `local.py` as a paper is: `papers/md-<title words>-<hash>/` with `source.html` (normalized),
 `source.md`, `meta.json` and `img/`, the images copied from beside the file, downloaded, or decoded, once (a large
@@ -349,10 +353,10 @@ so that nothing calls a model by accident. Without a model a document is still f
 
 ## No other server
 
-A page asks no other server for anything: no font service, no CDN. The fonts (Inter, Source Serif 4, as woff2 subsets)
-and KaTeX live in `textfold/web/vendor/`. The app serves them from `/static/vendor/`; a gallery copies them into its `assets/`
-beside the pages; a single exported file carries the Latin faces inside, and KaTeX too when the model wrote math that
-matches no formula of the paper. (Loading Google Fonts sends a visitor's IP address to Google, which a German court
+A page asks no other server for anything: no font service, no CDN. The fonts (Inter, Source Serif 4, as woff2 subsets),
+KaTeX and Mermaid (11.17.2) live in `textfold/web/vendor/`. The app serves them from `/static/vendor/`; a gallery copies them
+into its `assets/` beside the pages; a single exported file carries the Latin faces inside, KaTeX too when the model wrote
+math that matches no formula of the paper, and Mermaid (3.5 MB) when the text has a diagram. (Loading Google Fonts sends a visitor's IP address to Google, which a German court
 found unlawful without consent in 2022.)
 
 ## Smoothness is a rule
