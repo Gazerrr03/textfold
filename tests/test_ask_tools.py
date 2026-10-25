@@ -9,6 +9,7 @@ Run from the repo root:
     python3 -m unittest discover tests
 """
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -95,8 +96,9 @@ class Switch(unittest.TestCase):
 
     def test_its_answers_are_kept_apart(self):
         calls = []
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ), \
              mock.patch.object(llm, "_once", lambda *a: calls.append(a[2].get("tools")) or ({"ok": True}, 0)):
+            os.environ.pop("TEXTFOLD_NO_MODELS", None)   # (the test run's own: the model here is a stand-in)
             spec = {"kind": "agent", "runtime": "codex", "model": "m", "id": "x/codex/m"}
             llm.call("Say ok.", SCHEMA, spec, Path(tmp))
             llm.call("Say ok.", SCHEMA, {**spec, "tools": True}, Path(tmp))   # (not the reply kept without tools)

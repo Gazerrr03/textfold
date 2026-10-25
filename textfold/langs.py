@@ -87,7 +87,7 @@ def punctuation_rule(code):
 # uses most. A text it cannot tell is English, as every text was before.
 _SCRIPTS = {"latin": r"[A-Za-z\u00c0-\u024f\u1e00-\u1eff]+", "cyrillic": r"[\u0400-\u04ff]+", "devanagari": r"[\u0900-\u097f]+",
             "hangul": r"[\uac00-\ud7af\u1100-\u11ff]+"}
-_HAN, _KANA, _THAI = r"[\u4e00-\u9fff\u3400-\u4dbf]", r"[\u3040-\u30ff]", r"[\u0e00-\u0e7f]"
+_HAN, _KANA, _THAI_SCRIPT = r"[\u4e00-\u9fff\u3400-\u4dbf]", r"[\u3040-\u30ff]", r"[\u0e00-\u0e7f]"   # (_THAI: Thai's budgets)
 _SIMPLIFIED = "这们个来时说为国学会对发经过还体关与点实现机开长间问题种后业应进动产让认设计资数据级统处务将东区场结构变标准条网络语历层万号"
 _TRADITIONAL = "這們個來時說為國學會對發經過還體關與點實現機開長間問題種後業應進動產讓認設計資數據級統處務將東區場結構變標準條網絡語歷層萬號"
 _VIET = set("ạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹđơư")
@@ -118,7 +118,7 @@ def detect(text):
     words = {script: re.findall(rx, text) for script, rx in _SCRIPTS.items()}
     counts = {script: len(w) for script, w in words.items()}
     counts["cjk"] = (han + kana) / 1.7
-    counts["thai"] = len(re.findall(_THAI, text)) / 4
+    counts["thai"] = len(re.findall(_THAI_SCRIPT, text)) / 4
     script = max(counts, key=counts.get)
     if counts[script] < 5:
         return "en"
