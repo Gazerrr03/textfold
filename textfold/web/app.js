@@ -1611,10 +1611,13 @@
       wire();
       const storageInput = q('.st-storage-input'), storageSelect = q('.st-storage-mode');
       if (storageInput) storageInput.oninput = () => { storageDraft = storageInput.value; };
+      if (storageInput) storageInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveLibrary(); } };
       if (storageSelect) storageSelect.onchange = () => { storageMode = storageSelect.value; };
+      // a folder chosen in the system's dialog is the choice made: kept at once for the next start, as the line under it
+      // says (#67: chosen, and the button under the explanation not pressed, it was gone after the restart)
       const pickLibrary = q('.st-storage-pick');
       if (pickLibrary) pickLibrary.onclick = async () => {
-        try { const path = await window.desktop.chooseLibraryFolder(); if (path) { storageDraft = path; render(); } }
+        try { const path = await window.desktop.chooseLibraryFolder(); if (path) { storageDraft = path; await saveLibrary(); } }
         catch (error) { storageError = { message: error.message }; render(); }
       };
       async function saveLibrary(cancel = false) {
