@@ -2188,9 +2188,17 @@
   npop.hidden = true;
   document.body.append(npop);
   let popNote = null, popDraft = false, saveTimer = 0;
-  function mdLite(s) {   // the model's Markdown, enough of it: paragraphs, lists, bold, italics, code, $math$
-    const inline = (x) => esc(x).replace(/\$([^$]+)\$/g, '<span class="texsrc">$1</span>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-      .replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  // the model's Markdown, enough of it: paragraphs, lists, bold, italics, code, $math$, and links to the web pages an
+  // agent with its own tools drew on ([title](https://…), or the address alone), which open beside the reader
+  function mdLite(s) {
+    const links = [], link = (href, text) => `\ue010${links.push(`<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`) - 1}\ue011`;
+    const inline = (x) => esc(x).replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, t, u) => link(u, t)).replace(/https?:\/\/(?:(?!&lt;|&gt;|&quot;)[^\s()`])+/g, (u) => {
+        const end = /[.,;:!?']+$/.exec(u), href = end ? u.slice(0, -end[0].length) : u;   // (a full stop after it is the sentence's)
+        return link(href, href) + (end ? end[0] : '');
+      })
+      .replace(/\$([^$]+)\$/g, '<span class="texsrc">$1</span>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>').replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\ue010(\d+)\ue011/g, (_, n) => links[+n]);
     return String(s || '').split(/\n{2,}/).map((block) => {   // within a block, runs of "- " lines are a list
       const out = [];
       for (const l of block.split('\n')) {
@@ -2248,11 +2256,26 @@
   // the field to ask in, with its send button; while a question is under way the button stops it, and the next question
   // can be written meanwhile, to be sent once the answer is in
   const SEND = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15.5v-11M5.5 9 10 4.5 14.5 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // a question looked up on the web by the agent, with its own web tools (agents.py): the switch beside a question, where
+  // the questions go to an agent on this computer (app.js askAgent); off whenever a text is opened, and turned on for the
+  // questions that need it (a work the text cites, a term it takes as known), the same for a passage's and the whole text's
+  let askTools = false;
+  const TOOLS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.6 3.2a4 4 0 0 0-4.9 5.2l-4.4 4.4a1.6 1.6 0 0 0 2.3 2.3l4.4-4.4a4 4 0 0 0 5.2-4.9l-2.3 2.3-2.1-.5-.5-2.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  const toolsHere = () => !!(D.app && window.DRApp && window.DRApp.askAgent && window.DRApp.askAgent());
   function composer(cls, placeholder, value, waiting) {
-    const t = T[ui];
-    return `<div class="np-compose"><textarea class="${cls}" rows="2" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` +
+    const t = T[ui], tools = toolsHere();
+    return `<div class="np-compose${tools ? ' has-tools' : ''}"><textarea class="${cls}" rows="2" placeholder="${esc(placeholder)}">${esc(value)}</textarea>` +
+      (tools && !waiting ? `<button type="button" class="np-tools${askTools ? ' on' : ''}" aria-pressed="${askTools}" title="${esc(t.n_tools_tip)}" aria-label="${esc(t.n_tools)}">${TOOLS}</button>` : '') +
       (waiting ? `<button type="button" class="np-stop" title="${esc(t.n_stop)}" aria-label="${esc(t.n_stop)}"><i></i></button>`
-        : `<button type="button" class="np-send" title="${esc(t.n_send)}" aria-label="${esc(t.n_send)}"${value.trim() ? '' : ' disabled'}>${SEND}</button>`) + '</div>';
+        : `<button type="button" class="np-send" title="${esc(t.n_send)}" aria-label="${esc(t.n_send)}"${value.trim() ? '' : ' disabled'}>${SEND}</button>`) + '</div>' +
+      (tools ? `<p class="np-tools-on"${askTools ? '' : ' hidden'}>${esc(t.n_tools_on)}</p>` : '');
+  }
+  function flipTools(b) {   // (in place: what is being written, and where, stay)
+    askTools = !askTools;
+    for (const x of document.querySelectorAll('.np-tools')) { x.classList.toggle('on', askTools); x.setAttribute('aria-pressed', String(askTools)); }
+    for (const x of document.querySelectorAll('.np-tools-on')) x.hidden = !askTools;
+    const field = b.closest('.np-compose').querySelector('textarea');
+    if (field) field.focus();
   }
   const whereA = (a) => { if (whole(a)) return T[ui].n_whole; if (a.unit) return where(a.unit); const sc = secs.get(a.section); return sc ? `${sc.c.num ? `§${sc.c.num} ` : ''}${(trOf(sc.c) || sc.c).title.replace(/\$/g, '')}` : ''; };
   // the element a note's target is drawn in: its paragraph, or its section's summary (its heading where that is hidden)
@@ -2337,6 +2360,7 @@
     const n = popNote;
     if (b.classList.contains('np-ask')) { fillAsk(npop.querySelector('.np-input'), b.dataset.q); return; }
     if (b.classList.contains('np-send')) { sendPop(); return; }
+    if (b.classList.contains('np-tools')) { flipTools(b); return; }
     if (b.classList.contains('np-stop')) { stopAsk(n); return; }
     if (b.classList.contains('np-tdel')) { deleteTurn(n, +b.dataset.turn); return; }
     if (b.classList.contains('np-cite') && b.dataset.to) { closeNote(); showEvidence(b.dataset.to, targetEl(n.anchor)); return; }
@@ -2416,7 +2440,7 @@
     if (popNote && popNote.id === n.id) openNote(note);
     if (chatNote && chatNote.id === n.id) openChat(note);
     let answered;
-    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui: readerLang, req: mine.req }, mine.ctl.signal); }
+    try { answered = await post('/api/ask', { paper: D.meta.id, id: note.id, question: q, ui: readerLang, req: mine.req, tools: askTools && toolsHere() }, mine.ctl.signal); }
     catch (err) {
       if (mine.ctl.signal.aborted || err.message === 'stopped') return;   // (stopAsk put it all back)
       answered = { ...note, thread: [...done, { q, a: '', lang: qlang, error: String(err.message || err).slice(0, 200) }] };
@@ -2494,6 +2518,7 @@
     else if (b.classList.contains('np-ask')) fillAsk(chat.querySelector('.ch-input'), b.dataset.q);
     else if (b.classList.contains('np-cite') && b.dataset.to) showEvidence(b.dataset.to, null);
     else if (b.classList.contains('np-send')) chatSend(chat.querySelector('.ch-input'));
+    else if (b.classList.contains('np-tools')) flipTools(b);
     else if (b.classList.contains('np-stop') && chatNote) stopAsk(chatNote);
     else if (b.classList.contains('np-tdel') && chatNote) deleteTurn(chatNote, +b.dataset.turn);
   });

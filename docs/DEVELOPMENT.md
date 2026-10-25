@@ -168,9 +168,21 @@ What the model is given for a question (`textfold/notes.py`, `prompt`): the titl
 (with where the reader is); the level they read at and whose words it shows (at Key and below, a warning that the
 selection is the model's wording, not the authors'); the selection and its paragraph in the authors' words (or, for a
 section, its summary and each paragraph's point); up to five passages from anywhere in the paper that share the
-question's telling words (IDF over the English and the reading-language text; symbols such as D=4 kept whole, CJK
+question's telling words (IDF over the text's own and the reading-language text; symbols such as D=4 kept whole, CJK
 matched by character pairs, question words dropped); the earlier turns; and the paragraphs it may cite. The system
 prompt asks it to answer from the paper, say where, and keep general knowledge apart.
+
+An agent on this computer answers as a one-shot text generator, with no tools, unless the switch beside the question
+is on: in a passage's question and its follow-ups, and in **Ask the whole text** (`reader.js` composer; off whenever a
+text is opened, shown only where questions go to an agent: `app.js` askAgent; `/api/ask` `tools`, `models.ask_spec`).
+Then the agent looks it up on the web with its own tools, and nothing else (`agents.py`): Claude Code with
+`--tools WebSearch,WebFetch`, allowed without asking and no MCP server; CodeBuddy the same, with its StructuredOutput;
+Codex with `--search` in its read-only sandbox; Pi with `--no-builtin-tools`, its extensions' tools alone. None of them
+reads or changes a file or runs a command; each keeps its own system prompt, ours appended. The prompt adds that what
+comes from outside the paper ends with [[?]], each page drawn on given as a Markdown link (the reader draws links in
+answers: `reader.js`, `mdLite`); such an answer may take up to 15 minutes, is kept apart from one without the web
+(`llm.call`'s key), and its turn keeps `tools: true`. A service (an API) has no tools of its own: there is no switch
+for it.
 
 The notes button opens the list of every highlight, note and question, by section and filtered by kind: a click flies
 to the passage (opening its paragraph in place where the zoom hides it) and opens the note; × deletes it after a

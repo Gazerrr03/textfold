@@ -86,6 +86,8 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
         parts = [system, prompt, schema, spec["model"]]  # the key the cache was first written with stays valid
     else:
         parts = [system, prompt, schema, spec["id"]] + ([effort] if effort else [])
+    if spec.get("tools"):   # (an agent with its harness answers otherwise: its own key)
+        parts.append("tools")
     key = hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:24]
     cache_dir.mkdir(parents=True, exist_ok=True)
     f = cache_dir / f"{key}.json"
@@ -118,27 +120,32 @@ def forget(rec):
 
 
 def _once(prompt, schema, spec, timeout, system):
-    effort = spec.get("effort")
+    effort, tools = spec.get("effort"), bool(spec.get("tools"))   # (tools: the agent's own web tools, agents.py)
     if spec["kind"] == "agent":
         if spec["runtime"] == "claude-code":
-            return _claude(prompt, schema, spec["model"], effort, timeout, system)
+            return _claude(prompt, schema, spec["model"], effort, timeout, system, tools)
         if spec["runtime"] == "codex":
-            return agents.run_codex(spec["model"], prompt, schema, system, effort, timeout)
+            return agents.run_codex(spec["model"], prompt, schema, system, effort, timeout, tools)
         if spec["runtime"] == "codebuddy":
-            return agents.run_codebuddy(spec["model"], prompt, schema, system, effort, timeout)
-        return agents.run_pi(spec["model"], prompt, schema, system, effort, timeout)
+            return agents.run_codebuddy(spec["model"], prompt, schema, system, effort, timeout, tools)
+        return agents.run_pi(spec["model"], prompt, schema, system, effort, timeout, tools)
     if spec["protocol"] == "anthropic":
         return _anthropic(prompt, schema, spec, timeout, system)
     from .llm_openai import call as openai_call
     return openai_call(prompt, schema, spec, system, timeout)
 
 
-def _claude(prompt, schema, model, effort, timeout, system=SYSTEM):
+def _claude(prompt, schema, model, effort, timeout, system=SYSTEM, tools=False):
     path = agents.path_of("claude-code")
     if not path:
         raise RuntimeError("Claude Code was not found on this computer")
-    cmd = [*agents.argv(path), "-p", "--model", model, "--tools", "", "--strict-mcp-config", "--no-session-persistence",
-           "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
+    if tools:   # the web alone (agents.py), allowed without asking, no MCP server; its own system prompt with ours after it
+        cmd = [*agents.argv(path), "-p", "--model", model, "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch",
+               "--strict-mcp-config", "--no-session-persistence", "--output-format", "json", "--json-schema", json.dumps(schema),
+               "--append-system-prompt", system]
+    else:
+        cmd = [*agents.argv(path), "-p", "--model", model, "--tools", "", "--strict-mcp-config", "--no-session-persistence",
+               "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
     env = agents.child_env()
     if effort == "off":   # Claude Code has no such level: no thinking is a thinking budget of nothing
         env = {**env, "MAX_THINKING_TOKENS": "0"}
@@ -147,10 +154,10 @@ def _claude(prompt, schema, model, effort, timeout, system=SYSTEM):
     # The reader's own Claude Code settings and CLAUDE.md stay out (instructions for their work, ~900 tokens a call,
     # and a default effort meant for coding); a scratch folder has no project ones. Where Claude Code needs the user
     # settings to sign in, the call is made again with them.
-    with tempfile.TemporaryDirectory() as tmp:
-        r = subprocess.run(cmd + ["--setting-sources", "project,local"], input=prompt, capture_output=True, text=True,
+    with tempfile.TemporaryDirectory() as tmp:   # (looking it up on the web: with the user's own settings at once)
+        r = subprocess.run(cmd + ([] if tools else ["--setting-sources", "project,local"]), input=prompt, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout, env=env, cwd=tmp)
-        if r.returncode:
+        if r.returncode and not tools:
             r = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=timeout, env=env, cwd=tmp)
     if r.returncode:

@@ -14,7 +14,11 @@ own Electron and the WorkBuddy sign-in, as WorkBuddy runs it: no node needed, th
 
 The others are reported when found, but not driven yet. A model id is ThoughtDAG's:
 `claude/claude-code/opus`, `codex/codex/<model>`, `pi/<provider>/<model>`; CodeBuddy's `codebuddy/codebuddy/<model>`.
-Agents run here only as one-shot text generators: no tools, no session, a scratch working directory.
+Agents run here as one-shot text generators: no tools, no session, a scratch working directory. A question about a
+text can be looked up on the web (tools=True: the switch beside a question; models.ask_spec): the agent's own web
+tools, its own system prompt with ours after it, and nothing that reads or changes a file or runs a command (Claude
+Code and CodeBuddy: WebSearch and WebFetch alone, no MCP server; Codex: its web search in its read-only sandbox; Pi:
+its extensions' tools, none of its own). Still no session, and the scratch directory to start in.
 """
 import glob
 import json
@@ -658,15 +662,16 @@ def parse_json(text, schema=None):
     raise RuntimeError("no JSON in reply" if "{" not in text else "the reply's JSON does not parse")
 
 
-def run_codex(model, prompt, schema, system, effort, timeout):
+def run_codex(model, prompt, schema, system, effort, timeout, tools=False):
     path = path_of("codex")
     if not path:
         raise RuntimeError("Codex was not found on this computer")
     with tempfile.TemporaryDirectory() as tmp:  # a scratch cwd: no repository, nothing to edit
         sf, of = Path(tmp) / "schema.json", Path(tmp) / "out.txt"
         sf.write_text(json.dumps(_strict(schema)), encoding="utf-8")
-        args = [*argv(path), "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-m", model,
-                "--output-schema", str(sf), "-o", str(of)]
+        # (tools: its web search too; the sandbox stays read-only)
+        args = [*argv(path), *(["--search"] if tools else []), "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only",
+                "-m", model, "--output-schema", str(sf), "-o", str(of)]
         # off is "none" (gpt-5.5 takes it, and refuses "minimal"); a model that refuses "none" runs at "low"
         for level in (["none", "low"] if effort == "off" else [effort]):
             r = subprocess.run(args + (["-c", f"model_reasoning_effort={level}"] if level else []) + ["-"], input=f"{system}\n\n{prompt}",
@@ -679,12 +684,15 @@ def run_codex(model, prompt, schema, system, effort, timeout):
         return parse_json(of.read_text(encoding="utf-8")), None
 
 
-def run_pi(model, prompt, schema, system, effort, timeout):
+def run_pi(model, prompt, schema, system, effort, timeout, tools=False):
     path = path_of("pi")
     if not path:
         raise RuntimeError("Pi was not found on this computer")
-    args = [*argv(path), "-p", "--mode", "json", "--no-tools", "--no-session", "--no-context-files", "--no-extensions", "--no-skills",
-            "--no-prompt-templates", "--model", model, "--system-prompt", system]
+    if tools:   # its extensions' tools (the web, where one gives it), none of its own: it reads, writes and runs nothing
+        args = [*argv(path), "-p", "--mode", "json", "--no-builtin-tools", "--no-session", "--model", model, "--append-system-prompt", system]
+    else:
+        args = [*argv(path), "-p", "--mode", "json", "--no-tools", "--no-session", "--no-context-files", "--no-extensions", "--no-skills",
+                "--no-prompt-templates", "--model", model, "--system-prompt", system]
     if effort:
         args += ["--thinking", effort]
     body = f"{prompt}\n\nReply with one JSON object that matches this JSON Schema, and nothing else:\n{json.dumps(schema)}"
@@ -696,15 +704,20 @@ def run_pi(model, prompt, schema, system, effort, timeout):
                 raise
 
 
-def run_codebuddy(model, prompt, schema, system, effort, timeout):
+def run_codebuddy(model, prompt, schema, system, effort, timeout, tools=False):
     """claude -p's way, with CodeBuddy's differences: no --setting-sources (without the user's settings it has no
     sign-in and waits), the one tool its structured output needs (with none it has no StructuredOutput to answer
     with), and a list of messages for an output whose last is the result."""
     path = path_of("codebuddy")
     if not path:
         raise RuntimeError("CodeBuddy (WorkBuddy) was not found on this computer")
-    args = [*argv(path), "-p", "--model", model, "--tools", "StructuredOutput", "--strict-mcp-config", "--no-session-persistence",
-            "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
+    if tools:   # the web (and its structured output) alone, allowed without asking; its own system prompt with ours after it
+        web = "WebSearch,WebFetch,StructuredOutput"
+        args = [*argv(path), "-p", "--model", model, "--tools", web, "--allowedTools", web, "--strict-mcp-config", "--no-session-persistence",
+                "--output-format", "json", "--json-schema", json.dumps(schema), "--append-system-prompt", system]
+    else:
+        args = [*argv(path), "-p", "--model", model, "--tools", "StructuredOutput", "--strict-mcp-config", "--no-session-persistence",
+                "--output-format", "json", "--json-schema", json.dumps(schema), "--system-prompt", system]
     if effort:
         args += ["--effort", "minimal" if effort == "off" else effort]   # (no level off: the least)
     env = env_for(path)

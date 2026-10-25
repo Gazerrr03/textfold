@@ -1100,6 +1100,11 @@
         submit(PAPER.id, lang, force, update).catch(update.fail);
       },
       fill(lang) { fillGaps(lang, true); },
+      // questions go to an agent on this computer, which can look them up on the web (reader.js: the switch by a question)
+      askAgent() {
+        const d = modelData, m = d && (d.models || []).find((x) => x.id === (d.askModel || d.selected));
+        return !!m && m.kind === 'agent';
+      },
     };
     const modelsIn = api('/api/models').then((d) => { modelData = d; modelName = d.selectedName || ''; askName = d.askName || ''; renderSidebar(); }).catch(() => {});
     api('/api/papers').then((p) => { papers = p; renderSidebar(); }).catch(() => {});

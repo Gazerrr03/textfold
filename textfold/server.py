@@ -38,7 +38,8 @@
   POST /api/export            {paper, lang, langs: "current" | "all", kinds: ["hl", "note", "ask"], pdf}: the paper as one
                               HTML file: its levels, the reader's notes of the kinds chosen, and (pdf) its original PDF
                               with PDF.js, for the side-by-side view
-  POST /api/ask               {paper, id, question, req}: the model answers a note's question; the answer is stored in it
+  POST /api/ask               {paper, id, question, req, tools}: the model answers a note's question; the answer is stored in it
+                              (tools: an agent on this computer looks it up on the web with its own tools: agents.py)
   POST /api/ask/stop          {req}: that question stopped: its answer, when it comes, is not stored
   POST /api/papers/delete     {paper}: move a paper to papers/.trash, kept 30 days (not while it is being generated); the
                               list. Or {papers: [ids]}: each that can go; {papers: the list, deleted: [ids], busy: [ids]}
@@ -884,7 +885,7 @@ def make_handler(jobs):
                         return self.json({"error": "no such paper"}, 404)
                     try:
                         return self.json(notes.ask(pid, str(body.get("id", "")), str(body.get("question", "")).strip()[:2000],
-                                                   models.ask_spec(), ui=str(body.get("ui") or ""),
+                                                   models.ask_spec(tools=bool(body.get("tools"))), ui=str(body.get("ui") or ""),
                                                    req=str(body.get("req") or "")[:40] or None))
                     except notes.Stopped:
                         return self.json({"error": "stopped"}, 409)

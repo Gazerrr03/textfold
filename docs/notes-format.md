@@ -79,8 +79,9 @@ more than one way, so it can be found again when the text around it changes.
   that is the model's own inference rather than the paper's, and `[[!12]]` is a citation that named no unit (kept, so it
   shows as one that went wrong). Answers from before inline citations have none and list their units in `cites` only. Each question is asked with the turns before it (the last
   six), so a follow-up can say "and why is that?". While the model is answering, the last turn has an empty `a` and
-  `pending: true`; when it failed, `error`. (The first notes stored a single turn as `ask`; it reads as a thread of
-  one.)
+  `pending: true`; when it failed, `error`. `tools: true`: an agent looked it up on the web with its own tools, and
+  its answer gives the pages it drew on as links. (The first notes stored a single turn as `ask`; it reads as a
+  thread of one.)
 
 ## Converting
 

@@ -164,7 +164,14 @@ def retrieve(doc, query, lang, skip=(), k=5):
     return [uid for uid, sc in sorted(score.items(), key=lambda x: -x[1]) if sc > 0][:k]
 
 
-def prompt(doc, note, question, lang, earlier=(), ui=None):
+TOOLS = """
+You can search the web and open pages with your tools: use them for what the paper does not give, such as a work it
+cites or builds on, a term it takes as known, or a figure to check. A statement from outside the paper ends with [[?]],
+and each page you drew on is given where you use it, as a Markdown link [its title](https://…). The paper's own text
+comes first."""
+
+
+def prompt(doc, note, question, lang, earlier=(), ui=None, tools=False):
     """What the model is given: the paper (title, abstract, a line per section), where the reader is and whose words
     they selected, the selection and its paragraph (or its section; or, for a question about the whole paper, every
     paragraph's point), passages from anywhere in the paper that share the question's words, the conversation so
@@ -244,7 +251,7 @@ Passages from elsewhere in the paper that share words with the question:
 
 Answer in the language the question is written in (when that is unclear, in {langs.name(ui or lang)}). Conclusion first, then
 the grounds. Be precise about what the paper says, and say so when it does not say it. At most {200 if whole else 120} words;
-Markdown is fine, math as $...$.
+Markdown is fine, math as $...$.{TOOLS if tools else ""}
 
 Cite as you write: right after each statement drawn from the paper, put the number of the paragraph that bears it out most
 directly in double brackets, like [[12]], or two, [[12]][[30]], when one is not enough. Every statement from the paper carries
@@ -324,7 +331,9 @@ def ask(pid, nid, question, spec, timeout=300, ui=None, req=None):
         raise ValueError("no such note")
     done = [t for t in turns(note) if t.get("a")]   # answered turns (a pending or failed one is being asked again)
     lang = next((t.get("lang") for t in turns(note) if t.get("lang")), None) or note["anchor"].get("lang") or doc["meta"]["lang"]
-    text, nums = prompt(doc, note, question, lang, done[-6:], ui if ui in langs.LANGS else None)
+    tools = isinstance(spec, dict) and bool(spec.get("tools"))   # (looked up on the web by the agent: the time that takes)
+    timeout = max(timeout, 900) if tools else timeout
+    text, nums = prompt(doc, note, question, lang, done[-6:], ui if ui in langs.LANGS else None, tools)
     rec, _ = llm.call(text, ASK_SCHEMA, spec, store.pdir(pid) / "llm-cache", timeout=timeout, system=kinds.adapt(SYSTEM_ASK, doc["meta"]))
     out = rec["out"]
     answer, cites = _cited(out["answer"], nums, doc["units"])
@@ -336,7 +345,7 @@ def ask(pid, nid, question, spec, timeout=300, ui=None, req=None):
     nxt = [re.sub(r"\s+", " ", CITE.sub("", q)).strip() for q in (out.get("next") or []) if isinstance(q, str)]
     note["thread"] = done + [{"q": question, "a": answer, "takeaway": CITE.sub("", out["takeaway"]).strip(),
                               "cites": cites, "next": [q for q in nxt if q][:2],
-                              "model": spec["id"], "lang": lang, "at": now()}]
+                              "model": spec["id"], "lang": lang, "at": now(), **({"tools": True} if tools else {})}]
     note.pop("ask", None)
     note["kind"] = "ask"
     with _STOP_LOCK:   # (a stop and the answer crossing: the one second knows of the other)

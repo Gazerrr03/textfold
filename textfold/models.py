@@ -153,13 +153,16 @@ def ask_choice(s=None, cat=None):
     return (own["id"] if own else None), effort
 
 
-def ask_spec(s=None):
+def ask_spec(s=None, tools=False):
     """The model a question is answered with, and how hard it reasons: the settings' own for questions (a stronger
     model, more reasoning), else the one the levels are written with, at the questions' default (DEFAULT_THINKING)."""
     s = s or load_settings()
     model_id, effort = ask_choice(s)
     spec = resolve(model_id, s)
-    return {**spec, "effort": effort} if effort else for_task(spec, "ask", s)
+    spec = {**spec, "effort": effort} if effort else for_task(spec, "ask", s)
+    # tools: an agent on this computer looks it up on the web with its own tools, as the reader asked beside the question
+    # (agents.py); a service has none
+    return {**spec, "tools": True} if tools and spec.get("kind") == "agent" else spec
 
 
 def label(model_id, s=None):

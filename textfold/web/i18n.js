@@ -803,6 +803,23 @@ window.DR_I18N = (() => {
     hi: { find_ph: "पाठ में खोजें", find_n: "{n} में से {i}", find_none: "नहीं मिला", find_prev: "पिछला (⇧Enter)", find_next: "अगला (Enter)", find_close: "बंद करें (Esc)" },
   };
   for (const [code, words] of Object.entries(FIND)) Object.assign(S[code], words);
+  // a question looked up on the web by the agent, with its own web tools: the switch beside a question (reader.js
+  // composer; textfold/models.py ask_spec, agents.py)
+  const TOOLS = {
+    en: { n_tools: "Look it up on the web", n_tools_tip: "Let the agent search the web and open pages to answer", n_tools_on: "Looking it up on the web: the agent searches and opens pages with its own tools to answer." },
+    zh: { n_tools: "上网查找", n_tools_tip: "让 Agent 搜索网页、打开网页来回答", n_tools_on: "已开启上网查找：Agent 会用它自己的工具搜索、打开网页来回答。" },
+    "zh-Hant": { n_tools: "上網查找", n_tools_tip: "讓 Agent 搜尋網頁、開啟網頁來回答", n_tools_on: "已開啟上網查找：Agent 會用它自己的工具搜尋、開啟網頁來回答。" },
+    ja: { n_tools: "ウェブで調べる", n_tools_tip: "エージェントにウェブを検索し、ページを開いて答えさせる", n_tools_on: "ウェブで調べる：エージェントが自身のツールでウェブを検索し、ページを開いて答えます。" },
+    ko: { n_tools: "웹에서 찾아보기", n_tools_tip: "에이전트가 웹을 검색하고 페이지를 열어 답하게 합니다", n_tools_on: "웹에서 찾아보기 켜짐: 에이전트가 자체 도구로 웹을 검색하고 페이지를 열어 답합니다." },
+    es: { n_tools: "Buscar en la web", n_tools_tip: "Que el agente busque en la web y abra páginas para responder", n_tools_on: "Buscando en la web: el agente busca y abre páginas con sus propias herramientas para responder." },
+    fr: { n_tools: "Chercher sur le web", n_tools_tip: "Laisser l’agent chercher sur le web et ouvrir des pages pour répondre", n_tools_on: "Recherche sur le web : l’agent cherche et ouvre des pages avec ses propres outils pour répondre." },
+    de: { n_tools: "Im Web nachsehen", n_tools_tip: "Den Agenten im Web suchen und Seiten öffnen lassen, um zu antworten", n_tools_on: "Im Web nachsehen: Der Agent sucht und öffnet Seiten mit seinen eigenen Werkzeugen, um zu antworten." },
+    pt: { n_tools: "Pesquisar na web", n_tools_tip: "Deixar o agente pesquisar na web e abrir páginas para responder", n_tools_on: "Pesquisando na web: o agente pesquisa e abre páginas com as próprias ferramentas para responder." },
+    it: { n_tools: "Cerca sul web", n_tools_tip: "Far cercare all’agente sul web e aprire pagine per rispondere", n_tools_on: "Ricerca sul web: l’agente cerca e apre pagine con i suoi strumenti per rispondere." },
+    ru: { n_tools: "Поискать в интернете", n_tools_tip: "Пусть агент ищет в интернете и открывает страницы, чтобы ответить", n_tools_on: "Поиск в интернете: агент ищет и открывает страницы своими инструментами, чтобы ответить." },
+    hi: { n_tools: "वेब पर खोजें", n_tools_tip: "एजेंट को वेब पर खोजकर और पेज खोलकर जवाब देने दें", n_tools_on: "वेब पर खोज चालू: एजेंट अपने टूल से वेब पर खोजकर और पेज खोलकर जवाब देता है।" },
+  };
+  for (const [code, words] of Object.entries(TOOLS)) Object.assign(S[code], words);
   // text: the document is not a paper, and the questions about it say so
   const t = (lang, text) => ({ ...S.en, ...(S[lang] || {}), ...(text ? { ...DOCS.en, ...(DOCS[lang] || {}) } : {}) });
   // the language a visitor most likely reads, among the ones offered: the interface's, or `among` (a text's, by name)

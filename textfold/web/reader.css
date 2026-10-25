@@ -687,6 +687,14 @@ html[data-hide~="links"] .side-links, html[data-hide~="asks"] .side-notes, html[
 .np-stop { background: var(--ink); color: var(--card); }
 .np-stop:hover { background: var(--r-limitation); }
 .np-stop i { width: 9px; height: 9px; border-radius: 2px; background: currentColor; }
+/* the agent's own tools, for this question (reader.js composer): beside the send button, lit when on, said under it */
+.np-compose.has-tools textarea { padding-right: 76px; }
+.np-tools { position: absolute; right: 40px; bottom: 6px; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%;
+  display: grid; place-items: center; background: var(--card); color: var(--muted); cursor: pointer; }
+.np-tools:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--line)); }
+.np-tools.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.np-tools svg { width: 15px; height: 15px; }
+.np-tools-on { margin: 5px 2px 0; font: 12px/1.45 var(--sans); color: var(--r-gap); }
 .np-turn { position: relative; }
 .np-turn .np-q { padding-right: 20px; }
 .np-tdel { position: absolute; top: -3px; right: -5px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none;
