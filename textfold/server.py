@@ -230,7 +230,7 @@ class Jobs:
         """A document about to be converted again: the languages it has and is being generated in, the generations of
         its old text stopped (what they would write belongs to that text: a translation of another text's paragraphs,
         laid on the new ones by their places)."""
-        langs = (["en"] if store.read(pid, "en") else []) + store.languages(pid)
+        langs = ([store.text_lang(pid)] if store.read(pid, "en") else []) + store.languages(pid)
         for j in list(self.items.values()):
             if j["kind"] == "generate" and j["pid"] == pid and j["status"] in ("queued", "running"):
                 langs.append(j["lang"])
@@ -395,9 +395,10 @@ class Jobs:
                         Path(job["file"]).with_suffix(".json").unlink(missing_ok=True)
                     PAGES.pop(job["pid"], None)
                     job["readable"] = True
-                    job["next"] = self.submit(job["pid"], job["lang"] or "en", False)["id"]   # its levels, in the other queue
-                    for lang in langs:   # converted again: its other languages made again of the new text (English first)
-                        if lang not in ("en", job["lang"] or "en"):
+                    job["next"] = self.submit(job["pid"], job["lang"] or None, False)["id"]   # its levels, in the other queue
+                    base = store.text_lang(job["pid"])
+                    for lang in langs:   # converted again: its other languages made again of the new text (its own first)
+                        if lang not in (base, job["lang"] or base):
                             self.submit(job["pid"], lang, False)
                 job.update(status="done", finished=time.time())
             except Exception as e:
@@ -412,8 +413,8 @@ class Jobs:
 
 def _named(headers):
     """A dropped file's name and the language to read it in, from the request's headers."""
-    lang = headers.get("X-Lang") or "en"
-    return Path(unquote(headers.get("X-Name") or "document.pdf")).name[:200] or "document.pdf", lang if lang in langs.LANGS else "en"
+    lang = headers.get("X-Lang")   # (none: the language it is written in)
+    return Path(unquote(headers.get("X-Name") or "document.pdf")).name[:200] or "document.pdf", lang if lang in langs.LANGS else None
 
 
 def take_file(jobs, data, headers):
@@ -657,10 +658,10 @@ def make_handler(jobs):
                     return self.json(notes.read(m.group(1)))
                 m = re.fullmatch(r"/api/doc/([\w.-]+)", u.path)   # (a document not folded yet: its local levels, said so)
                 if m:
-                    pid, lang = m.group(1), (parse_qs(u.query).get("lang") or ["en"])[0]
+                    pid, lang = m.group(1), (parse_qs(u.query).get("lang") or [None])[0]   # (none: the text's own)
                     if not (store.valid_id(pid) and (store.pdir(pid) / "meta.json").exists() and (store.pdir(pid) / "source.html").exists()):
                         return self.json({"error": "no such paper"}, 404)
-                    if lang not in langs.LANGS:
+                    if lang is not None and lang not in langs.LANGS:
                         return self.json({"error": f"unknown language {lang}"}, 400)
                     return self.json(fold.document(pid, lang))
                 m = re.fullmatch(r"/api/ids/([\w.-]+)", u.path)   # what paragraphs' and sections' ids name now (ids.py)
@@ -713,8 +714,8 @@ def make_handler(jobs):
                         return self.json({"error": str(error), "code": getattr(error, "code", "")}, 400)
 
                 if u.path == "/api/generate":
-                    lang = body.get("lang") or "en"
-                    if lang not in langs.LANGS:
+                    lang = body.get("lang") or None   # (none: the language it is written in, its own levels)
+                    if lang is not None and lang not in langs.LANGS:
                         return self.json({"error": f"unknown language {lang}"}, 400)
                     try:
                         job = jobs.submit(body.get("paper", ""), lang, body.get("force"))
@@ -729,7 +730,7 @@ def make_handler(jobs):
                     return self.json(zotero.status())
                 if u.path == "/api/zotero/read":   # an item of the Zotero library: its paper online, or its file as a dropped one
                     lib, _, key = str(body.get("item") or "").rpartition("/")
-                    lang = body.get("lang") if body.get("lang") in langs.LANGS else "en"
+                    lang = body.get("lang") if body.get("lang") in langs.LANGS else None
                     try:
                         got = zotero.read(lib, key)
                         if "ref" in got:   # generated as a pasted link is (from the page, which asks for a model first)
@@ -740,7 +741,7 @@ def make_handler(jobs):
                         return self.json({"error": str(e)}, 503)
                     except ValueError as e:   # no file and no paper online; not a library or item
                         return self.json({"error": str(e) if str(e) in ("no-file", "no-fulltext", "bad-library", "bad-item") else "bad-ref"}, 400)
-                    named = {"X-Name": quote(got["name"]), "X-Lang": lang, "X-Refs": quote(json.dumps(got["refs"]))}
+                    named = {"X-Name": quote(got["name"]), "X-Lang": lang or "", "X-Refs": quote(json.dumps(got["refs"]))}
                     reply, code = take_file(jobs, got["data"], named)
                     pid = reply.get("paper") or reply.get("upload") or (reply.get("job") or {}).get("pid")
                     if code == 200 and pid:
@@ -761,7 +762,7 @@ def make_handler(jobs):
                     if not engine.where():
                         return self.json({"error": "needs-engine"}, 409)
                     name = json.loads(store.read_text(store.pdir(pid) / "meta.json")).get("source", {}).get("name") or "document.pdf"
-                    return self.json(jobs.convert(pid, src, name, body.get("lang") or "en", tier, replace=True))
+                    return self.json(jobs.convert(pid, src, name, body.get("lang") or None, tier, replace=True))
                 if u.path == "/api/jobs/stop":
                     job = jobs.stop(body.get("id", ""))
                     return self.json(job) if job else self.json({"error": "no such job"}, 404)
@@ -787,9 +788,10 @@ def make_handler(jobs):
                         return self.json({"error": "not-markdown"}, 400)
                     return self.json({"paper": pid, "title": json.loads(store.read_text(store.pdir(pid) / "meta.json"))["title"]})
                 if u.path == "/api/export":   # the paper as one file, saved by the reader for themself
-                    pid, lang = str(body.get("paper") or ""), str(body.get("lang") or "en")
+                    pid, lang = str(body.get("paper") or ""), str(body.get("lang") or "")
                     if not store.valid_id(pid) or not (store.pdir(pid) / "meta.json").exists():
                         return self.json({"error": "no such paper"}, 404)
+                    lang = lang or store.text_lang(pid)
                     kinds = {k for k in body.get("kinds") or [] if k in ("hl", "note", "ask")}
                     doc = assembled(pid, only=[lang] if body.get("langs") == "current" else None)
                     chosen = [n for n in notes.read(pid)["notes"] if notes.kind(n) in kinds]

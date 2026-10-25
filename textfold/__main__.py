@@ -123,7 +123,7 @@ def main():
         ap.add_argument("ref", help="a link (any web page, arXiv, PubMed Central, bioRxiv, Wikipedia, GitHub), an arXiv id, a DOI, or a file (.pdf, .docx, .pptx, .xlsx, .epub, .html, a picture, .md, .txt)")
         ap.add_argument("--level", default="topic", choices=LEVELS, help="topic (a map of the sections) ... full (every word); default topic")
         ap.add_argument("--section", help="one section: its number (3.2), its id (S3), or its place in the list (1 is the first)")
-        ap.add_argument("--lang", default="en", help="the language to read it in (en, zh, de, ...); default en")
+        ap.add_argument("--lang", help="the language to read it in (en, zh, de, ...); default the one it is written in")
         ap.add_argument("--json", action="store_true", help="the whole document in the TextFold format (docs/format.md)")
         ap.add_argument("--no-generate", action="store_true", help="call no model: the levels already written, or the local ones")
         return sys.exit(get(ap.parse_args(sys.argv[2:])))
@@ -142,7 +142,7 @@ def main():
     t0 = time.time()
     ref = local.import_file(a.paper) if Path(a.paper).suffix.lower() in local.KINDS and Path(a.paper).is_file() else a.paper
     pid = None
-    for lang in ["en"] + a.lang:
+    for lang in [None] + a.lang:   # (None: the text's own language, its ladder)
         pid = pipeline.generate(ref, lang, a.model, force=a.force, jobs=a.jobs, log=print,
                                 progress=lambda s, d, t: print(f"  {s} {d}/{t}", end="\r"))
     print(f"\n  → {build.export(pid)}  ({time.time() - t0:.0f}s)")

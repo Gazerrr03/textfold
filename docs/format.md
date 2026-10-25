@@ -50,7 +50,8 @@ checker can compare the two.
 
 - `id`: the document's id in TextFold (an arXiv id; `pmc…`, `ppr…`, `biorxiv-…`, `wiki-<lang>-<page>`,
   `gh-<owner>--<repo>`, `web-<host>-<hash>`, `pdf-<file hash>`, `md-…`).
-- `lang`: the language of the text and its levels. A translation keeps the original's `evidence`.
+- `lang`: the language of the text and its levels: the one it is written in (its own levels), or a translation's. A
+  translation keeps the original's `evidence`.
 - `source`: where the text came from. `kind` is `arxiv`, `europepmc` (PubMed Central and Europe PMC), `biorxiv` or
   `medrxiv`, `wikipedia`, `github`, `web`, `pdf` (a file read by the PDF engine) or `markdown`; `snapshot` is the day a changing page was read; `license` is the
   text's own, when it names one. The levels and translations made from a text stay under the text's license.

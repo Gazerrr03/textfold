@@ -139,7 +139,7 @@ generation still resolves its model when it runs. `tests/test_model_discovery.py
 Command line, without the server:
 
 ```bash
-python3 -m textfold 2512.23916 --lang zh --lang ja   # generate English + translations, then export
+python3 -m textfold 2512.23916 --lang zh --lang ja   # generate its own levels + translations, then export
 python3 -m textfold export 2512.23916                # one self-contained HTML file in out/<id>/
 ```
 
@@ -293,8 +293,13 @@ become one bibliography the marks [1] point into. Stored as `papers/wiki-<langua
 the day it was read (`snapshot`, shown under the title and carried into the notes' exports: the article may have changed
 since), under CC BY-SA 4.0.
 
-The model is still told it reads a paper, and the levels are made in English first: a document in another language
-is read with English levels over its own text. Making the levels in the document's language is the next step.
+The model is still told it reads a paper. A text's levels are written in its own language (`store.text_lang`: what
+its ladder, `en.json`, says since 0.10.33, else read from its words, `langs.detect`), and the language menu calls the
+ladder by it: a Chinese document's levels are in Chinese, and reading it in Chinese is its ladder, not a translation of
+it into Chinese again. Another language, English too, is a translation (`tr-<lang>.json`). A translation into the text's
+own language made before then is still read while the ladder it was made from stands. A note made on the text's own
+words before said `en`: it is read as the text's language until the text is first translated into English, and
+written so then (`notes.settle_base`).
 
 ## PDFs and web pages
 
@@ -401,7 +406,7 @@ textfold/ladder.py   one model call per section; validation; written words align
 textfold/links.py    argument links, one call over the whole paper
 textfold/translate.py  any language: sentence-aligned translation + short levels, one call per section (langs.py: the languages a text can be read in)
 textfold/store.py    versioned layers per paper; assembling a reader from them
-textfold/pipeline.py fetch → parse → English ladder + links (once) → translation, with progress
+textfold/pipeline.py fetch → parse → ladder + links in the text's own language (once) → translation, with progress
 textfold/server.py   local server: pages, /api/papers, /api/jobs (and /api/jobs/stop), /api/generate, /api/settings
 textfold/agents.py   local agents: the scan, model catalogs, one-shot runs (claude -p, codex exec, pi -p)
 textfold/providers.py API providers: ThoughtDAG's env registry and presets, /models probing

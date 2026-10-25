@@ -21,13 +21,13 @@ def _text(toks, atoms):
 
 def _view(u, lang):
     """A unit's text and levels in a language: its translation's when there is one, else the original's."""
-    z = (u.get("tr") or {}).get(lang) if lang != "en" else None
+    z = (u.get("tr") or {}).get(lang)
     if z:
         return z["toks"], z["sents"], [s for s in u["lad"].get("ev", []) if s < len(z["sents"])], z["lad"]
     return u["toks"], u["sents"], u["lad"].get("ev", []), u["lad"]
 
 
-def unit(doc, uid, lang="en"):
+def unit(doc, uid, lang=None):
     A = doc["atoms"]
     u = doc["units"][uid]
     toks, sents, ev, lad = _view(u, lang)
@@ -41,26 +41,28 @@ def unit(doc, uid, lang="en"):
     }
 
 
-def section(doc, c, lang="en"):
+def section(doc, c, lang=None):
     A = doc["atoms"]
-    lad = ((c.get("tr") or {}).get(lang) or {}).get("lad") if lang != "en" else None
+    lad = ((c.get("tr") or {}).get(lang) or {}).get("lad")
     lad = lad or c.get("lad") or {}
     take = lad.get("take") or []
-    title = ((c.get("tr") or {}).get(lang) or {}).get("title") if lang != "en" else None
+    title = ((c.get("tr") or {}).get(lang) or {}).get("title")
     return {"id": c["id"], "num": c.get("num") or "", "title": title or c.get("title") or "", "depth": max(1, int(c.get("level") or 2) - 1),
             "takeaway": _text(take, A), "topic": _text([take[i] for i in lad.get("topic") or [] if i < len(take)], A),
             "units": [unit(doc, uid, lang) for uid in c["units"] if uid in doc["units"]]}
 
 
-def document(pid, lang="en"):
-    """The whole document in the TextFold format, version 0."""
+def document(pid, lang=None):
+    """The whole document in the TextFold format, version 0: in lang when it is translated into it, else in the text's
+    own language (lang None: that)."""
     doc = store.assemble(pid)
     meta = doc["meta"]
     en = store.read(pid, "en")
-    tr = store.read(pid, f"tr-{lang}") if lang != "en" else None
+    tr = store.read(pid, f"tr-{lang}") if lang in meta["translated"] else None
+    lang = lang if tr else meta["lang"]
     written_by = (tr or en or {}).get("model") or ""
     return {
-        "format": "textfold/doc", "version": 0, "id": pid, "lang": lang if (lang == "en" or tr) else "en",
+        "format": "textfold/doc", "version": 0, "id": pid, "lang": lang,
         "title": (meta.get("titles") or {}).get(lang) or meta.get("title", ""), "authors": meta.get("authors", []),
         "date": meta.get("date", ""),
         "source": {"kind": (meta.get("source") or {}).get("kind") or ("arxiv" if store.ARXIV_ID.fullmatch(pid) else "paper"),

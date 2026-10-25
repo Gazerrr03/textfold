@@ -1,9 +1,8 @@
-"""A paper in another language, built on the English ladder.
+"""A paper in another language, built on its ladder, in the text's own language (English for most papers).
 
 Every sentence is translated one to one, so Key stays an exact subset of the translated
-Full text (the English evidence indices still apply), and the roles and links stay the
-same. Brief, Takeaway and Topic are rewritten in the target language from the English
-ones. Formulas, citations and cross-references travel through the translation as markers
+Full text (the ladder's evidence indices still apply), and the roles and links stay the
+same. Brief, Takeaway and Topic are rewritten in the target language from the ladder's. Formulas, citations and cross-references travel through the translation as markers
 ⟦a12⟧ and come back as the very same atoms, so they stay clickable and slide when the
 reader switches language. One call per section; a long section is translated in parts (PART_CHARS of English each),
 because a reply that long comes back with its last paragraphs missing (seen without reasoning), and the parts run in
@@ -50,6 +49,7 @@ def marked(toks, atoms):
 def prompt_for(doc, chunk, lang):
     U, A = doc["units"], doc["atoms"]
     L, b = langs.name(lang), langs.budget(lang)
+    E = langs.name(doc["meta"].get("lang") if doc["meta"].get("lang") in langs.LANGS else "en")   # the text's own (pipeline)
     unit, acro = b["unit"], " (an English acronym counts as one)" if b["unit"] == "characters" else ""
     blocks = []
     for n, uid in enumerate(chunk["units"]):
@@ -57,8 +57,8 @@ def prompt_for(doc, chunk, lang):
         kind = KIND.get(u["role"], "paragraph") + (f" inside {u['env']['title']}" if u.get("env") else "")
         lines = [f"[U{n}] {kind}"] + [f"  {i}: {marked(u['toks'][s:e], A)}" for i, (s, e) in enumerate(u["sents"])]
         reason = plain(lad["brief"][lad["tn"] + 1:-1], A) if len(lad["brief"]) > lad["tn"] + 1 else ""
-        lines += [f"  English takeaway: {plain(lad['brief'][:lad['tn']], A)}", f"  English reason: {reason}",
-                  f"  English topic: {plain(lad['topic'], A)}"]
+        lines += [f"  {E} takeaway: {plain(lad['brief'][:lad['tn']], A)}", f"  {E} reason: {reason}",
+                  f"  {E} topic: {plain(lad['topic'], A)}"]
         blocks.append("\n".join(lines))
     sec = chunk.get("lad")
     head = f"{chunk['num']} {chunk['title']}".strip()
@@ -71,18 +71,18 @@ Outline (▶ marks this section):
 {outline(doc, chunk['id'])}
 
 This section: {head}
-English section takeaway: {plain(sec['take'], A) if sec else ''}
+{E} section takeaway: {plain(sec['take'], A) if sec else ''}
 
-Each unit (a paragraph, list item or caption) lists its numbered English sentences, then the English short levels already written for it.
+Each unit (a paragraph, list item or caption) lists its numbered {E} sentences, then the {E} short levels already written for it.
 
 {chr(10).join(blocks)}
 
 Rules:
-- sentences: translate EVERY numbered sentence into fluent, precise academic {L}: exactly one {L} sentence per English sentence, same count and order, because the reader shows them sentence by sentence. Never merge, split or drop a sentence; a sentence fragment stays a fragment.
+- sentences: translate EVERY numbered sentence into fluent, precise academic {L}: exactly one {L} sentence per {E} sentence, same count and order, because the reader shows them sentence by sentence. Never merge, split or drop a sentence; a sentence fragment stays a fragment.
 - Markers ⟦…⟧ stand for formulas, citations and cross-references. Copy each marker exactly once and unchanged (including what is inside it) where it belongs in the {L} sentence. Do not write math of your own in the sentences.
 - Terminology: keep established acronyms and proper names as the field writes them in {L} (usually unchanged, e.g. SNN, MLP, CartPole); translate other technical terms with the standard {L} terms, the same way throughout.
-- takeaway: the English takeaway as natural {L} of at most {b['takeaway']} {unit}, conclusion first, not a word-by-word translation.
-- reason: the English reason as natural {L} of at most {b['reason']} {unit}; "" when the English reason is empty.
+- takeaway: the {E} takeaway as natural {L} of at most {b['takeaway']} {unit}, conclusion first, not a word-by-word translation.
+- reason: the {E} reason as natural {L} of at most {b['reason']} {unit}; "" when the {E} reason is empty.
 - topic: at most {b['topic']} {unit}{acro}, copied VERBATIM from inside the {L} takeaway.
 - section: title (the section title in {L}, without its number), takeaway (at most {b['section']} {unit}), topic (at most {b['topic']} {unit}, verbatim from that takeaway).{title_rule}
 - {langs.punctuation_rule(lang)} In takeaway and reason, math only by copying a marker.

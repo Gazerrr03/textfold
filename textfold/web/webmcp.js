@@ -69,7 +69,7 @@
     if (!exact || at < 0 || full.indexOf(exact, at + exact.length) >= 0) throw new Error('quote must match one unique source passage in this unit');
     let n = 0, start = 0, end = u.toks.length - 1;
     u.toks.forEach((t, i) => { const next = n + piece(t).length; if (n <= at && at <= next) start = i; if (n < at + exact.length && next >= at + exact.length) end = i; n = next + (t.s ? 1 : 0); });
-    return { unit: uid, section: u.chunk, lang: 'en', level: 4, tokens: [start, end],
+    return { unit: uid, section: u.chunk, lang: D.meta.lang || 'en', level: 4, tokens: [start, end],   // (the text's own words)
       sents: u.sents.map((s, i) => s[0] <= end && s[1] > start ? i : -1).filter(i => i >= 0),
       source_url: source(uid), quote: { exact, prefix: full.slice(Math.max(0, at - 40), at), suffix: full.slice(at + exact.length, at + exact.length + 40) } };
   }

@@ -1,8 +1,9 @@
 """What has been generated for each paper, as versioned layers on disk.
 
   papers/<id>/source.html, meta.json     the arXiv HTML, fetched once (or a document from this computer, local.py)
-  papers/<id>/layers/en.json             the English ladder and the argument links
-  papers/<id>/layers/tr-<lang>.json      one translation, stamped with the English version it was built on
+  papers/<id>/layers/en.json             the ladder in the text's own language (its "lang": English, Chinese...;
+                                         the name is the one it had when that was always English) and the links
+  papers/<id>/layers/tr-<lang>.json      one translation, stamped with the version of the ladder it was built on
   papers/.trash/<id>-<time>/             a paper the reader deleted (moved there whole, notes included; not listed), with
                                          library.json: its place in the library, for the reader's Undo (untrash);
                                          erased after 30 days (empty_trash)
@@ -10,7 +11,7 @@
 A model samples differently on every run, so the same paper does not come out the same twice.
 The layers are what makes a paper read the same every time it is opened: a reader is assembled
 from them without any model call, and "regenerate" replaces one layer with a new version.
-A translation whose English base has since been regenerated is reported as stale.
+A translation whose base has since been regenerated is reported as stale.
 """
 import contextlib
 import functools
@@ -22,7 +23,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import ladder
+from . import ladder, langs
 from ._storage_layout import DirectoryFiles
 from .storage import DocumentStore, LocalDirectoryBackend
 
@@ -269,9 +270,41 @@ def stamp():
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+# the language a text is written in, found once per version of its source.html and its ladder: pid -> (times, code)
+_LANG_SEEN = {}
+
+
+def text_lang(pid, en=None):
+    """The language the text is written in: its levels' (en.json says which since 0.10.33), every translation's base,
+    and never a translation of its own. A ladder from before that names none: read from the text, its words outside
+    formulas, code and the references (langs.detect). en: the ladder, when it is read already."""
+    if en and en.get("lang") in langs.LANGS:
+        return en["lang"]
+    if _nonlocal():
+        en = read(pid, "en") if en is None else en
+        if en and en.get("lang") in langs.LANGS:
+            return en["lang"]
+        try: return _detect(document(pid).source.html)
+        except FileNotFoundError: return "en"
+    src, lad = pdir(pid) / "source.html", _file(pid, "en")
+    key = tuple(f.stat().st_mtime_ns if f.exists() else 0 for f in (src, lad))
+    seen = _LANG_SEEN.get(pid)
+    if seen and seen[0] == key:
+        return seen[1]
+    en = read(pid, "en") if en is None else en
+    code = en["lang"] if en and en.get("lang") in langs.LANGS else _detect(read_text(src)) if src.exists() else "en"
+    _LANG_SEEN[pid] = (key, code)
+    return code
+
+
+def _detect(html):
+    html = re.sub(r"(?is)<(math|pre|script|style)\b.*?</\1>|<section[^>]*ltx_bibliography.*?</section>", " ", html)
+    return langs.detect(re.sub(r"<[^>]+>", " ", html))
+
+
 def save_en(doc, model):
     write(doc["meta"]["id"], "en", {
-        "version": stamp(), "model": model,
+        "version": stamp(), "model": model, "lang": doc["meta"].get("lang") or "en",
         "units": {uid: u["lad"] for uid, u in doc["units"].items() if "lad" in u},
         "chunks": {c["id"]: c.get("lad") for c in doc["chunks"]},
         "edges": [e for e in doc["edges"] if e["rel"] != "ref"],
@@ -330,14 +363,15 @@ def assemble(pid, only=None):
     doc = parsed(pid)
     en = read(pid, "en")
     meta = doc["meta"]
-    meta["langs"], meta["stale"], meta["versions"] = [], [], {}
+    meta["langs"], meta["stale"], meta["versions"], meta["translated"] = [], [], {}, []
+    meta["lang"] = base = text_lang(pid, en)   # (the reader's, the page's: the language its own levels are in)
     cjk = ladder.cjk_doc(doc)
     if cjk:   # the reader's CJK rules (an English paper's page carries nothing new)
         meta["cjk"] = True
     if en:
         apply_en(doc, en)
-        meta["langs"].append("en")
-        meta["versions"]["en"] = en["version"]
+        meta["langs"].append(base)
+        meta["versions"][base] = en["version"]
     else:
         for u in doc["units"].values():
             u["lad"] = ladder.local(u, doc["atoms"], cjk)
@@ -345,12 +379,16 @@ def assemble(pid, only=None):
         if only is not None and lang not in only:
             continue
         tr = read(pid, f"tr-{lang}")
+        if lang == base and (not en or tr.get("base") != en["version"]):
+            continue   # a translation into the text's own language (before 0.10.33): read while its ladder stands
         apply_tr(doc, lang, tr)
-        meta["langs"].append(lang)
+        meta["translated"].append(lang)
+        if lang not in meta["langs"]:
+            meta["langs"].append(lang)
         meta["versions"][lang] = tr["version"]
         if not en or tr.get("base") != en["version"]:
             meta["stale"].append(lang)
-        else:   # paragraphs it has no translation for (a call that failed): asked for when it is generated again
+        elif lang != base:   # paragraphs it has no translation for (a call that failed): asked for when it is generated again
             from .translate import gaps   # (translate imports ladder and llm, which read through this module)
             n = len(gaps(doc, lang))
             if n:
@@ -373,7 +411,8 @@ def papers():
             continue
         meta = json.loads(read_text(mf))
         en = read(d.name, "en")
-        langs_ = (["en"] if en else []) + languages(d.name)
+        base = text_lang(d.name, en)
+        langs_ = list(dict.fromkeys(([base] if en else []) + languages(d.name)))
         titles = {}
         for lang in languages(d.name):
             t = (read(d.name, f"tr-{lang}") or {}).get("title")

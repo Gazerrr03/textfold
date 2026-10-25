@@ -38,7 +38,8 @@
   const nameOf = (code) => NAMES[code] || I18N.NATIVE[code] || code;
   let readerLang = (() => { let v = null; try { v = localStorage.getItem(UI_KEY); } catch { /* private window */ } return v && (T[v] || NAMES[v]) ? v : I18N.guess(); })();
   let ui = I18N.uiFor(readerLang);
-  const AVAIL = (D.meta.langs && D.meta.langs.length) ? D.meta.langs : ['en'];
+  const BASE = D.meta.lang || 'en';   // the language the text is written in, its own levels' (store.text_lang): never a translation
+  const AVAIL = (D.meta.langs && D.meta.langs.length) ? D.meta.langs : [BASE];
   const STALE = new Set(D.meta.stale || []);
   // the paragraphs a language's translation has none for (store.assemble: a call that failed), by language; the app
   // asks for them as the language is opened, and its menu can ask again
@@ -46,7 +47,7 @@
   const gapTag = (code, t) => (GAPS[code] && !STALE.has(code) ? `<em class="stale">${esc(t.gaps_tag.replace('{n}', GAPS[code]))}</em>` : '');
   // a document in Chinese or Japanese (store.assemble): the CJK rules below are its only, an English paper reads as before
   const CJK_DOC = !!D.meta.cjk;
-  const trOf = (x) => (lang !== 'en' && x && x.tr && x.tr[lang]) || null;   // a unit's or chunk's translation, if any
+  const trOf = (x) => (x && x.tr && x.tr[lang]) || null;   // a unit's or chunk's translation, if any (none in BASE)
 
   const perf = (name, t0) => { if (window.__drPerf) window.__drPerf.push([name, Math.round((performance.now() - t0) * 10) / 10]); };
   const docEl = document.getElementById('doc');
@@ -54,7 +55,7 @@
   if (CJK_DOC) docEl.classList.add('cjk');
   const ghostEl = document.getElementById('ghosts');
   let level = 4;
-  let lang = 'en';
+  let lang = BASE;
   const localLevel = new Map();           // uid -> level the reader opened it to
   const findMarks = new Map();            // uid -> Map(piece id -> 1, 2 for the one stepped to): the words found (⌘F)
   const finder = { open: false, q: '', hits: [], at: -1, opened: null };   // (opened: the paragraph a step opened at Full)
@@ -574,7 +575,7 @@
     document.documentElement.dataset.lang = lang;
     mirrorLang();
     // the reader's name for it in the library (m.name), if they gave one, over its own title in this language
-    const trTitle = lang !== 'en' && m.titles && m.titles[lang], below = m.name ? trTitle || m.title : trTitle ? m.title : '';
+    const trTitle = m.titles && m.titles[lang], below = m.name ? trTitle || m.title : trTitle ? m.title : '';
     paperHead.innerHTML = `<h1>${esc(m.name || trTitle || m.title)}</h1>${below ? `<div class="orig">${esc(below)}</div>` : ''}<div class="authors">${esc((m.authors || []).map(flipName).join(', '))}</div>` +
       (m.license || m.snapshot ? `<div class="license">${[m.license ? `<a href="${esc(m.license)}" target="_blank" rel="noopener">${esc(licenseName(m.license, t))}</a>` : '',
         m.snapshot ? esc(t.snapshot.replace('{date}', longDate(m.snapshot))) : ''].filter(Boolean).join(' · ')}</div>` : '');
@@ -2820,7 +2821,7 @@
       written: units.some((x) => levelOf(x) <= 2) || parts.some((x) => x.el.classList.contains('stake')), quote: text, units };
   }
   function dragData(d) {
-    const m = D.meta, title = m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title, c = d.c;
+    const m = D.meta, title = m.name || (m.titles && m.titles[lang]) || m.title, c = d.c;
     const q = new URLSearchParams({ paper: m.id });
     if (d.note) { q.set('n', d.note.id); if (d.turn !== undefined) q.set('t', d.turn); } else if (d.uid) { q.set('u', d.uid); if (d.to) q.set('to', d.to); } else if (c) q.set('s', c.id);
     if (!d.note) q.set('level', LEVEL_NAMES[d.L]);
@@ -3171,7 +3172,7 @@
   // author's words that Brief and Full show, is marked in them (==…==) instead. At Topic it is an outline: the
   // headings and the paragraphs' topics, which an outliner or a mind-map plugin draws as a map
   function docMarkdown(kinds) {
-    const m = D.meta, t = T[ui], title = m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title;
+    const m = D.meta, t = T[ui], title = m.name || (m.titles && m.titles[lang]) || m.title;
     const out = mdHead(title, [`level: ${LEVEL_NAMES[level]}`, `lang: ${lang}`], null);
     out.push(`*${t.levels[level]} · ${BRAND}*`, '');
     const mine = new Map();
@@ -3388,7 +3389,7 @@
   function paraOf(a, md) {
     const u = a.unit && U[a.unit];
     if (!u) return null;
-    const z = a.lang !== 'en' && u.tr && u.tr[a.lang], toks = z ? z.toks : u.toks, sents = z ? z.sents : u.sents;
+    const z = u.tr && u.tr[a.lang], toks = z ? z.toks : u.toks, sents = z ? z.sents : u.sents;
     const spans = a.tokens ? [a.tokens] : (a.sents || []).map((k) => sents[k] && [sents[k][0], sents[k][1] - 1]).filter(Boolean);
     const on = (i) => spans.some(([x, y]) => i >= x && i <= y);
     let out = '';
@@ -4234,7 +4235,7 @@ math { font-size: 1.05em; }
   // the tree: a section under the last one above it of a higher level; a paragraph's topic under its section (the
   // opening text's, under the title); the topics before the subsections, as the text has them
   function mapTree() {
-    const m = D.meta, root = { kind: 'root', html: esc(m.name || (lang !== 'en' && m.titles && m.titles[lang]) || m.title), kids: [] };
+    const m = D.meta, root = { kind: 'root', html: esc(m.name || (m.titles && m.titles[lang]) || m.title), kids: [] };
     const stack = [{ lv: 0, node: root }];
     for (const c of D.chunks) {
       const sc = secs.get(c.id);
@@ -4639,7 +4640,7 @@ math { font-size: 1.05em; }
   }
   // ?lang= (the app), #lang= (a static file), then the reader's language, then the one last read in
   const asked = new URLSearchParams(location.search).get('lang') || (/[#&]lang=([\w-]+)/.exec(location.hash) || [])[1];
-  lang = [asked, D.lang, readerLang, store.get('dr-lang'), 'en', AVAIL[0]].find((l) => l && AVAIL.includes(l));
+  lang = [asked, D.lang, readerLang, store.get('dr-lang'), BASE, AVAIL[0]].find((l) => l && AVAIL.includes(l));
   const start = /[#&]level=([^&]+)/.exec(location.hash);
   // where it was being read, unless the link names a place or the page comes again after a generation (pf-keep, below)
   let wasAt = null;

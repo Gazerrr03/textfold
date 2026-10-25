@@ -18,7 +18,7 @@ import difflib
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from . import kinds, llm
+from . import kinds, langs, llm
 from .tokens import is_cjk, lcs_pairs, norm, plain, tokenize_text, words
 
 ROLES = ["context", "gap", "claim", "method", "setup", "result", "analysis", "limitation"]
@@ -180,8 +180,10 @@ def prompt_for(doc, chunk):
     U, A = doc["units"], doc["atoms"]
     b = budgets_for(doc)
     cjk = b is CJK_BUDGET
-    one = "ONE sentence" if cjk else "ONE English sentence"
-    more = "ONE more sentence" if cjk else "ONE more English sentence"
+    # written in the text's own language (pipeline: store.text_lang); a CJK text's lines name none, as before
+    own = langs.name(doc["meta"].get("lang") if doc["meta"].get("lang") in langs.LANGS else "en")
+    one = "ONE sentence" if cjk else f"ONE {own} sentence"
+    more = "ONE more sentence" if cjk else f"ONE more {own} sentence"
     count = "characters" if cjk else "words"
     rules = """
 

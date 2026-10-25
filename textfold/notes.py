@@ -47,7 +47,12 @@ def kind(n):
 def read(pid):
     f = _file(pid)
     if f.exists():
-        return {**json.loads(store.read_text(f)), "format": FORMAT}   # (an older file's name for the same format, renewed)
+        data = {**json.loads(store.read_text(f)), "format": FORMAT}   # (an older file's name for the same format, renewed)
+        base = store.text_lang(pid)
+        if base != "en" and "en" not in store.languages(pid):
+            for n in data.get("notes", []):
+                _relabel(n, base)
+        return data
     meta = json.loads(store.read_text(store.pdir(pid) / "meta.json"))
     return {"format": FORMAT, "version": VERSION,
             "paper": {"id": pid, "version": meta.get("version", ""), "title": meta.get("title", ""), "url": meta.get("abs_url", "")},
@@ -59,6 +64,29 @@ def _write(pid, data):
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(f)
+
+
+def _relabel(note, base):
+    """A note made on the ladder of a text in another language than English said "en": the ladder had that name when
+    it was always English. Read as the text's own language (base) while the text has no English translation, the
+    note stays where it was made; True when it said "en"."""
+    said = False
+    for x in [note.get("anchor") or {}, *turns(note)]:
+        if x.get("lang") == "en":
+            x["lang"], said = base, True
+    return said
+
+
+def settle_base(pid, base):
+    """Before a text in another language than English is first translated into English: its notes that said "en"
+    (_relabel) say its own language in the file, so that "en" from then on is the translation."""
+    with _LOCK:
+        f = _file(pid)
+        if base == "en" or not f.exists():
+            return
+        data = json.loads(store.read_text(f))
+        if any([_relabel(n, base) for n in data.get("notes", [])]):
+            _write(pid, data)
 
 
 def put(pid, note):
@@ -94,7 +122,7 @@ def turns(note):
 
 
 def _text(u, atoms, lang):
-    z = (u.get("tr") or {}).get(lang) if lang != "en" else None
+    z = (u.get("tr") or {}).get(lang)   # (none in the text's own language)
     return plain(z["toks"] if z else u["toks"], atoms)
 
 
@@ -126,7 +154,7 @@ def retrieve(doc, query, lang, skip=(), k=5):
     """The paragraphs anywhere in the paper that share the most telling words with the question and the selection
     (in the authors' text, and in the reader's language when it is another), best first."""
     units, atoms = doc["units"], doc["atoms"]
-    bags = {uid: set(_terms(plain(u["toks"], atoms) + (" " + _text(u, atoms, lang) if lang != "en" else ""))) for uid, u in units.items()}
+    bags = {uid: set(_terms(plain(u["toks"], atoms) + (" " + _text(u, atoms, lang) if lang in (u.get("tr") or {}) else ""))) for uid, u in units.items()}
     df = {}
     for bag in bags.values():
         for w in bag:
@@ -176,7 +204,7 @@ def prompt(doc, note, question, lang, earlier=(), ui=None):
             where += (" The selection is the model's wording, not the authors': answer from the authors' text below, "
                       "and say so if that text does not bear the summary out.")
         body = f"The paragraph, in the authors' words:\n{plain(unit['toks'], atoms)}"
-        if lang != "en" and (unit.get("tr") or {}).get(lang):
+        if (unit.get("tr") or {}).get(lang):
             body += f"\n\n(The same paragraph in {langs.name(lang)}, as the reader sees it:)\n{_text(unit, atoms, lang)}"
         own = [a["unit"]]
     else:
@@ -295,7 +323,7 @@ def ask(pid, nid, question, spec, timeout=300, ui=None, req=None):
     if not note:
         raise ValueError("no such note")
     done = [t for t in turns(note) if t.get("a")]   # answered turns (a pending or failed one is being asked again)
-    lang = next((t.get("lang") for t in turns(note) if t.get("lang")), None) or note["anchor"].get("lang") or "en"
+    lang = next((t.get("lang") for t in turns(note) if t.get("lang")), None) or note["anchor"].get("lang") or doc["meta"]["lang"]
     text, nums = prompt(doc, note, question, lang, done[-6:], ui if ui in langs.LANGS else None)
     rec, _ = llm.call(text, ASK_SCHEMA, spec, store.pdir(pid) / "llm-cache", timeout=timeout, system=kinds.adapt(SYSTEM_ASK, doc["meta"]))
     out = rec["out"]
@@ -332,7 +360,7 @@ def reanchor(pid, old, new):
         if not _file(pid).exists():
             return None
         data = read(pid)
-        moves = Moves(old, new)
+        moves = Moves(old, new, store.text_lang(pid))
         data["notes"] = [moves.note(n) for n in data["notes"]]
         data["paper"] = {**data.get("paper", {}), "title": new["meta"].get("title", "")}
         _write(pid, data)
@@ -414,8 +442,8 @@ class Moves:
     ones edited (near: the most alike, at least half, of the new ones in their place), and where each one is or was among
     the new paragraphs (at)."""
 
-    def __init__(self, old, new):
-        self.old, self.new = old, new
+    def __init__(self, old, new, base="en"):
+        self.old, self.new, self.base = old, new, base   # (base: the language of the text's own words, a note made on them)
         a, self.order = _order(old), _order(new)
         ta = [plain(old["units"][u]["toks"], old["atoms"]) for u in a]
         tb = [plain(new["units"][u]["toks"], new["atoms"]) for u in self.order]
@@ -466,7 +494,7 @@ class Moves:
             return n
         if not lost:
             lost = {"unit": uid, "section": a.get("section"), "tokens": a.get("tokens"), "sents": a.get("sents"), "since": now()}
-            if a.get("lang", "en") != "en":   # (its quote is the translation's: the text's own words, to look for next time)
+            if a.get("lang", self.base) != self.base:   # (its quote is the translation's: the text's own words, to look for next time)
                 lost["quote"] = _sentences(self.old, uid, a.get("sents"))
         here = a.get("unit") and (self.same.get(a["unit"]) or self.near.get(a["unit"]))   # its paragraph, edited, still there
         if here:
@@ -483,7 +511,7 @@ class Moves:
         near, at = self.near.get(was["unit"]), self.at.get(was["unit"])
         if was.get("tokens") is None:
             return {"unit": near, "section": self.chunk(near), "tokens": None, "sents": None} if near else None
-        en = a.get("lang", "en") == "en"
+        en = a.get("lang", self.base) == self.base   # (on the text's own words)
         q = (a.get("quote") or {}) if en else ((lost or {}).get("quote") or _sentences(self.old, was["unit"], was.get("sents")))
         hit = q and self.found(q, near, at)
         got = hit and _at(self.new, *hit)

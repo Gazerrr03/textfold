@@ -14,7 +14,9 @@ from ._storage_layout import DirectoryFiles, LegacyLayout, checked_id, checked_k
 
 
 def document_info(doc):
-    languages = (["en"] if "en" in doc.layers else []) + sorted(k[3:] for k in doc.layers if k.startswith("tr-"))
+    base = (doc.layers.get("en") or {}).get("lang") or "en"   # (the ladder's own language: store.text_lang)
+    translated = sorted(k[3:] for k in doc.layers if k.startswith("tr-"))
+    languages = list(dict.fromkeys(([base] if "en" in doc.layers else []) + translated))
     titles = {k[3:]: v["title"] for k, v in doc.layers.items() if k.startswith("tr-") and v.get("title")}
     return DocumentInfo(doc.id, doc.meta or {}, titles, languages,
                         len((doc.notes or {}).get("notes", [])), doc.created, doc.updated, doc.revision,

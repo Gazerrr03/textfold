@@ -1,4 +1,6 @@
-"""Generate a paper in a language: fetch (an arXiv paper), parse, the English ladder and links (once), the translation.
+"""Generate a paper in a language: fetch (an arXiv paper), parse, the ladder and links in the text's own language
+(once: store.text_lang), and a translation into any other language, English too. The text's own language is never
+translated: asked for, it is the ladder.
 
 Every step reports through `progress(stage, done, total)`; the server turns that into a progress bar. A set `stop`
 (a threading.Event) ends it with llm.Stopped at the next step: what the model has already written stays in the cache,
@@ -14,7 +16,7 @@ section after an atom added or taken out is translated again too.
 """
 import urllib.error
 
-from . import biorxiv, epmc, github, ladder, links, llm, models, store, translate, webpage, wiki
+from . import biorxiv, epmc, github, ladder, links, llm, models, notes, store, translate, webpage, wiki
 from .fetch import fetch
 
 
@@ -54,12 +56,14 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
     doc = store.parsed(pid)
     cache = d / "llm-cache"
     en = store.read(pid, "en")
-    if cfg is None and (en is None or force or (lang != "en" and store.read(pid, f"tr-{lang}") is None)):
+    doc["meta"]["lang"] = base = store.text_lang(pid, en)   # (the ladder is written in it: ladder.prompt_for)
+    lang = lang or base
+    if cfg is None and (en is None or force or (lang != base and store.read(pid, f"tr-{lang}") is None)):
         # fetched and parsed, so it can be read as written; its levels need a model
         raise RuntimeError("No model is available: install Claude Code, Codex, Pi or WorkBuddy, or add an API provider in the settings")
     model = llm.label(cfg) if cfg else ""
     replaced = bool(doc["meta"].get("replaced"))   # its text replaced in place: a missing layer is made from the replies kept
-    if en is None or (force and lang == "en"):
+    if en is None or (force and lang == base):
         check()
         again = force and not (replaced and en is None)
         ladder.build(doc, task(cfg, "ladder"), cache, jobs=jobs, log=log, progress=lambda a, b: progress("ladder", a, b), force=again, stop=stop)
@@ -71,7 +75,9 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
         en = store.read(pid, "en")
     else:
         store.apply_en(doc, en)
-    if lang != "en":
+    if lang != base:
+        if lang == "en":   # notes made on the ladder of a text in another language said "en" (it was always English)
+            notes.settle_base(pid, base)
         tr = store.read(pid, f"tr-{lang}")
         if force or tr is None or tr.get("base") != en["version"]:
             check()
