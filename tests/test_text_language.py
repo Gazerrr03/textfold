@@ -109,6 +109,7 @@ class TextLanguage(unittest.TestCase):
                 self.assertEqual(store.text_lang(local.import_text(text, f"{want}.md")), want)
         self.assertEqual(langs.detect("本文提出了一種新的方法，我們在多個基準上進行了實驗，結果表明這個方法是有效的。"), "zh-Hant")
         self.assertEqual(langs.detect("この論文では、新しい手法を提案する。複数のベンチマークで実験を行った。"), "ja")
+        self.assertEqual(langs.detect("ผลลัพธ์แสดงว่าวิธีนี้ช่วยให้ผู้อ่านเข้าใจบทความยาวได้ดีขึ้น และใช้เวลาน้อยลง"), "th")
         self.assertEqual(langs.detect("$x$ 1 2 3"), "en")   # (too little to tell: English, as before)
 
     def test_a_chinese_text_read_in_chinese_is_not_translated(self):
