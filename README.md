@@ -323,6 +323,7 @@ More in [plugins/pi-textfold](https://github.com/chenxiachan/textfold/blob/main/
 <a href="https://github.com/Pharex38" title="@Pharex38"><img src="https://github.com/Pharex38.png?size=80" width="40" height="40" alt="@Pharex38" /></a>
 <a href="https://github.com/vcdim" title="@vcdim"><img src="https://github.com/vcdim.png?size=80" width="40" height="40" alt="@vcdim" /></a>
 <a href="https://github.com/Yanksi" title="@Yanksi"><img src="https://github.com/Yanksi.png?size=80" width="40" height="40" alt="@Yanksi" /></a>
+<a href="https://github.com/mingrath1" title="@mingrath1"><img src="https://github.com/mingrath1.png?size=80" width="40" height="40" alt="@mingrath1" /></a>
 
 Contributions are welcome: start with [CONTRIBUTING.md](https://github.com/chenxiachan/textfold/blob/main/CONTRIBUTING.md).
 
