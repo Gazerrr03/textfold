@@ -22,6 +22,14 @@ MARKER = ".textfold-migration.json"
 NEXT = ".textfold-migration-next.json"
 
 
+class Refused(ValueError):
+    """A folder Settings will not take, and why (code): the page says it in the reader's language (i18n.js,
+    storage_err_<code>), the message stays for the log and the tests."""
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def _process_alive(pid):
     if not isinstance(pid, int) or pid <= 0:
         return False
@@ -119,24 +127,24 @@ def status(root, home):
 
 def _target(source, target, mode="copy"):
     if not isinstance(target, str) or not target.strip():
-        raise ValueError("Enter an absolute folder path")
+        raise Refused("path", "Enter an absolute folder path")
     path = Path(target.strip()).expanduser()
     if not path.is_absolute():
-        raise ValueError("The library folder must be an absolute path")
+        raise Refused("path", "The library folder must be an absolute path")
     path, source = path.resolve(), Path(source).resolve()
     if path == source:
         return path
     if path.is_relative_to(source) or source.is_relative_to(path):
-        raise ValueError("The new library must not contain, or be inside, the current library")
+        raise Refused("inside", "The new library must not contain, or be inside, the current library")
     if mode not in ("copy", "existing"):
         raise ValueError("Choose copy or existing library")
     if mode == "existing":
         if not (path / "papers").is_dir() or (path / MARKER).exists():
-            raise ValueError("Choose an existing TextFold library containing papers/")
+            raise Refused("not_library", "Choose an existing TextFold library containing papers/")
         _files(path)  # reject symbolic links; selection never modifies this library
         return path
     if path.exists() and (not path.is_dir() or any(path.iterdir())):
-        raise ValueError("Choose an empty folder; existing files will not be overwritten")
+        raise Refused("not_empty", "Choose an empty folder; existing files will not be overwritten")
     return path
 
 
@@ -167,10 +175,10 @@ def _files(root):
     for name in NAMES:
         path = root / name
         if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
-            raise ValueError("Migration does not follow symbolic links")
+            raise Refused("links", "Migration does not follow symbolic links")
         for item in path.rglob("*") if path.is_dir() else [path]:
             if item.is_symlink() or getattr(item, "is_junction", lambda: False)() or not item.resolve().is_relative_to(root):
-                raise ValueError("Migration does not follow symbolic links")
+                raise Refused("links", "Migration does not follow symbolic links")
             if item.is_file():
                 files.append(item)
     return files
@@ -274,8 +282,9 @@ def copy_library(source, destination):
     # The marker is kept until storage.json has selected the verified copy.
 
 
-def activate(default, home):
-    """Startup only. A failed copy leaves the old library active and readable."""
+def activate(default, home, log=None):
+    """Startup only. A failed copy leaves the old library active and readable. log: told before a copy starts (the
+    desktop app's window says so, and waits for it: desktop/main.js)."""
     with _lock:
         try:
             config = load(home)
@@ -290,6 +299,8 @@ def activate(default, home):
             if config.get("pending_mode", "copy") == "existing":
                 _target(source, str(target), "existing")
             else:
+                if log:
+                    log(f"TextFold is copying the library to {target}: once, before it starts")
                 copy_library(source, target)
             selected = {**config, "path": str(target), "backend": "local"}
             selected.pop("pending", None)

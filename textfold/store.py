@@ -228,10 +228,10 @@ def schedule_storage(path=None, cancel=False, mode="copy"):
     return schedule(library_root(), DATA, path, cancel, mode)
 
 
-def initialize_storage():
+def initialize_storage(log=None):
     global _repository, _repository_default
     from .storage_settings import activate
-    _repository = DocumentStore(LocalDirectoryBackend(activate(DATA, DATA)))
+    _repository = DocumentStore(LocalDirectoryBackend(activate(DATA, DATA, log)))
     _repository_default = Path(DATA)
 
 

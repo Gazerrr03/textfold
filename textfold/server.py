@@ -709,8 +709,8 @@ def make_handler(jobs):
                 if u.path == "/api/storage":
                     try:
                         return self.json(store.schedule_storage(body.get("path"), bool(body.get("cancel")), body.get("mode", "copy")))
-                    except (OSError, ValueError) as error:
-                        return self.json({"error": str(error)}, 400)
+                    except (OSError, ValueError) as error:   # (why, in the reader's language: its code)
+                        return self.json({"error": str(error), "code": getattr(error, "code", "")}, 400)
 
                 if u.path == "/api/generate":
                     lang = body.get("lang") or "en"
@@ -1019,7 +1019,7 @@ def withdraw(f):
 def serve(port=3017):
     if os.name == "nt":
         _quiet_children()
-    store.initialize_storage()
+    store.initialize_storage(log=lambda line: print(line, flush=True))   # (a library moved in Settings: copied now, once)
     jobs = Jobs()
     # look for the agents on this computer while the server comes up, and erase what was deleted 30 days ago
     threading.Thread(target=agents.scan, kwargs={"log": print}, daemon=True).start()

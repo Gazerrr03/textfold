@@ -771,6 +771,23 @@ window.DR_I18N = (() => {
     "ru": { n_chat: "Спросить текст", n_chat_ph: "Вопрос по всему тексту…", n_chat_hint: "Ответы берутся из текста, с абзацами, на которые они опираются.", n_whole: "Весь текст", n_infer_tip: "Не из текста: собственный вывод модели или общие знания", n_cite_bad: "Эта ссылка не указывает ни на один абзац текста", n_export_pdf_paper: "Экспорт в PDF: текст на уровне «{level}» с заметками", n_starters: ["О чём это, в нескольких предложениях?", "Каковы главные мысли?", "Просят ли меня что-то сделать или решить?", "Что осталось неясным или не сказано?", "Какая часть важнее всего и почему?"], n_pstarters: ["Объясни это проще", "На чём это основано?", "Как это связано с главной мыслью?"] },
     "hi": { n_chat: "पूरे पाठ से पूछें", n_chat_ph: "पूरे पाठ के बारे में पूछें…", n_chat_hint: "उत्तर पाठ से आते हैं, उन अनुच्छेदों के साथ जिन पर वे टिके हैं।", n_whole: "पूरा पाठ", n_infer_tip: "पाठ में नहीं: मॉडल का अपना अनुमान या सामान्य ज्ञान", n_cite_bad: "यह उद्धरण पाठ के किसी अनुच्छेद की ओर संकेत नहीं करता", n_export_pdf_paper: "PDF निर्यात करें: {level} स्तर पर पाठ, नोट्स के साथ", n_starters: ["यह किस बारे में है, कुछ वाक्यों में?", "इसकी मुख्य बातें क्या हैं?", "क्या यह मुझसे कुछ करने या तय करने को कहता है?", "क्या अस्पष्ट रह गया या कहा नहीं गया?", "कौन-सा हिस्सा सबसे ज़रूरी है, और क्यों?"], n_pstarters: ["इसे आसान शब्दों में समझाइए", "यह किस आधार पर कहा गया है?", "यह मुख्य बात से कैसे जुड़ता है?"] },
   };
+  // the library's folder, in Settings (app.js storageSection; textfold/storage_settings.py): its words, and why a folder
+  // is refused (storage_err_<code>)
+  const STORAGE = {
+    en: { storage_title: "Library folder", storage_current: "Your documents, notes and highlights are in", storage_action: "Use another folder", storage_copy: "Copy the library into an empty folder, and use it there", storage_existing: "Open a library that is already in a folder", storage_destination: "Folder", storage_choose: "Choose…", storage_explain: "TextFold switches when it next starts. A copy is checked file by file, and the library here stays as it is. A library you open is used as it is, with nothing copied into it. The app and the Python package each keep their own choice.", storage_pending: "From the next start:", storage_cancel: "Keep it here", storage_save: "Switch at the next start", storage_saving: "Saving…", storage_failed: "The library stays where it is: {e}", storage_err_path: "Enter the folder’s full path.", storage_err_inside: "The new folder cannot be inside the library, or hold it.", storage_err_not_empty: "Choose an empty folder: nothing already in a folder is overwritten.", storage_err_not_library: "This folder holds no TextFold library (a papers folder).", storage_err_links: "This library has links to other folders, which TextFold does not follow when it copies or opens a library." },
+    zh: { storage_title: "文献库位置", storage_current: "你的文档、笔记和高光都在", storage_action: "换一个文件夹", storage_copy: "把文献库复制到一个空文件夹，之后用那里的", storage_existing: "打开文件夹里已有的文献库", storage_destination: "文件夹", storage_choose: "选择…", storage_explain: "TextFold 下次启动时切换。复制时逐个文件核对，这里的文献库原样保留。打开的文献库按原样使用，不会往里面复制任何东西。桌面版和 Python 包各自记住自己的选择。", storage_pending: "下次启动起使用：", storage_cancel: "留在这里", storage_save: "下次启动时切换", storage_saving: "正在保存…", storage_failed: "文献库没有换位置：{e}", storage_err_path: "请填写文件夹的完整路径。", storage_err_inside: "新文件夹不能在文献库里面，也不能包含它。", storage_err_not_empty: "请选择一个空文件夹：里面已有的文件不会被覆盖。", storage_err_not_library: "这个文件夹里没有 TextFold 文献库（papers 文件夹）。", storage_err_links: "这个文献库里有指向别处的链接，TextFold 复制或打开文献库时不跟随链接。" },
+    "zh-Hant": { storage_title: "文獻庫位置", storage_current: "你的文件、筆記和標亮都在", storage_action: "換一個資料夾", storage_copy: "把文獻庫複製到一個空資料夾，之後用那裡的", storage_existing: "開啟資料夾裡已有的文獻庫", storage_destination: "資料夾", storage_choose: "選擇…", storage_explain: "TextFold 下次啟動時切換。複製時逐個檔案核對，這裡的文獻庫原樣保留。開啟的文獻庫照原樣使用，不會往裡面複製任何東西。桌面版和 Python 套件各自記住自己的選擇。", storage_pending: "下次啟動起使用：", storage_cancel: "留在這裡", storage_save: "下次啟動時切換", storage_saving: "正在儲存…", storage_failed: "文獻庫沒有換位置：{e}", storage_err_path: "請填寫資料夾的完整路徑。", storage_err_inside: "新資料夾不能在文獻庫裡面，也不能包含它。", storage_err_not_empty: "請選擇一個空資料夾：裡面已有的檔案不會被覆寫。", storage_err_not_library: "這個資料夾裡沒有 TextFold 文獻庫（papers 資料夾）。", storage_err_links: "這個文獻庫裡有指向別處的連結，TextFold 複製或開啟文獻庫時不跟隨連結。" },
+    ja: { storage_title: "ライブラリの場所", storage_current: "文書、メモ、ハイライトの保存先：", storage_action: "別のフォルダを使う", storage_copy: "ライブラリを空のフォルダにコピーして、そこで使う", storage_existing: "フォルダにある既存のライブラリを開く", storage_destination: "フォルダ", storage_choose: "選択…", storage_explain: "次に TextFold を起動したときに切り替わります。コピーはファイルごとに確認され、ここのライブラリはそのまま残ります。開いたライブラリはそのまま使われ、何もコピーされません。アプリと Python パッケージは、それぞれ自分の選択を覚えています。", storage_pending: "次回の起動から使う場所：", storage_cancel: "ここのままにする", storage_save: "次回の起動で切り替える", storage_saving: "保存しています…", storage_failed: "ライブラリの場所は変わっていません：{e}", storage_err_path: "フォルダのフルパスを入力してください。", storage_err_inside: "新しいフォルダは、ライブラリの中にも、ライブラリを含む場所にもできません。", storage_err_not_empty: "空のフォルダを選んでください。中にあるファイルは上書きされません。", storage_err_not_library: "このフォルダには TextFold のライブラリ（papers フォルダ）がありません。", storage_err_links: "このライブラリには別のフォルダへのリンクがあります。TextFold はライブラリをコピーしたり開いたりするとき、リンクをたどりません。" },
+    ko: { storage_title: "라이브러리 위치", storage_current: "문서, 메모, 하이라이트가 있는 곳:", storage_action: "다른 폴더 사용", storage_copy: "라이브러리를 빈 폴더에 복사해서 거기서 사용", storage_existing: "폴더에 이미 있는 라이브러리 열기", storage_destination: "폴더", storage_choose: "선택…", storage_explain: "TextFold를 다음에 시작할 때 바뀝니다. 복사는 파일마다 확인하고, 여기 있는 라이브러리는 그대로 둡니다. 연 라이브러리는 그대로 쓰며, 아무것도 복사해 넣지 않습니다. 앱과 Python 패키지는 각자 자기 선택을 기억합니다.", storage_pending: "다음 시작부터 사용:", storage_cancel: "여기 그대로 두기", storage_save: "다음 시작 때 바꾸기", storage_saving: "저장하는 중…", storage_failed: "라이브러리 위치는 바뀌지 않았습니다: {e}", storage_err_path: "폴더의 전체 경로를 입력하세요.", storage_err_inside: "새 폴더는 라이브러리 안에 있거나 라이브러리를 포함할 수 없습니다.", storage_err_not_empty: "빈 폴더를 선택하세요. 폴더 안에 있던 파일은 덮어쓰지 않습니다.", storage_err_not_library: "이 폴더에는 TextFold 라이브러리(papers 폴더)가 없습니다.", storage_err_links: "이 라이브러리에는 다른 폴더를 가리키는 링크가 있습니다. TextFold는 라이브러리를 복사하거나 열 때 링크를 따라가지 않습니다." },
+    es: { storage_title: "Carpeta de la biblioteca", storage_current: "Tus documentos, notas y resaltados están en", storage_action: "Usar otra carpeta", storage_copy: "Copiar la biblioteca a una carpeta vacía y usarla allí", storage_existing: "Abrir una biblioteca que ya está en una carpeta", storage_destination: "Carpeta", storage_choose: "Elegir…", storage_explain: "TextFold cambia la próxima vez que se inicie. La copia se comprueba archivo por archivo, y la biblioteca de aquí queda como está. Una biblioteca que abres se usa tal cual, sin copiar nada en ella. La app y el paquete de Python guardan cada uno su propia elección.", storage_pending: "Desde el próximo inicio:", storage_cancel: "Dejarla aquí", storage_save: "Cambiar en el próximo inicio", storage_saving: "Guardando…", storage_failed: "La biblioteca sigue donde estaba: {e}", storage_err_path: "Escribe la ruta completa de la carpeta.", storage_err_inside: "La carpeta nueva no puede estar dentro de la biblioteca ni contenerla.", storage_err_not_empty: "Elige una carpeta vacía: no se sobrescribe nada de lo que ya hay en una carpeta.", storage_err_not_library: "Esta carpeta no tiene una biblioteca de TextFold (una carpeta papers).", storage_err_links: "Esta biblioteca tiene enlaces a otras carpetas, y TextFold no los sigue al copiar o abrir una biblioteca." },
+    fr: { storage_title: "Dossier de la bibliothèque", storage_current: "Vos documents, notes et surlignages sont dans", storage_action: "Utiliser un autre dossier", storage_copy: "Copier la bibliothèque dans un dossier vide, et l’utiliser là", storage_existing: "Ouvrir une bibliothèque déjà présente dans un dossier", storage_destination: "Dossier", storage_choose: "Choisir…", storage_explain: "TextFold change au prochain démarrage. La copie est vérifiée fichier par fichier, et la bibliothèque d’ici reste telle quelle. Une bibliothèque que vous ouvrez est utilisée telle quelle, sans rien y copier. L’app et le paquet Python gardent chacun leur propre choix.", storage_pending: "À partir du prochain démarrage :", storage_cancel: "La garder ici", storage_save: "Changer au prochain démarrage", storage_saving: "Enregistrement…", storage_failed: "La bibliothèque reste où elle est : {e}", storage_err_path: "Saisissez le chemin complet du dossier.", storage_err_inside: "Le nouveau dossier ne peut ni être dans la bibliothèque ni la contenir.", storage_err_not_empty: "Choisissez un dossier vide : rien de ce qu’un dossier contient déjà n’est écrasé.", storage_err_not_library: "Ce dossier ne contient pas de bibliothèque TextFold (un dossier papers).", storage_err_links: "Cette bibliothèque contient des liens vers d’autres dossiers, que TextFold ne suit pas pour copier ou ouvrir une bibliothèque." },
+    de: { storage_title: "Ordner der Bibliothek", storage_current: "Deine Dokumente, Notizen und Markierungen liegen in", storage_action: "Einen anderen Ordner verwenden", storage_copy: "Die Bibliothek in einen leeren Ordner kopieren und dort verwenden", storage_existing: "Eine Bibliothek öffnen, die schon in einem Ordner liegt", storage_destination: "Ordner", storage_choose: "Auswählen…", storage_explain: "TextFold wechselt beim nächsten Start. Die Kopie wird Datei für Datei geprüft, und die Bibliothek hier bleibt, wie sie ist. Eine Bibliothek, die du öffnest, wird verwendet, wie sie ist, und nichts wird hineinkopiert. Die App und das Python-Paket merken sich ihre Wahl jeweils selbst.", storage_pending: "Ab dem nächsten Start:", storage_cancel: "Hier lassen", storage_save: "Beim nächsten Start wechseln", storage_saving: "Wird gespeichert…", storage_failed: "Die Bibliothek bleibt, wo sie ist: {e}", storage_err_path: "Gib den vollständigen Pfad des Ordners ein.", storage_err_inside: "Der neue Ordner darf weder in der Bibliothek liegen noch sie enthalten.", storage_err_not_empty: "Wähle einen leeren Ordner: Nichts, was schon in einem Ordner liegt, wird überschrieben.", storage_err_not_library: "Dieser Ordner enthält keine TextFold-Bibliothek (einen Ordner papers).", storage_err_links: "Diese Bibliothek enthält Verknüpfungen zu anderen Ordnern, denen TextFold beim Kopieren oder Öffnen einer Bibliothek nicht folgt." },
+    pt: { storage_title: "Pasta da biblioteca", storage_current: "Seus documentos, notas e destaques estão em", storage_action: "Usar outra pasta", storage_copy: "Copiar a biblioteca para uma pasta vazia e usá-la lá", storage_existing: "Abrir uma biblioteca que já está em uma pasta", storage_destination: "Pasta", storage_choose: "Escolher…", storage_explain: "O TextFold muda na próxima vez que iniciar. A cópia é verificada arquivo por arquivo, e a biblioteca daqui fica como está. Uma biblioteca que você abre é usada como está, sem nada copiado para ela. O app e o pacote Python guardam cada um a sua escolha.", storage_pending: "A partir do próximo início:", storage_cancel: "Deixar aqui", storage_save: "Mudar no próximo início", storage_saving: "Salvando…", storage_failed: "A biblioteca continua onde está: {e}", storage_err_path: "Digite o caminho completo da pasta.", storage_err_inside: "A nova pasta não pode estar dentro da biblioteca nem contê-la.", storage_err_not_empty: "Escolha uma pasta vazia: nada do que já está em uma pasta é sobrescrito.", storage_err_not_library: "Esta pasta não tem uma biblioteca do TextFold (uma pasta papers).", storage_err_links: "Esta biblioteca tem links para outras pastas, que o TextFold não segue ao copiar ou abrir uma biblioteca." },
+    it: { storage_title: "Cartella della libreria", storage_current: "I tuoi documenti, note ed evidenziazioni sono in", storage_action: "Usa un’altra cartella", storage_copy: "Copia la libreria in una cartella vuota e usala lì", storage_existing: "Apri una libreria che è già in una cartella", storage_destination: "Cartella", storage_choose: "Scegli…", storage_explain: "TextFold cambia al prossimo avvio. La copia viene controllata file per file, e la libreria qui resta com’è. Una libreria che apri viene usata così com’è, senza copiarci nulla. L’app e il pacchetto Python ricordano ciascuno la propria scelta.", storage_pending: "Dal prossimo avvio:", storage_cancel: "Lasciala qui", storage_save: "Cambia al prossimo avvio", storage_saving: "Salvataggio…", storage_failed: "La libreria resta dov’è: {e}", storage_err_path: "Scrivi il percorso completo della cartella.", storage_err_inside: "La nuova cartella non può stare dentro la libreria né contenerla.", storage_err_not_empty: "Scegli una cartella vuota: nulla di ciò che una cartella contiene già viene sovrascritto.", storage_err_not_library: "Questa cartella non contiene una libreria di TextFold (una cartella papers).", storage_err_links: "Questa libreria contiene collegamenti ad altre cartelle, che TextFold non segue quando copia o apre una libreria." },
+    ru: { storage_title: "Папка библиотеки", storage_current: "Ваши документы, заметки и выделения хранятся в", storage_action: "Другая папка", storage_copy: "Скопировать библиотеку в пустую папку и работать там", storage_existing: "Открыть библиотеку, которая уже есть в папке", storage_destination: "Папка", storage_choose: "Выбрать…", storage_explain: "TextFold переключится при следующем запуске. Копия проверяется файл за файлом, а библиотека здесь остаётся как есть. Открытая библиотека используется как есть, в неё ничего не копируется. Приложение и пакет Python запоминают свой выбор каждый сам.", storage_pending: "Со следующего запуска:", storage_cancel: "Оставить здесь", storage_save: "Переключить при следующем запуске", storage_saving: "Сохранение…", storage_failed: "Библиотека осталась на месте: {e}", storage_err_path: "Введите полный путь к папке.", storage_err_inside: "Новая папка не может находиться внутри библиотеки или содержать её.", storage_err_not_empty: "Выберите пустую папку: ничего из того, что уже есть в папке, не перезаписывается.", storage_err_not_library: "В этой папке нет библиотеки TextFold (папки papers).", storage_err_links: "В этой библиотеке есть ссылки на другие папки, а TextFold не переходит по ним, когда копирует или открывает библиотеку." },
+    hi: { storage_title: "लाइब्रेरी का फ़ोल्डर", storage_current: "आपके दस्तावेज़, नोट और हाइलाइट यहाँ हैं:", storage_action: "दूसरा फ़ोल्डर इस्तेमाल करें", storage_copy: "लाइब्रेरी को किसी ख़ाली फ़ोल्डर में कॉपी करके वहीं इस्तेमाल करें", storage_existing: "किसी फ़ोल्डर में पहले से मौजूद लाइब्रेरी खोलें", storage_destination: "फ़ोल्डर", storage_choose: "चुनें…", storage_explain: "TextFold अगली बार शुरू होने पर बदल जाएगा। कॉपी हर फ़ाइल के साथ जाँची जाती है, और यहाँ की लाइब्रेरी जैसी है वैसी रहती है। जो लाइब्रेरी आप खोलते हैं, वह जैसी है वैसी ही इस्तेमाल होती है, उसमें कुछ कॉपी नहीं होता। ऐप और Python पैकेज, दोनों अपना-अपना चुनाव याद रखते हैं।", storage_pending: "अगली शुरुआत से:", storage_cancel: "यहीं रहने दें", storage_save: "अगली शुरुआत पर बदलें", storage_saving: "सहेजा जा रहा है…", storage_failed: "लाइब्रेरी अपनी जगह पर ही है: {e}", storage_err_path: "फ़ोल्डर का पूरा पाथ लिखें।", storage_err_inside: "नया फ़ोल्डर लाइब्रेरी के अंदर नहीं हो सकता, और न ही उसे अपने अंदर रख सकता है।", storage_err_not_empty: "कोई ख़ाली फ़ोल्डर चुनें: किसी फ़ोल्डर में पहले से मौजूद कुछ भी ओवरराइट नहीं होता।", storage_err_not_library: "इस फ़ोल्डर में TextFold की लाइब्रेरी (papers फ़ोल्डर) नहीं है।", storage_err_links: "इस लाइब्रेरी में दूसरे फ़ोल्डरों के लिंक हैं, और TextFold लाइब्रेरी कॉपी करते या खोलते समय उनका अनुसरण नहीं करता।" },
+  };
+  for (const [code, words] of Object.entries(STORAGE)) Object.assign(S[code], words);
   // find in the text (reader.js, ⌘F): its bar (English with the rest, above)
   const FIND = {
     zh: { find_ph: "在文中查找", find_n: "{i}/{n}", find_none: "没有找到", find_prev: "上一个（⇧Enter）", find_next: "下一个（Enter）", find_close: "关闭（Esc）" },
@@ -787,177 +804,6 @@ window.DR_I18N = (() => {
   };
   for (const [code, words] of Object.entries(FIND)) Object.assign(S[code], words);
   // text: the document is not a paper, and the questions about it say so
-  const STORAGE = {
-  "en": {
-    "storage_title": "Document library",
-    "storage_current": "Current location",
-    "storage_action": "Action",
-    "storage_copy": "Copy to an empty folder",
-    "storage_existing": "Open an existing library",
-    "storage_destination": "Library folder",
-    "storage_choose": "Choose…",
-    "storage_explain": "Changes apply after restart, only to this runtime. Copies are verified and the original is kept. Opening an existing library does not copy or merge documents.",
-    "storage_pending": "After restart, use:",
-    "storage_cancel": "Cancel change",
-    "storage_save": "Save for next restart",
-    "storage_saving": "Saving…"
-  },
-  "zh": {
-    "storage_title": "文献存储",
-    "storage_current": "当前位置",
-    "storage_action": "操作",
-    "storage_copy": "复制到空目录",
-    "storage_existing": "打开已有文献库",
-    "storage_destination": "文献库目录",
-    "storage_choose": "选择…",
-    "storage_explain": "重启后生效，仅影响当前运行目录。复制会校验并保留原文件；打开已有库不会复制或合并文献。",
-    "storage_pending": "重启后使用：",
-    "storage_cancel": "取消变更",
-    "storage_save": "保存，重启后生效",
-    "storage_saving": "正在保存…"
-  },
-  "zh-Hant": {
-    "storage_title": "文獻儲存",
-    "storage_current": "目前位置",
-    "storage_action": "操作",
-    "storage_copy": "複製到空目錄",
-    "storage_existing": "開啟現有文獻庫",
-    "storage_destination": "文獻庫目錄",
-    "storage_choose": "選擇…",
-    "storage_explain": "重新啟動後生效，僅影響目前執行目錄。複製會驗證並保留原檔；開啟現有庫不會複製或合併文獻。",
-    "storage_pending": "重新啟動後使用：",
-    "storage_cancel": "取消變更",
-    "storage_save": "儲存，重新啟動後生效",
-    "storage_saving": "儲存中…"
-  },
-  "ja": {
-    "storage_title": "文献ライブラリ",
-    "storage_current": "現在の場所",
-    "storage_action": "操作",
-    "storage_copy": "空のフォルダーにコピー",
-    "storage_existing": "既存のライブラリを開く",
-    "storage_destination": "ライブラリのフォルダー",
-    "storage_choose": "選択…",
-    "storage_explain": "再起動後、この実行環境だけに適用されます。コピーを検証し、元のファイルを保持します。既存のライブラリを開く場合、コピーや統合は行いません。",
-    "storage_pending": "再起動後に使用：",
-    "storage_cancel": "変更を取り消す",
-    "storage_save": "保存して再起動時に適用",
-    "storage_saving": "保存中…"
-  },
-  "ko": {
-    "storage_title": "문헌 보관함",
-    "storage_current": "현재 위치",
-    "storage_action": "작업",
-    "storage_copy": "빈 폴더로 복사",
-    "storage_existing": "기존 보관함 열기",
-    "storage_destination": "보관함 폴더",
-    "storage_choose": "선택…",
-    "storage_explain": "다시 시작하면 이 실행 환경에만 적용됩니다. 복사본을 검증하고 원본을 보존합니다. 기존 보관함은 복사하거나 병합하지 않습니다.",
-    "storage_pending": "다시 시작 후 사용:",
-    "storage_cancel": "변경 취소",
-    "storage_save": "저장하고 재시작 시 적용",
-    "storage_saving": "저장 중…"
-  },
-  "es": {
-    "storage_title": "Biblioteca",
-    "storage_current": "Ubicación actual",
-    "storage_action": "Acción",
-    "storage_copy": "Copiar a una carpeta vacía",
-    "storage_existing": "Abrir una biblioteca existente",
-    "storage_destination": "Carpeta de la biblioteca",
-    "storage_choose": "Elegir…",
-    "storage_explain": "Se aplica al reiniciar, solo a esta instancia. Las copias se verifican y se conserva el original. Abrir una biblioteca existente no copia ni combina documentos.",
-    "storage_pending": "Al reiniciar, usar:",
-    "storage_cancel": "Cancelar cambio",
-    "storage_save": "Guardar para el próximo reinicio",
-    "storage_saving": "Guardando…"
-  },
-  "fr": {
-    "storage_title": "Bibliothèque",
-    "storage_current": "Emplacement actuel",
-    "storage_action": "Action",
-    "storage_copy": "Copier vers un dossier vide",
-    "storage_existing": "Ouvrir une bibliothèque existante",
-    "storage_destination": "Dossier de la bibliothèque",
-    "storage_choose": "Choisir…",
-    "storage_explain": "Prend effet au redémarrage, pour cette instance uniquement. Les copies sont vérifiées et les originaux conservés. Ouvrir une bibliothèque existante ne copie ni ne fusionne les documents.",
-    "storage_pending": "Au redémarrage, utiliser :",
-    "storage_cancel": "Annuler le changement",
-    "storage_save": "Enregistrer pour le redémarrage",
-    "storage_saving": "Enregistrement…"
-  },
-  "de": {
-    "storage_title": "Bibliothek",
-    "storage_current": "Aktueller Speicherort",
-    "storage_action": "Aktion",
-    "storage_copy": "In leeren Ordner kopieren",
-    "storage_existing": "Vorhandene Bibliothek öffnen",
-    "storage_destination": "Bibliotheksordner",
-    "storage_choose": "Auswählen…",
-    "storage_explain": "Gilt nach dem Neustart nur für diese Laufzeitumgebung. Kopien werden geprüft, Originale bleiben erhalten. Beim Öffnen einer vorhandenen Bibliothek werden Dokumente weder kopiert noch zusammengeführt.",
-    "storage_pending": "Nach dem Neustart verwenden:",
-    "storage_cancel": "Änderung abbrechen",
-    "storage_save": "Für nächsten Neustart speichern",
-    "storage_saving": "Wird gespeichert…"
-  },
-  "pt": {
-    "storage_title": "Biblioteca",
-    "storage_current": "Localização atual",
-    "storage_action": "Ação",
-    "storage_copy": "Copiar para uma pasta vazia",
-    "storage_existing": "Abrir biblioteca existente",
-    "storage_destination": "Pasta da biblioteca",
-    "storage_choose": "Escolher…",
-    "storage_explain": "Aplica-se após reiniciar, apenas a esta instância. As cópias são verificadas e os originais mantidos. Abrir uma biblioteca existente não copia nem combina documentos.",
-    "storage_pending": "Após reiniciar, usar:",
-    "storage_cancel": "Cancelar alteração",
-    "storage_save": "Guardar para o próximo reinício",
-    "storage_saving": "A guardar…"
-  },
-  "it": {
-    "storage_title": "Biblioteca",
-    "storage_current": "Posizione attuale",
-    "storage_action": "Azione",
-    "storage_copy": "Copia in una cartella vuota",
-    "storage_existing": "Apri una biblioteca esistente",
-    "storage_destination": "Cartella della biblioteca",
-    "storage_choose": "Scegli…",
-    "storage_explain": "Si applica al riavvio, solo a questa istanza. Le copie vengono verificate e gli originali conservati. Aprire una biblioteca esistente non copia né unisce i documenti.",
-    "storage_pending": "Al riavvio, usa:",
-    "storage_cancel": "Annulla modifica",
-    "storage_save": "Salva per il prossimo riavvio",
-    "storage_saving": "Salvataggio…"
-  },
-  "ru": {
-    "storage_title": "Библиотека",
-    "storage_current": "Текущее расположение",
-    "storage_action": "Действие",
-    "storage_copy": "Копировать в пустую папку",
-    "storage_existing": "Открыть существующую библиотеку",
-    "storage_destination": "Папка библиотеки",
-    "storage_choose": "Выбрать…",
-    "storage_explain": "Применяется после перезапуска только к этому экземпляру. Копии проверяются, оригиналы сохраняются. При открытии существующей библиотеки документы не копируются и не объединяются.",
-    "storage_pending": "После перезапуска использовать:",
-    "storage_cancel": "Отменить изменение",
-    "storage_save": "Сохранить до перезапуска",
-    "storage_saving": "Сохранение…"
-  },
-  "hi": {
-    "storage_title": "पुस्तकालय",
-    "storage_current": "वर्तमान स्थान",
-    "storage_action": "कार्रवाई",
-    "storage_copy": "खाली फ़ोल्डर में कॉपी करें",
-    "storage_existing": "मौजूदा पुस्तकालय खोलें",
-    "storage_destination": "पुस्तकालय फ़ोल्डर",
-    "storage_choose": "चुनें…",
-    "storage_explain": "पुनः आरंभ के बाद केवल इस रनटाइम पर लागू होगा। प्रतियाँ जाँची जाती हैं और मूल सुरक्षित रहता है। मौजूदा पुस्तकालय खोलने से दस्तावेज़ कॉपी या मर्ज नहीं होते।",
-    "storage_pending": "पुनः आरंभ के बाद उपयोग करें:",
-    "storage_cancel": "बदलाव रद्द करें",
-    "storage_save": "अगले पुनः आरंभ के लिए सहेजें",
-    "storage_saving": "सहेज रहा है…"
-  }
-};
-  for (const [code, words] of Object.entries(STORAGE)) Object.assign(S[code], words);
   const t = (lang, text) => ({ ...S.en, ...(S[lang] || {}), ...(text ? { ...DOCS.en, ...(DOCS[lang] || {}) } : {}) });
   // the language a visitor most likely reads, among the ones offered: the interface's, or `among` (a text's, by name)
   function guess(among = NATIVE) {

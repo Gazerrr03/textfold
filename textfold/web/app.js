@@ -19,7 +19,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const api = (path, body) => fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText); return d; });
+    .then(async (r) => { const d = await r.json(); if (!r.ok) throw Object.assign(new Error(d.error || r.statusText), { code: d.code }); return d; });
   let modelData = BOOT.modelData || null, modelRefresh = null;
   function refreshModels() {
     if (!modelRefresh) modelRefresh = (async () => {
@@ -1471,25 +1471,27 @@
     let form = null;          // the provider being added or edited: {key?, preset, name, base, api_key, found, picked}
     const tests = {};         // the last connection test of each model: the levels' (gen), the questions' (ask)
     let bridgeStarting = false, bridgeState = null;
-    let storageDraft = null, storageMode = null, storageBusy = false, storageError = "";
+    let storageDraft = null, storageMode = null, storageBusy = false, storageError = null;   // ({code, message}: why a folder was refused)
     const dlg = h('dialog', 'settings prefs'); document.body.append(dlg);
     dlg.addEventListener('close', () => { settingsOpen = false; });
     const T = () => t();
     const host = (u) => { try { return new URL(u).host; } catch { return u; } };
     const groupName = (g) => (data.agents.find((a) => a.runtime === g) || {}).label || (data.providers.find((p) => p.key === g) || {}).name || g;
 
+    // the library's folder (textfold/storage_settings.py): where it is, and another one from the next start, a copy of it
+    // or a library already in a folder; why a folder is refused, in the reader's language
     function storageSection() {
       const t = T(), v = data.storage;
       if (!v) return '';
       const mode = storageMode ?? v.mode ?? 'copy', disabled = storageBusy ? ' disabled' : '';
+      const why = storageError ? t[`storage_err_${storageError.code}`] || storageError.message : v.error ? t.storage_failed.replace('{e}', v.error) : '';
       return `<h3>${esc(t.storage_title)}</h3><div class="st-form">
         <p class="st-note">${esc(t.storage_current)} <code>${esc(v.path)}</code></p>
         <label>${esc(t.storage_action)}<select class="st-storage-mode"${disabled}><option value="copy"${mode === 'copy' ? ' selected' : ''}>${esc(t.storage_copy)}</option><option value="existing"${mode === 'existing' ? ' selected' : ''}>${esc(t.storage_existing)}</option></select></label>
-        <label>${esc(t.storage_destination)}<input class="st-storage-input" value="${esc(storageDraft ?? v.pending ?? '')}" spellcheck="false"${disabled}></label>
-        ${window.desktop?.chooseLibraryFolder ? `<button class="st-btn st-storage-pick"${disabled}>${esc(t.storage_choose)}</button>` : ''}
+        <label>${esc(t.storage_destination)}<div class="st-row" style="margin:0"><input class="st-storage-input" style="flex:1;min-width:0" value="${esc(storageDraft ?? v.pending ?? '')}" spellcheck="false"${disabled}>${window.desktop?.chooseLibraryFolder ? `<button type="button" class="st-btn st-storage-pick"${disabled}>${esc(t.storage_choose)}</button>` : ''}</div></label>
         <p class="st-note">${esc(t.storage_explain)}</p>
         ${v.pending ? `<p class="st-note ok">${esc(t.storage_pending)} <code>${esc(v.pending)}</code></p>` : ''}
-        ${storageError || v.error ? `<p class="st-note warn" role="alert">${esc(storageError || v.error)}</p>` : ''}
+        ${why ? `<p class="st-note warn" role="alert">${esc(why)}</p>` : ''}
         <div class="st-row end">${v.pending ? `<button class="st-btn st-storage-cancel"${disabled}>${esc(t.storage_cancel)}</button>` : ''}<button class="st-btn st-storage-save"${disabled}>${esc(storageBusy ? t.storage_saving : t.storage_save)}</button></div></div>`;
     }
 
@@ -1608,12 +1610,12 @@
       const pickLibrary = q('.st-storage-pick');
       if (pickLibrary) pickLibrary.onclick = async () => {
         try { const path = await window.desktop.chooseLibraryFolder(); if (path) { storageDraft = path; render(); } }
-        catch (error) { storageError = error.message; render(); }
+        catch (error) { storageError = { message: error.message }; render(); }
       };
       async function saveLibrary(cancel = false) {
-        storageBusy = true; storageError = ''; render();
+        storageBusy = true; storageError = null; render();
         try { data.storage = await api('/api/storage', { path: storageDraft ?? data.storage.pending, mode: storageMode ?? data.storage.mode, cancel }); }
-        catch (error) { storageError = error.message; }
+        catch (error) { storageError = { code: error.code, message: error.message }; }
         storageBusy = false; render();
       }
       const saveLibraryButton = q('.st-storage-save'), cancelLibraryButton = q('.st-storage-cancel');

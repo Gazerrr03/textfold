@@ -52,6 +52,26 @@ class Migration(unittest.TestCase):
                 storage_settings.schedule(self.source, self.home, path)
         self.assertEqual((bad / "keep.txt").read_bytes(), b"keep")
 
+    def test_a_refused_folder_says_why(self):
+        # (the page says it in the reader's language: i18n.js storage_err_<code>)
+        bad = self.root / "occupied"
+        bad.mkdir()
+        (bad / "keep.txt").write_bytes(b"keep")
+        for path, mode, code in ((str(bad), "copy", "not_empty"), (str(self.source / "child"), "copy", "inside"),
+                                 ("relative", "copy", "path"), ("", "copy", "path"), (str(bad), "existing", "not_library")):
+            with self.subTest(path=path, mode=mode), self.assertRaises(storage_settings.Refused) as caught:
+                storage_settings.schedule(self.source, self.home, path, mode=mode)
+            self.assertEqual(caught.exception.code, code)
+
+    def test_the_start_says_a_copy_is_under_way(self):
+        heard = []
+        self.assertEqual(storage_settings.activate(self.source, self.home, heard.append), self.source)
+        self.assertEqual(heard, [])   # nothing to copy, nothing said
+        storage_settings.schedule(self.source, self.home, str(self.target))
+        self.assertEqual(storage_settings.activate(self.source, self.home, heard.append), self.target)
+        self.assertEqual(len(heard), 1)
+        self.assertIn("copying the library", heard[0])   # (what desktop/main.js listens for, to wait for it)
+
     def test_pending_move_can_be_cancelled(self):
         storage_settings.schedule(self.source, self.home, str(self.target))
         status = storage_settings.schedule(self.source, self.home, cancel=True)

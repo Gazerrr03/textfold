@@ -86,7 +86,8 @@ class StorageRoutes(unittest.TestCase):
         self.assertEqual(len(list((self.target / "papers").glob("*/meta.json"))), 3)
 
     def test_bad_destination_and_cancel_do_not_change_the_active_library(self):
-        self.assertEqual(self.call("/api/storage", {"path": "relative"})[0], 400)
+        code, refused = self.call("/api/storage", {"path": "relative"})
+        self.assertEqual((code, refused["code"]), (400, "path"))
         self.call("/api/storage", {"path": str(self.target)})
         code, status = self.call("/api/storage", {"cancel": True})
         self.assertEqual((code, status["path"], status["pending"]), (200, str(self.data), ""))

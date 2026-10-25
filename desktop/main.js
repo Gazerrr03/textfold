@@ -15,12 +15,6 @@ const path = require('path');
 const links = require('./links');
 
 const WIN = process.platform === 'win32';
-ipcMain.handle('storage:choose-folder', async (e) => {
-  const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
-    title: 'TextFold', properties: ['openDirectory', 'createDirectory'],
-  });
-  return result.canceled ? null : result.filePaths[0] || null;
-});
 const PAYLOAD = app.isPackaged ? path.join(process.resourcesPath, 'payload') : path.join(__dirname, 'payload');
 const BUNDLED = WIN ? path.join(PAYLOAD, 'python', 'python.exe') : path.join(PAYLOAD, 'python', 'bin', 'python3');
 const PACKED = fs.existsSync(BUNDLED);
@@ -111,8 +105,23 @@ function freePort(start = 31917) {
   });
 }
 
+// The library moved in Settings is copied when the server starts, before it answers (textfold/storage_settings.py): the
+// server says so, the window too, and the wait lasts as long as the copy (a large library on a slow disk takes minutes)
+let copying = false;
+const COPYING = { en: 'Copying your library to its new folder. This happens once.', zh: '正在把文献库复制到新文件夹，只有这一次。',
+  'zh-Hant': '正在把文獻庫複製到新資料夾，只有這一次。', ja: 'ライブラリを新しいフォルダにコピーしています。これは一度だけです。',
+  ko: '라이브러리를 새 폴더로 복사하고 있습니다. 한 번만 합니다.', es: 'Copiando tu biblioteca a su nueva carpeta. Solo esta vez.',
+  fr: 'Copie de votre bibliothèque dans son nouveau dossier. Cela n’arrive qu’une fois.', de: 'Deine Bibliothek wird in ihren neuen Ordner kopiert. Das geschieht nur einmal.',
+  pt: 'Copiando sua biblioteca para a nova pasta. Isso acontece só uma vez.', it: 'Copia della tua libreria nella nuova cartella. Succede una volta sola.',
+  ru: 'Ваша библиотека копируется в новую папку. Это происходит один раз.', hi: 'आपकी लाइब्रेरी नए फ़ोल्डर में कॉपी हो रही है। ऐसा केवल एक बार होता है।' };
+function heard(chunk) {
+  if (copying || !/copying the library/.test(String(chunk))) return;
+  copying = true;
+  if (win && !win.isDestroyed()) win.webContents.executeJavaScript(`document.querySelector('.note').textContent = ${JSON.stringify(inLocale(COPYING))}`).catch(() => {});
+}
+
 async function waitReady(port, tries = 160) {
-  for (let i = 0; i < tries; i++) {
+  for (let i = 0; i < tries || (copying && server); i++) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/api/models`);
       if (r.ok) return true;
@@ -147,6 +156,7 @@ function startServer(port) {
   server = spawn(PYTHON, ['-s', '-u', '-m', 'textfold', 'serve', '--port', String(port)], { cwd: CODE, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   server.stdout.pipe(log);
   server.stderr.pipe(log);
+  server.stdout.on('data', heard);
   server.on('exit', (code) => { server = null; if (code && win && !win.isDestroyed()) win.webContents.send?.('server-exit', code); });
 }
 
@@ -196,6 +206,12 @@ ipcMain.handle('save-file', async (e, name, data) => {
   if (r.canceled || !r.filePath) return null;
   await fs.promises.writeFile(r.filePath, String(data), 'utf8');
   return r.filePath;
+});
+// the folder the library is to go to, or the library to open (Settings: textfold/storage_settings.py), in the system's
+// own dialog: its path, or null
+ipcMain.handle('storage:choose-folder', async (e) => {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), { title: 'TextFold', properties: ['openDirectory', 'createDirectory'] });
+  return r.canceled ? null : r.filePaths[0] || null;
 });
 
 // ── updates ──────────────────────────────────────────────────────────
