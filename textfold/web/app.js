@@ -1471,11 +1471,27 @@
     let form = null;          // the provider being added or edited: {key?, preset, name, base, api_key, found, picked}
     const tests = {};         // the last connection test of each model: the levels' (gen), the questions' (ask)
     let bridgeStarting = false, bridgeState = null;
+    let storageDraft = null, storageMode = null, storageBusy = false, storageError = "";
     const dlg = h('dialog', 'settings prefs'); document.body.append(dlg);
     dlg.addEventListener('close', () => { settingsOpen = false; });
     const T = () => t();
     const host = (u) => { try { return new URL(u).host; } catch { return u; } };
     const groupName = (g) => (data.agents.find((a) => a.runtime === g) || {}).label || (data.providers.find((p) => p.key === g) || {}).name || g;
+
+    function storageSection() {
+      const t = T(), v = data.storage;
+      if (!v) return '';
+      const mode = storageMode ?? v.mode ?? 'copy', disabled = storageBusy ? ' disabled' : '';
+      return `<h3>${esc(t.storage_title)}</h3><div class="st-form">
+        <p class="st-note">${esc(t.storage_current)} <code>${esc(v.path)}</code></p>
+        <label>${esc(t.storage_action)}<select class="st-storage-mode"${disabled}><option value="copy"${mode === 'copy' ? ' selected' : ''}>${esc(t.storage_copy)}</option><option value="existing"${mode === 'existing' ? ' selected' : ''}>${esc(t.storage_existing)}</option></select></label>
+        <label>${esc(t.storage_destination)}<input class="st-storage-input" value="${esc(storageDraft ?? v.pending ?? '')}" spellcheck="false"${disabled}></label>
+        ${window.desktop?.chooseLibraryFolder ? `<button class="st-btn st-storage-pick"${disabled}>${esc(t.storage_choose)}</button>` : ''}
+        <p class="st-note">${esc(t.storage_explain)}</p>
+        ${v.pending ? `<p class="st-note ok">${esc(t.storage_pending)} <code>${esc(v.pending)}</code></p>` : ''}
+        ${storageError || v.error ? `<p class="st-note warn" role="alert">${esc(storageError || v.error)}</p>` : ''}
+        <div class="st-row end">${v.pending ? `<button class="st-btn st-storage-cancel"${disabled}>${esc(t.storage_cancel)}</button>` : ''}<button class="st-btn st-storage-save"${disabled}>${esc(storageBusy ? t.storage_saving : t.storage_save)}</button></div></div>`;
+    }
 
     function modelSection() {
       const t = T();
@@ -1581,10 +1597,29 @@
         <section><h3>${esc(t.st_models_h)}</h3><div class="st-model-area">${modelSection()}${discoveryState()}</div></section>
         <section><h3>${esc(t.st_agents)}</h3><div class="st-agent-area">${loaded ? agentSection() : ''}</div></section>
         <section><h3>${esc(t.st_providers)}</h3><div class="st-provider-area">${loaded ? providerSection() : ''}</div></section>
+        <section class="st-storage">${storageSection()}</section>
         <section class="st-engine"></section>
         </div>
         <footer class="stp-foot"><p>${esc(t.key_note)}</p><button type="button" class="primary st-close">${esc(t.st_close)}</button></footer></div>`;
       wire();
+      const storageInput = q('.st-storage-input'), storageSelect = q('.st-storage-mode');
+      if (storageInput) storageInput.oninput = () => { storageDraft = storageInput.value; };
+      if (storageSelect) storageSelect.onchange = () => { storageMode = storageSelect.value; };
+      const pickLibrary = q('.st-storage-pick');
+      if (pickLibrary) pickLibrary.onclick = async () => {
+        try { const path = await window.desktop.chooseLibraryFolder(); if (path) { storageDraft = path; render(); } }
+        catch (error) { storageError = error.message; render(); }
+      };
+      async function saveLibrary(cancel = false) {
+        storageBusy = true; storageError = ''; render();
+        try { data.storage = await api('/api/storage', { path: storageDraft ?? data.storage.pending, mode: storageMode ?? data.storage.mode, cancel }); }
+        catch (error) { storageError = error.message; }
+        storageBusy = false; render();
+      }
+      const saveLibraryButton = q('.st-storage-save'), cancelLibraryButton = q('.st-storage-cancel');
+      if (saveLibraryButton) saveLibraryButton.onclick = () => saveLibrary();
+      if (cancelLibraryButton) cancelLibraryButton.onclick = () => saveLibrary(true);
+
       renderEngine();
       q('.stp-body').scrollTop = y;   // (after the engine's part, which makes the sections their full height)
       if (form && !formShown) q('.st-form').scrollIntoView({ block: 'nearest' });   // adding or editing a provider: the form in view

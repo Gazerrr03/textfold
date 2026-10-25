@@ -28,7 +28,7 @@ _lock = threading.Lock()
 
 
 def path():
-    return store.DATA / "library.json"
+    return store.library_root() / "library.json"
 
 
 def _times(d, key):

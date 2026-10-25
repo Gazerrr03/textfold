@@ -44,7 +44,7 @@ def generate(ref, lang, cfg, force=False, jobs=4, progress=lambda *a: None, log=
         d = store.pdir(pid)
     else:
         try:
-            d = fetch(pid, store.DATA)
+            d = fetch(pid, store.library_root())
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 raise RuntimeError("no-html")  # the app shows its own sentence for this
