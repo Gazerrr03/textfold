@@ -264,7 +264,7 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
-- **2026 年 10 月 25 日：公式和表格像 Typora 那样显示。** Markdown 文档里的公式由 KaTeX 排版，字体和间距与 TeX 一致。单独成行的公式按 Typora 的方式在右边编号 (1)、(2)：`\tag{A}` 给出它自己的编号，`\notag` 和带星号的环境不编号，`\eqref{…}` 显示 `\label{…}` 那条公式的编号，点它就跳过去。多行的公式（`aligned`）分行显示。论文里的公式改用 LaTeX 的字体 Latin Modern Math。来自 Markdown、网页或文档的表格，每一格都有边框，隔行有底色。单独成行的公式也能像文字一样选中，用来高光、写笔记或提问；也能像段落一样用左边的手柄拖出去，带着编号和指回原处的链接。编号、KaTeX 和新表格对之后添加的文档生效；论文公式的字体马上就变。
+- **2026 年 10 月 25 日：公式和表格像 Typora 那样显示。** Markdown 文档里的公式由 KaTeX 排版，字体和间距与 TeX 一致。单独成行的公式按 Typora 的方式在右边编号 (1)、(2)：`\tag{A}` 给出它自己的编号，`\notag` 和带星号的环境不编号，`\eqref{…}` 显示 `\label{…}` 那条公式的编号，点它就跳过去。多行的公式（`aligned`）分行显示。论文里的公式改用 LaTeX 的字体 Latin Modern Math。来自 Markdown、网页或文档的表格，每一格都有边框，隔行有底色。单独成行的公式也能像文字一样选中，用来高光、写笔记或提问；也能像段落一样用左边的手柄拖出去，带着编号和指回原处的链接。书库里已有的 Markdown 文档也会这样显示，层级和笔记都保持原样。
 - **2026 年 10 月 25 日：文档用它自己的语言，提问可以上网查，加入泰语。** 文档的各层级用它本身的语言写，语言菜单也用这个名字：中文文档显示为“简体中文”，用中文读时不再让模型把它再翻译成中文一遍。英文和其他语言一样，是一份翻译。提问时打开 **上网查找**，本机的 Agent（Claude Code、Codex、CodeBuddy，或装了网页扩展的 Pi）会搜索、打开网页来回答，用到的网页附上链接；它不会改动任何文件。在设置里选好的文献库文件夹会立刻保存。泰语加入可读的语言。感谢 [@mingrath1](https://github.com/mingrath1)、[@MacMillan1225](https://github.com/MacMillan1225)、[@RocStone](https://github.com/RocStone) 和 [@QAbot-zh](https://github.com/QAbot-zh)。
 - **2026 年 10 月 25 日：在文中查找，画出图表，文献库放在你选的文件夹。** ⌘F（Ctrl+F）在文中查找：查当前层级显示的文字，也查这一层折叠掉的原文，跳到这样一处时，那一段原地展开到全文。Markdown 文件或网页里用 Mermaid 写的图会画出来，页面是浅色就画成浅色，是深色就画成深色。在设置的 **文献库位置** 里，可以把文献库复制到另一个文件夹，以后用那里的；也可以打开一个文件夹里已有的文献库。TextFold 下次启动时切换，原来那份文献库保持原样。感谢 [@adalach](https://github.com/adalach)、[@Yanksi](https://github.com/Yanksi) 和 [@kvistgaard](https://github.com/kvistgaard)。
 
