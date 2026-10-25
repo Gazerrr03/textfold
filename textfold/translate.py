@@ -50,7 +50,7 @@ def marked(toks, atoms):
 def prompt_for(doc, chunk, lang):
     U, A = doc["units"], doc["atoms"]
     L, b = langs.name(lang), langs.budget(lang)
-    unit, acro = b["unit"], " (an English acronym counts as one)" if langs.cjk(lang) else ""
+    unit, acro = b["unit"], " (an English acronym counts as one)" if b["unit"] == "characters" else ""
     blocks = []
     for n, uid in enumerate(chunk["units"]):
         u, lad = U[uid], U[uid]["lad"]

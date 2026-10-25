@@ -28,8 +28,13 @@ def _marks():
 
 
 MARKS = _marks()
-_LETTER = rf"[^\W_{CJK}](?:[^\W_{CJK}]|[{MARKS}])*"
-WORD = re.compile(rf"[{CJK}]|\d+(?:[.,]\d+)+%?|{_LETTER}(?:['’\-]{_LETTER})*|\S", re.U)
+# Thai has no space between its words, and no dictionary comes with Python: it is cut into syllables, the way CJK is
+# cut into characters. A syllable here is a consonant with the vowel signs and tone marks written around it (the
+# vowels เ แ โ ใ ไ stand before it); the reader breaks a line only between the words of the browser's own dictionary.
+THAI = "\u0e00-\u0e7f"
+_SYLLABLE = "[เแโใไ]*[ก-ฮ][\u0e30-\u0e3a\u0e45\u0e47-\u0e4e]*"
+_LETTER = rf"[^\W_{CJK}{THAI}](?:[^\W_{CJK}{THAI}]|[{MARKS}])*"
+WORD = re.compile(rf"[{CJK}]|{_SYLLABLE}|\d+(?:[.,]\d+)+%?|[๐-๙]+|{_LETTER}(?:['’\-]{_LETTER})*|[{THAI}]|\S", re.U)
 ABBREV = {
     "e", "g", "i", "al", "etc", "vs", "cf", "fig", "figs", "eq", "eqs", "sec", "secs", "tab",
     "ref", "refs", "no", "approx", "resp", "ca", "viz", "dr", "mr", "ms", "prof", "st", "jr",
@@ -106,7 +111,7 @@ def norm(tok, atoms):
         return "atom:" + re.sub(r"\s+", "", atoms.get(tok["a"], {}).get("alt", tok["a"]))
     if "x" in tok:
         return "atom:" + re.sub(r"\s+", "", tok["x"])
-    w = re.sub(r"[^\w]", "", (tok.get("t") or "").lower())
+    w = re.sub(rf"[^\w{MARKS}]", "", (tok.get("t") or "").lower())   # (a vowel sign or tone mark is part of its syllable)
     if not w or w in STOP:
         return ""
     if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):

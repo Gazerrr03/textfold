@@ -245,10 +245,38 @@
   const CLOSE = /^[，。、；：！？）」』”’》%,.;:!?)\]]/;
   const OPEN = /[（「『“‘《([]$/;
   const textOf = (p) => p.gap ? '…' : (p.tok.t || 'A');
-  function glued(p, q) {
+  function glued(p, q, cut) {
     const a = textOf(p), b = textOf(q);
     if (CLOSE.test(b) || OPEN.test(a)) return true;
-    return !(CJK.test(a) || CJK.test(b));
+    return !(CJK.test(a) || CJK.test(b) || cut);
+  }
+
+  // Thai is written without spaces and its tokens are syllables (tokens.py): a line may break only where the browser's
+  // own dictionary ends a word, so the pieces of a word stay together and the words of a clause may part (a closing
+  // mark after the word, an opening one before it, stay glued to it as everywhere)
+  const THAI = /[\u0e00-\u0e7f]/;
+  const thaiSeg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+  // the pieces after which a line may break: the end of each Thai word, and each side of a Thai run among other text
+  function thaiCuts(pcs) {
+    const cuts = new Set();
+    let run = [], text = '';
+    const flush = () => {
+      if (run.length) {
+        const ends = new Set();
+        if (thaiSeg) for (const w of thaiSeg.segment(text)) ends.add(w.index + w.segment.length);
+        let at = 0;
+        run.forEach((n) => { at += pcs[n].tok.t.length; if (!thaiSeg || ends.has(at)) cuts.add(n); });
+        if (run[0] > 0) cuts.add(run[0] - 1);
+        cuts.add(run[run.length - 1]);
+      }
+      run = []; text = '';
+    };
+    pcs.forEach((p, n) => {
+      if (p.tok && p.tok.t && THAI.test(p.tok.t)) { run.push(n); text += p.tok.t; if (p.tok.s) flush(); }
+      else flush();
+    });
+    flush();
+    return cuts;
   }
 
   const levelOf = (uid) => localLevel.has(uid) ? localLevel.get(uid) : level;
@@ -279,6 +307,7 @@
       return;
     }
     const pcs = pieces(uid, L), frag = document.createDocumentFragment();
+    const cuts = lang === 'th' ? thaiCuts(pcs) : null;
     let group = null;
     pcs.forEach((p, n) => {
       let s = map.get(p.id);
@@ -288,7 +317,7 @@
       s._j = p.j;
       const last = n === pcs.length - 1;
       const space = !last && (p.gap || (p.tok && p.tok.s) || pcs[n + 1].gap);
-      const glue = !last && !space && glued(p, pcs[n + 1]);
+      const glue = !last && !space && glued(p, pcs[n + 1], cuts && cuts.has(n));
       if (glue) { if (!group) { group = document.createElement('span'); group.className = 'wg'; frag.appendChild(group); } group.appendChild(s); }
       else if (group) { group.appendChild(s); group = null; }
       else frag.appendChild(s);
