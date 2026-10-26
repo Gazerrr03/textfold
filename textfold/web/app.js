@@ -878,7 +878,8 @@
     : msg === 'no-readme' ? t().no_readme : msg === 'github-limit' ? t().github_limit : msg === 'needs-engine' ? t().pdf_needs
     : msg === 'busy' ? t().engine_busy : msg === 'not-pdf' ? t().not_pdf : msg === 'too-large' ? t().pdf_large
     : msg === 'bad-file' ? t().file_bad : msg === 'no-file' ? t().no_file : msg === 'not-running' ? t().z_off : msg === 'api-off' ? t().z_api_off
-    : msg === 'web-notext' ? t().web_notext : msg === 'web-pdf' ? t().web_pdf : msg === 'web-blocked' ? t().web_blocked : msg);
+    : msg === 'web-notext' ? t().web_notext : msg === 'web-pdf' ? t().web_pdf : msg === 'web-blocked' ? t().web_blocked
+    : /^net-down:/.test(msg) ? t().net_down.replace('{host}', msg.slice(9) || '?') : msg);   // (fetch.Unreachable)
 
   // the corner where the page says what is under way, one above the other: a generation, the app's update. Each toast
   // is a small card: a sign at the left, what happens beside it, then its line, its progress or its buttons below.
@@ -1205,7 +1206,13 @@
         const T = t(), name = esc(label || jobName(j, T)), in_ = j.lang ? ` · ${esc(nameOf(j.lang))}` : '';
         if (j.status === 'moved' && j.next) { watchers.set(j.next, cb); startPolling(); return; }   // (an arXiv paper without HTML: its PDF converts)
         if (j.status === 'error' && j.error === 'needs-engine') { engineCard(j.upload, label || j.title || j.pid); return; }
-        if (j.status === 'error') { card.innerHTML = `<div class="jc-t">${esc(T.failed)} · ${name}</div><div class="jc-e">${esc(errText(j.error))}</div>`; return; }
+        if (j.status === 'error') {   // the network failed on the way: continued from there, what came is kept (fetch.py)
+          const again = j.kind === 'generate' && j.pid && /^net-down:/.test(j.error || '');
+          card.innerHTML = `<div class="jc-head"><div class="jc-t">${esc(T.failed)} · ${name}</div>${again ? `<button type="button" class="jc-go">${esc(T.resume)}</button>` : ''}</div>
+            <div class="jc-e">${esc(errText(j.error))}</div>`;
+          if (again) card.querySelector('.jc-go').onclick = () => start(j.pid, label || j.title, j.lang);
+          return;
+        }
         if (j.status === 'stopped') {
           card.innerHTML = `<div class="jc-head"><div class="jc-t">${name}${in_}</div>${j.kind === 'generate' ? `<button type="button" class="jc-go">${esc(T.resume)}</button>` : ''}</div>
             <div class="jc-s">${esc(T.stopped)}</div>`;

@@ -392,7 +392,7 @@ Frame intervals from requestAnimationFrame in a default headless browser hide mo
 ## Layout
 
 ```
-textfold/fetch.py    arXiv HTML + metadata, figure images
+textfold/fetch.py    arXiv HTML + metadata, figure images; urlread, every download of TextFold's, tried again when the network drops it
 textfold/picture.py  a picture kept smaller as it comes in: a large PNG or JPEG as WebP (quality 90, at most 3200 px)
 textfold/parse.py    LaTeXML → units (paragraph, list item, caption) as token streams; math, citations, refs stay atomic
 textfold/latexml_safe.py  what an arXiv page may carry into the reader: scripts, handlers and script URLs out, figures kept

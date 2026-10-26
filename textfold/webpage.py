@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 
 from . import local, markdown, store
-from .fetch import UA
+from .fetch import UA, urlread
 
 LIMIT = 8 * 2**20   # no article's page is larger
 MIN_WORDS = 80      # fewer: a page that shows its text with scripts, or behind a sign-in
@@ -43,15 +43,16 @@ def register(url):
 
 def _get(url):
     req = urllib.request.Request(url, headers={**UA, "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"})
+
+    def check(r):
+        ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype == "application/pdf" or r.url.lower().split("?")[0].endswith(".pdf"):
+            raise ValueError("web-pdf")
+        if ctype and "html" not in ctype and "xml" not in ctype:
+            raise ValueError("web-notext")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-            if ctype == "application/pdf" or r.url.lower().split("?")[0].endswith(".pdf"):
-                raise ValueError("web-pdf")
-            if ctype and "html" not in ctype and "xml" not in ctype:
-                raise ValueError("web-notext")
-            data = r.read(LIMIT + 1)
-            return data[:LIMIT], r.url, r.headers.get_content_charset()
+        data, final, headers = urlread(req, 30, LIMIT + 1, check, busy={500, 502, 504})   # (429 and 503: a wall)
+        return data[:LIMIT], final, headers.get_content_charset()
     except urllib.error.HTTPError as e:
         if e.code in (401, 402, 403, 407, 429, 451, 503):   # a sign-in, a paywall, a wall against programs
             raise ValueError("web-blocked") from None

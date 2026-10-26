@@ -278,13 +278,14 @@ class Jobs:
         return log
 
     def _end(self, job, e, stop):
-        if job["pid"] and (store.pdir(job["pid"]) / "source.html").exists():
-            job["readable"] = True   # what failed was its levels: it reads as written
+        if job["pid"] and store.readable(job["pid"]):
+            job["readable"] = True   # what failed was its levels: it reads as written (an arXiv page without its
+            # metadata yet does not)
         if isinstance(e, (llm.Stopped, engine.Stopped)) or stop.is_set():
             job.update(status="stopped", stopping=False)
         else:
             job.update(status="error", error="no-model" if str(e).startswith("No model is available") else str(e))
-            self._log(job)(traceback.format_exc()[-800:])
+            self._log(job)(traceback.format_exc()[-4000:])   # (enough to keep the calls that led there)
             print(f"job {job['id']} {job['pid']} {job['lang']} failed:\n" + "\n".join(job["log"][-12:]), flush=True)
         job["finished"] = time.time()
         PAGES.pop(job["pid"], None)
@@ -327,8 +328,7 @@ class Jobs:
 
     def _pdf_link(self, job, url=None):
         url = url or store.read_text(store.pdir(job["pid"]) / "url.txt").strip()
-        with urllib.request.urlopen(urllib.request.Request(url, headers=fetch.UA), timeout=90) as r:
-            data = r.read(pdf.LIMIT + 1)
+        data = fetch.urlread(urllib.request.Request(url, headers=fetch.UA), 90, pdf.LIMIT + 1)[0]
         if data[:5] != b"%PDF-" or len(data) > pdf.LIMIT:
             raise ValueError("not-pdf")
         shutil.rmtree(store.pdir(job["pid"]), ignore_errors=True)   # (only its address was there)

@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 from . import ids, markdown, notes, picture, semantic, store
-from .fetch import UA
+from .fetch import UA, urlread
 from .parse import parse
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
@@ -78,14 +78,15 @@ class Images:
             if self.get:
                 data, _ = self.get(src)
                 return (data if data[:4] != b"<!DO" and data[:5] != b"<html" else None), path.rsplit("/", 1)[-1] or "image"
-            with urllib.request.urlopen(urllib.request.Request(src, headers=UA), timeout=20) as r:
-                ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip()
-                if not ctype.startswith("image/"):
-                    return None, ""
-                name = path.rsplit("/", 1)[-1] or "image"
-                if Path(name).suffix.lower() not in IMG_EXT:   # a badge's address has none: the page needs it to draw it
-                    name += {"image/svg+xml": ".svg", "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}.get(ctype, "")
-                return r.read(MAX_IMG + 1), name
+            data, _, headers = urlread(urllib.request.Request(src, headers=UA), 20, MAX_IMG + 1, again=(1,))   # (a page
+            # has many pictures, and one missed is tried again: one try more each)
+            ctype = (headers.get("Content-Type") or "").split(";")[0].strip()
+            if not ctype.startswith("image/"):
+                return None, ""
+            name = path.rsplit("/", 1)[-1] or "image"
+            if Path(name).suffix.lower() not in IMG_EXT:   # a badge's address has none: the page needs it to draw it
+                name += {"image/svg+xml": ".svg", "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}.get(ctype, "")
+            return data, name
         if self.base is None or re.match(r"^[a-z][a-z0-9+.-]*:", src, re.I):
             return None, ""
         f = (self.base / urllib.parse.unquote(src.split("#")[0].split("?")[0])).resolve()
