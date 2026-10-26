@@ -61,8 +61,8 @@ class Doc:
             if e.get("id"):
                 self.targets.setdefault(e["id"], {"k": kind, "id": tid})
 
-    def open_chunk(self, cid, num, title, html, level):
-        self.chunk = self.last = {"id": cid, "num": num, "title": title, "html": html, "level": level, "units": []}
+    def open_chunk(self, cid, num, title, html, level, app=False):
+        self.chunk = self.last = {"id": cid, "num": num, "title": title, "html": html, "level": level, "app": app, "units": []}
         self.chunks.append(self.chunk)
         self.blocks.append({"k": "h", "chunk": cid})
         if self.loose:   # read before any section: shown just under this one's heading, and read with it
@@ -238,7 +238,8 @@ def section(el, doc):
         doc.targets.setdefault(el["id"], {"k": "chunk", "id": cid})
     if doc.made is not None and el.get("data-tf-k"):
         doc.made["chunks"][el["data-tf-k"]] = cid
-    doc.open_chunk(cid, num, title, html, level)
+    # an appendix is one LaTeXML named (ltx_appendix), or a section inside one; a plain section does not end it
+    doc.open_chunk(cid, num, title, html, level, app="ltx_appendix" in cls or bool(doc.chunk and doc.chunk.get("app")))
     walk(el, doc)
 
 
