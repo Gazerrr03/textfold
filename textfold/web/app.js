@@ -1305,7 +1305,7 @@
       if (!/\d{4}\.\d{4,5}|PMC\d{4,}|PPR\d{4,}|10\.\d{4,9}\/\S|^https?:\/\/[^\s/]+\.[^\s/]+/i.test(ref)) { fail(t().bad_ref); return; }   // an arXiv or Europe PMC id, a DOI, any web page's link
       if (!modelName) { fail(t().no_model); return; }   // connect a model first (the card below)
       // queued: the box is free for the next link. A link that was refused (bad, no model) stays in it to be
-      // fixed; one the reader has already typed over while it waited is his, and stays
+      // fixed; one the reader has already typed over while it waited is the reader's, and stays
       if (await start(ref) && input.value.trim() === ref) input.value = '';
     };
     // a file, from the drop zone or dropped anywhere on the page: one the engine reads is converted (no model is
