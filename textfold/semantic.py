@@ -275,8 +275,9 @@ def _ref_link(soup, m, labels):
 
 def _math(soup, root):
     """markdown-it's and Pandoc's math (span.math.inline, div.math.block, span.math.display) becomes MathML; MathML
-    that came as such keeps its LaTeX annotation as its alttext. markdown-it's display formulas (a Markdown file's $$)
-    are numbered, and any formula's \\tag; a reference to a label is its number."""
+    that came as such keeps its LaTeX annotation as its alttext, and MathML that is nothing but its LaTeX is drawn from
+    it. markdown-it's display formulas (a Markdown file's $$) are numbered, and any formula's \\tag; a reference to a
+    label is its number."""
     found, labels, n = [], {}, 0
     for el in root.find_all(["span", "div"], class_="math"):
         cls = el.get("class", [])
@@ -302,6 +303,12 @@ def _math(soup, root):
             ann = m.find("annotation", attrs={"encoding": "application/x-tex"})
             if ann:
                 m["alttext"] = ann.get_text("").strip()
+            elif m.get("data-latex"):   # (Defuddle's)
+                m["alttext"] = m["data-latex"]
+        if m.get("alttext") and not m.find(lambda t: t.name not in ("semantics", "annotation", "annotation-xml")):
+            drawn = tex_math(m["alttext"], m.get("display") == "block")   # (its LaTeX alone: a page's MathJax drew it)
+            m.replace_with(drawn)
+            m = drawn
         if m.get("display") == "block" and not m.find_parent("table", class_="ltx_equation"):
             ph = soup.new_tag("span")
             m.replace_with(ph)

@@ -285,6 +285,177 @@ def read(page, final):
     return _md_noted(md, notes), _noted(html, notes), info
 
 
+# ── an article a reading view gave (the browser's button: extension/reader.js) ──────────────
+VIEWS = ("defuddle", "readability")
+LINKS_ONLY = 12   # words: a block at the head all of whose words are links (View PDF, Next article) is the site's
+
+
+def view_of(read):
+    """Which of the readings the browser's button sent to take: (its name, it), or (None, None) when neither has the
+    words to read (the snapshot is read then). Defuddle's, which keeps a page's formulas, abstract and code, unless
+    Readability's has half as many words again: Defuddle took away what it should not have."""
+    got = {k: v for k, v in (read or {}).items() if k in VIEWS and isinstance(v, dict) and isinstance(v.get("html"), str)
+           and isinstance(v.get("words"), (int, float)) and v["words"] >= MIN_WORDS}
+    d, r = got.get("defuddle"), got.get("readability")
+    if d and not (r and r["words"] >= 1.5 * d["words"]):
+        return "defuddle", d
+    return ("readability", r) if r else (None, None)
+
+
+def _key(s):
+    return re.sub(r"\W+", " ", s or "").strip().lower()
+
+
+def _from_title(root, title):
+    """The article from its title on: the heading that is the page's title and what stands before it (a publisher's
+    name, a breadcrumb) gone, when that is a small part of the reading."""
+    want, total = _key(title), len(root.text_content().split())
+    if not want:
+        return
+    for h in root.iter("h1", "h2", "h3"):
+        if _key(h.text_content()) != want:
+            continue
+        before, el = [], h
+        while el is not root:
+            before += list(el.itersiblings(preceding=True))
+            el = el.getparent()
+        if sum(len(b.text_content().split()) for b in before) > total * 0.15:
+            return
+        el = h
+        while el is not root:
+            parent = el.getparent()
+            parent.text = None
+            for b in el.itersiblings(preceding=True):
+                parent.remove(b)
+            el = parent
+        _swap(h, "")
+        return
+
+
+HEADINGS = ("h1", "h2", "h3", "h4", "h5", "h6")
+BULLET = re.compile(r"^\s*[•◦▪▫‣⁃∙·●○■□►▸–—-]\s*$")
+
+
+def _site_bits(el):
+    """A short block that is none of the article's words: all its words links (View PDF, Next article), a picture that
+    is a link (a journal's logo), or nothing but punctuation (what a removed button left: ",")."""
+    words = el.text_content().split()
+    if len(words) > LINKS_ONLY:
+        return False
+    if not re.search(r"\w", el.text_content()):
+        return all(img.getparent() is not None and any(a.tag == "a" for a in img.iterancestors()) for img in el.iter("img"))
+    linked = sum(len(a.text_content().split()) for a in el.iter("a"))
+    return linked == len(words) and all(any(a.tag == "a" for a in img.iterancestors()) for img in el.iter("img"))
+
+
+def _head(root):
+    """The head of the article as a reading view leaves it on a publisher's page: the site's bits before the article's
+    own words (_site_bits), and then the headings left with nothing under them (Published by), gone."""
+    blocks = ("p", "div", "ul", "ol", "section", "figure")
+    heads = []
+    for el in list(root.iter(*blocks, *HEADINGS)):
+        if not _within(el, root):
+            continue
+        if el.tag in HEADINGS:
+            heads.append(el)
+            continue
+        if any(d.tag in blocks or d.tag in HEADINGS for d in el.iterdescendants()):
+            continue   # (its blocks are looked at one by one)
+        words = el.text_content().split()
+        if len(words) >= 30 and sum(len(a.text_content().split()) for a in el.iter("a")) < len(words) / 2:
+            break   # (the article's own words have begun)
+        if not _site_bits(el):
+            continue
+        while True:
+            parent = el.getparent()
+            _swap(el, "")
+            if parent is root or parent.tag not in blocks or (parent.text_content().strip() and not _site_bits(parent)):
+                break
+            el = parent
+    for h in heads:   # (a heading whose next words, in the order they are read, are another heading's)
+        if not _within(h, root) or (h.tail or "").strip():
+            continue
+        order = list(root.iter())
+        for e in order[order.index(h) + 1:]:
+            if not isinstance(e.tag, str) or any(a is h for a in e.iterancestors()):
+                continue
+            if e.tag in HEADINGS:
+                _swap(h, "")
+                break
+            if (e.text or "").strip() or (e.tail or "").strip() or e.tag == "img":
+                break
+
+
+def _bullets(root):
+    """A list's item that writes its own bullet (•) before its words: the list has one already."""
+    for li in root.iter("li"):
+        if li.text and BULLET.match(li.text):
+            li.text = None
+        first = li[0] if len(li) else None
+        if first is not None and not (li.text or "").strip() and len(first) == 0 and BULLET.match(first.text_content() or ""):
+            _swap(first, "")
+
+
+def _math_views(root):
+    """Formulas Readability leaves as the page drew them, as their MathML (KaTeX keeps it beside its drawing, MathJax 3
+    in mjx-assistive-mml): the drawing goes."""
+    for box in root.xpath('//*[contains(concat(" ", normalize-space(@class), " "), " katex ")] | //mjx-container'):
+        m = next((x for x in box.iter() if isinstance(x.tag, str) and x.tag.rsplit("}", 1)[-1] == "math"), None)
+        if m is not None and box.getparent() is not None:
+            if box.tag == "mjx-container" and box.get("display") == "true":
+                m.set("display", "block")
+            m.tail = box.tail
+            box.getparent().replace(box, m)
+
+
+def _footnote_list(box, root):
+    """Defuddle's list of footnotes (div#footnotes) as normalize knows one; an item no link in the text points to (a
+    reference list Defuddle took for footnotes, its citations named otherwise) stays where the list is, as a list."""
+    from lxml import html as lhtml
+    cited = {a.get("href")[1:] for a in root.iter("a") if (a.get("href") or "").startswith("#") and not _within(a, box)}
+    loose = lhtml.Element("ol")
+    for li in [li for li in box.iter("li") if li.get("id") not in cited]:
+        li.getparent().remove(li)
+        for back in li.xpath('.//a[contains(@class, "footnote-backref")]'):
+            _swap(back, "")
+        li.attrib.pop("id", None)
+        loose.append(li)
+    if len(loose):
+        box.addprevious(loose)
+    if box.find(".//li") is None:
+        _swap(box, "")
+    else:
+        box.set("class", "footnotes " + (box.get("class") or ""))
+
+
+def read_view(view, page, final):
+    """A reading view's article as TextFold reads it: its HTML for semantic.normalize (links and pictures as full
+    addresses; the page's title, what stands before it and the site's bits at its head gone; bullets written into list
+    items gone; formulas as MathML, not as drawn; Defuddle's footnote list as normalize knows one), and what the
+    page says of itself, from the snapshot (about): its title the reading view's when the page names itself nowhere
+    TextFold reads."""
+    from lxml import html as lhtml
+    info = about(visible(page, final), final)
+    host = re.sub(r"^www\.", "", urllib.parse.urlparse(final).hostname or "")
+    if info["title"] == host and (view.get("title") or "").strip():
+        info["title"] = view["title"].strip()[:300]
+    root = lhtml.fragment_fromstring(view["html"], create_parent="div")
+    root.make_links_absolute(final, resolve_base_href=False)
+    for a in root.iter("a"):   # (a place on the page, a footnote's mark: there again)
+        if (a.get("href") or "").startswith(final + "#"):
+            a.set("href", a.get("href")[len(final):])
+    _from_title(root, info["title"])
+    _head(root)
+    _bullets(root)
+    _math_views(root)
+    for box in root.xpath('//div[@id="footnotes"]'):
+        _footnote_list(box, root)
+    html = lhtml.tostring(root, encoding="unicode")
+    if len(re.sub(r"<[^>]+>", " ", html).split()) < MIN_WORDS and not re.search(r"[぀-ヿ㐀-鿿]", html):
+        raise ValueError("web-notext")
+    return html, info
+
+
 def about(tree, final):
     """What a page says of itself: its title (the site's name off its end), site, authors, date and license."""
     import trafilatura

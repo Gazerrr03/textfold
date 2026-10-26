@@ -6,8 +6,11 @@ browser starts it, writes one message to its standard input, reads the answer fr
 the extensions named in its manifest (allowed_origins) reach it. No port is opened. The page's cookies never leave the
 browser: what comes is the page as it was drawn.
 
+With it come its article as reading views read it in the browser (extension/reader.js: Defuddle's and Readability's).
 A snapshot is stored as a web page of the library (webpage.py: web-<host>-<hash>), its HTML as it came beside it
-(snapshot.html), and read as any web page is. A page already in the library is not written over.
+(snapshot.html): its article the reading view's (article.html beside it), or, when neither has the words to read,
+the one TextFold reads in the snapshot as in any web page. A page already in the library is not written over. When
+TextFold runs, the new page's levels are asked of it at once, as for a page added on its landing.
 
   python3 -m textfold capture install --extension <id> [--browser chrome ...]   the host's manifest, for that extension
   python3 -m textfold capture-host                                             what the browser starts
@@ -19,6 +22,7 @@ import struct
 import sys
 import time
 import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from . import local, store, webpage
@@ -76,8 +80,24 @@ def _server_url():
     return s["url"]
 
 
+def _generate(there, pid):
+    """The paper's levels asked of the TextFold that runs, in the reader's language as its page last told it (as a
+    page added on its landing is): the job's id, or None."""
+    from . import langs, models
+    lang = models.load_settings().get("lang")
+    body = json.dumps({"paper": pid, "lang": lang if lang in langs.LANGS else None}).encode("utf-8")
+    req = urllib.request.Request(f"{there}/api/generate", data=body, headers={"Content-Type": "application/json"})
+    try:   # (straight to this computer, whatever proxy the system names)
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=10) as r:
+            return json.loads(r.read() or b"{}").get("id")
+    except (OSError, ValueError):
+        return None
+
+
 def receive(msg):
-    """A snapshot the extension sent: checked, stored, and where to open it. {"ok", "paper", "new", "open"}."""
+    """A snapshot the extension sent: checked, stored, its levels asked for when TextFold runs, and where to open it.
+    Its article is the one a reading view read in the browser (msg["read"], webpage.view_of), or else the one TextFold
+    reads in the snapshot itself. {"ok", "paper", "new", "open", "job"}."""
     if not isinstance(msg, dict) or msg.get("format") != FORMAT:
         raise ValueError("not-a-snapshot")
     url, html = msg.get("url"), msg.get("html")
@@ -90,7 +110,12 @@ def receive(msg):
     d = store.pdir(pid)
     new = not (d / "meta.json").exists()
     if new:
-        md, read, info = webpage.read(html, url)   # (too few words: web-notext, said to the extension)
+        how, view = webpage.view_of(msg.get("read") if isinstance(msg.get("read"), dict) else None)
+        if view:
+            read, info = webpage.read_view(view, html, url)
+        else:
+            how = "textfold"
+            md, read, info = webpage.read(html, url)   # (too few words: web-notext, said to the extension)
         host = re.sub(r"^www\.", "", urllib.parse.urlparse(url).hostname or "")
         if info["title"] == host:   # (the page names itself nowhere TextFold reads: the tab's title)
             info["title"] = (msg.get("title") or "").strip()[:300] or host
@@ -100,11 +125,16 @@ def receive(msg):
         meta["source"] = {**meta["source"], "via": "browser"}
         meta["snapshot_kind"] = "browser"
         meta["snapshot_taken"] = msg.get("taken") if isinstance(msg.get("taken"), str) else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        meta["reader"] = how
         pre = local.prefetch(re.findall(r'<img[^>]*\ssrc="([^"]+)"', read))
         local.store_doc(pid, read, meta, "snapshot.html", html, lambda folder: local.Images(folder, None, pre=pre).resolve, sizes=True)
-        (d / "source.md").write_text(md, encoding="utf-8")
+        if view:
+            (d / "article.html").write_text(view["html"], encoding="utf-8")   # (as the reading view gave it)
+        else:
+            (d / "source.md").write_text(md, encoding="utf-8")
     there = _server_url()
-    return {"ok": True, "paper": pid, "new": new, "open": f"{there}/p/{pid}" if there else None}
+    job = _generate(there, pid) if there and new else None
+    return {"ok": True, "paper": pid, "new": new, "open": f"{there}/p/{pid}" if there else None, "job": job}
 
 
 def host(stdin=None, stdout=None):
