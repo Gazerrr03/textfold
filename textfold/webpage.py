@@ -1,13 +1,17 @@
 """Any web page: the article on it (the text a reader came for, without the site's menus, adverts and footers), read
 with trafilatura as Markdown and stored through the Markdown path, with its pictures. Kept as a snapshot of the day it
 was read. Text the page hides from its readers (display: none, aria-hidden, screen-reader classes) is removed first:
-it is where words meant for a model rather than a person are put.
+it is where words meant for a model rather than a person are put. A note the page writes inside its sentences, shown
+on hover or in the margin (ARIA's tooltip, DPUB-ARIA's doc-footnote, Distill's d-footnote, Tufte's sidenote), would
+run into the sentence it hangs on: it is taken out first, and comes back as a footnote under the page's own mark.
 
 A page that needs its scripts to show its text, or a sign-in, gives too little to read (web-notext); a site that
 refuses the request, web-blocked; a link to a PDF, web-pdf (the file is dropped on the landing instead).
 
 Its id: web-<host>-<the first 12 hex digits of the address's SHA-256>; the address waits in url.txt until the fetch."""
+import copy
 import hashlib
+import html as htmllib
 import re
 import time
 import urllib.error
@@ -73,6 +77,142 @@ def visible(page, url):
     return root
 
 
+# ── notes inside the sentences ───────────────────────────────────────
+NOTE = "TFNOTE{}Q"   # a note's place in the text trafilatura reads, until the note comes back there
+NOTE_AT = re.compile(r"TFNOTE(\d+)Q")
+MARK = re.compile(r"\[?(?:\d{1,3}[a-z]?|[a-z]|[*†‡§¶⊕]{1,3})\]?|\(\d{1,3}\)", re.I)   # 1, [10], 3a, *, †, (2)
+IN_TEXT = {"p", "li", "dd", "dt", "td", "th", "figcaption", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6"}
+RUN_ON = {"p", "div", "section", "aside", "blockquote", "ul", "ol", "li", "dl", "dt", "dd", "table", "tbody", "thead",
+          "tr", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6", "figure", "figcaption", "header", "footer"}
+NOT_WORDS = {"script", "style", "button", "svg", "canvas", "input", "template", "noscript", "iframe", "video", "audio"}
+
+
+def _swap(el, text):
+    """el out of the tree, text in its place, what came after it kept."""
+    parent = el.getparent()
+    if parent is None:
+        return
+    text += el.tail or ""
+    prev = el.getprevious()
+    if prev is not None:
+        prev.tail = (prev.tail or "") + text
+    else:
+        parent.text = (parent.text or "") + text
+    parent.remove(el)
+
+
+def _within(el, root):
+    while el is not None and el is not root:
+        el = el.getparent()
+    return el is root
+
+
+def _words(el):
+    """A note's words: as inline HTML, its links, emphasis, code and formulas kept, its paragraphs and line breaks run
+    together (a footnote is one line), its buttons and scripts gone; and as plain text."""
+    from lxml import etree, html as lhtml
+    box = copy.deepcopy(el)
+    box.tail = None
+    for e in list(box.iter()):
+        if e is box or not isinstance(e.tag, str):
+            continue
+        if e.tag in NOT_WORDS:
+            _swap(e, " ")
+        elif e.tag in RUN_ON or e.tag == "br":
+            e.text, e.tail = " " + (e.text or ""), " " + (e.tail or "")
+    etree.strip_elements(box, etree.Comment, with_tail=False)
+    etree.strip_tags(box, "br", *RUN_ON)
+    inner = htmllib.escape(box.text or "", quote=False) + "".join(lhtml.tostring(c, encoding="unicode") for c in box)
+    return re.sub(r"\s+", " ", inner).strip(), re.sub(r"\s+", " ", box.text_content()).strip()
+
+
+def _notes(root):
+    """Notes the page writes inside its sentences and shows only on hover or in the margin: ARIA's tooltip, under the
+    mark that names it (aria-describedby); DPUB-ARIA's doc-footnote within a paragraph, under its doc-noteref;
+    Distill's <d-footnote> and Tufte's sidenote, numbered as their pages number them; Tufte's marginnote. Each is taken
+    out of its sentence, its mark's place kept (NOTE), and given back: [(the mark as the page shows it, its words as
+    HTML, as text)]. A tooltip without a mark (a figure's, a button's, a word's) is not the article's text, and goes."""
+    named = {}
+    for el in root.iter():
+        if isinstance(el.tag, str):
+            for i in (el.get("aria-describedby") or "").split():
+                named.setdefault(i, el)
+            if el.get("role") == "doc-noteref" and urllib.parse.urldefrag(el.get("href") or "")[1]:
+                named.setdefault(urllib.parse.urldefrag(el.get("href"))[1], el)
+    inside = lambda el: any(a.tag in IN_TEXT for a in el.iterancestors())  # noqa: E731
+    found = []
+    for el in root.iter():
+        if not isinstance(el.tag, str):
+            continue
+        role, cls = el.get("role") or "", (el.get("class") or "").split()
+        kind = ("tip" if role == "tooltip" else "dpub" if role in ("doc-footnote", "doc-endnote") and inside(el)
+                else "distill" if el.tag == "d-footnote" else "side" if el.tag == "span" and "sidenote" in cls and inside(el)
+                else "margin" if el.tag == "span" and "marginnote" in cls and inside(el) else None)
+        if kind:
+            found.append((kind, el))
+    notes, count = [], {}
+    for kind, el in found:
+        if not _within(el, root):   # (in a note taken out already: its words went with it)
+            continue
+        count[kind] = count.get(kind, 0) + 1
+        mark_el = named.get(el.get("id")) if el.get("id") else None
+        if kind in ("side", "margin"):   # Tufte's toggle beside it: a label (⊕ for a margin note) and its checkbox
+            for sib in list(el.itersiblings(preceding=True))[:2]:
+                if "margin-toggle" in (sib.get("class") or "").split():
+                    mark_el = sib if sib.tag == "label" else mark_el
+                    if sib.tag == "input":
+                        _swap(sib, "")
+        if mark_el is not None and not _within(mark_el, root):
+            mark_el = None
+        said = ""
+        if mark_el is not None:
+            said = re.sub(r"\s+", "", mark_el.text_content().replace(el.text_content(), "", 1) if el in mark_el.iterdescendants()
+                          else mark_el.text_content())
+        if kind == "tip" and not MARK.fullmatch(said):
+            _swap(el, "")
+            continue
+        mark = said if MARK.fullmatch(said) else str(count[kind])
+        words = _words(el)
+        if mark_el is not None:
+            _swap(mark_el, NOTE.format(len(notes)))
+            if _within(el, root):
+                _swap(el, "")
+        else:
+            _swap(el, NOTE.format(len(notes)))
+        notes.append((mark, *words))
+    return notes
+
+
+def _noted(html, notes):
+    """Each note back in its place in the article's HTML, as LaTeXML writes a footnote (the reader shows it on hover),
+    under the page's own mark."""
+    def one(m):
+        k = int(m.group(1))
+        if k >= len(notes) or not notes[k][1]:
+            return ""
+        sup = f'<sup class="ltx_note_mark">{htmllib.escape(notes[k][0])}</sup>'
+        return (f'<span class="ltx_note ltx_role_footnote">{sup}<span class="ltx_note_outer"><span class="ltx_note_content">'
+                f'{sup}{notes[k][1]}</span></span></span>')
+    html = re.sub(r"<[^>]*>", lambda m: NOTE_AT.sub("", m.group(0)), html)   # (one in an attribute, an image's alt: gone)
+    return NOTE_AT.sub(one, html)
+
+
+def _md_noted(md, notes):
+    """The Markdown kept of the page: each note a footnote of its own, its words at the end."""
+    there = []
+
+    def ref(m):
+        k = int(m.group(1))
+        if k >= len(notes) or not notes[k][2]:
+            return ""
+        there.append(k)
+        return f"[^{k + 1}]"
+    md = NOTE_AT.sub(ref, md)
+    esc = lambda s: re.sub(r"([\\`*_\[\]<>$~|])", r"\\\1", s)  # noqa: E731
+    ends = [f"[^{k + 1}]: {esc(notes[k][2])}" for k in dict.fromkeys(there)]
+    return md.rstrip() + ("\n\n" + "\n".join(ends) + "\n" if ends else "\n")
+
+
 def _clean(md, title):
     md = re.sub(r"!\[[^\]]*\]\(\s*\)", "", md)                      # pictures without an address (a layout's spacers)
     lines = [ln for ln in md.splitlines() if not re.fullmatch(r"\s*\|[\s|]*", ln)]   # a layout table's empty cells
@@ -99,6 +239,7 @@ def fetch(pid, progress=None):
     data, final, charset = _get(url)
     page = data.decode(charset or "utf-8", "replace") if charset else data
     tree = visible(page, final)
+    notes = _notes(tree)
     md = trafilatura.extract(tree, url=final, output_format="markdown", include_images=True, include_links=True,
                              include_tables=True, include_formatting=True, favor_recall=True) or ""
     if len(md.split()) < MIN_WORDS:
@@ -106,11 +247,12 @@ def fetch(pid, progress=None):
     m = trafilatura.extract_metadata(tree, default_url=final)
     host = re.sub(r"^www\.", "", urllib.parse.urlparse(final).hostname or "")
     site = (m.sitename if m and m.sitename else "") or host
-    title = (m.title if m and m.title else "") or host
+    title = NOTE_AT.sub("", (m.title if m and m.title else "") or host)
     for name in {site, host}:   # "How to Do Great Work - Paul Graham": the site's name off the end
         title = re.sub(rf"\s*[-|–—·:]\s*{re.escape(name)}\s*$", "", title, flags=re.I) if name else title
     md = _clean(md, title)
     html, _ = markdown.to_html(md)
+    html, md = _noted(html, notes), _md_noted(md, notes)
     authors = [a.strip() for a in re.split(r";|\band\b", (m.author if m and m.author else "")) if a.strip()]
     meta = {"id": pid, "version": "", "title": title.strip() or host, "authors": authors[:12], "date": (m.date if m and m.date else "") or "",
             "snapshot": time.strftime("%Y-%m-%d"), "abs_url": final, "html_url": "",

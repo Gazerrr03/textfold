@@ -348,7 +348,9 @@ The server has two queues (`Jobs`): generation (model calls) and the engine (ins
 time; a conversion's `next` is the generation that follows it. A converted PDF opens as soon as it is stored.
 
 Any other link is a web page (`webpage.py`): fetched with TextFold's own user agent, its hidden elements removed (they
-are where text meant for a model is put), its article taken out by trafilatura as Markdown and stored through the
+are where text meant for a model is put), its notes written inside sentences and shown on hover or in the margin taken
+out (an ARIA tooltip under its mark, DPUB-ARIA's doc-footnote, Distill's d-footnote, Tufte's sidenote) and put back as
+footnotes under the page's own marks, its article taken out by trafilatura as Markdown and stored through the
 Markdown path. Too little text (`web-notext`), a refusal (`web-blocked`), and a link to a PDF (fetched, then read as a
 dropped PDF) each have their own answer.
 
@@ -404,7 +406,7 @@ textfold/epmc.py     papers from Europe PMC by PMC or PPR id, link or DOI (pmc�
 textfold/biorxiv.py  preprints from bioRxiv and medRxiv, from their own JATS (biorxiv-…, medrxiv-…)
 textfold/wiki.py     Wikipedia articles, any language edition (wiki-<lang>-<page id>)
 textfold/github.py   a GitHub repository's README (gh-<owner>--<repo>)
-textfold/webpage.py  any other web page: its article (trafilatura), hidden text removed first (web-<host>-<hash>)
+textfold/webpage.py  any other web page: its article (trafilatura), hidden text removed and in-sentence notes made footnotes first (web-<host>-<hash>)
 textfold/engine.py   the PDF engine: MinerU in a Python of its own under the app data folder; install, removal, conversion
 textfold/pdftext.py  a PDF with its own text, read without the engine (pdf-inspector); figures found by their captions, cut with pypdfium2
 textfold/pdfdoc.py   a converted PDF as a document: MinerU's structured output into Markdown and HTML (pdf-<file hash>;
