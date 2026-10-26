@@ -1228,7 +1228,8 @@
       card.hidden = false;
       try {
         await submit(ref, lang, false, onCard(label, mine));
-      } catch (x) { card.hidden = true; fail(errText(x.message)); }
+        return true;
+      } catch (x) { card.hidden = true; fail(errText(x.message)); return false; }
     }
     // a file that needs the engine: what it is and what it takes, and its install, in the card; once installed, the
     // file waiting for it converts (the server starts that), and the card follows the conversion
@@ -1293,10 +1294,12 @@
     form.onsubmit = async (e) => {
       e.preventDefault();
       err.hidden = true;
-      const ref = document.getElementById('ref').value.trim();
+      const input = document.getElementById('ref'), ref = input.value.trim();
       if (!/\d{4}\.\d{4,5}|PMC\d{4,}|PPR\d{4,}|10\.\d{4,9}\/\S|^https?:\/\/[^\s/]+\.[^\s/]+/i.test(ref)) { fail(t().bad_ref); return; }   // an arXiv or Europe PMC id, a DOI, any web page's link
       if (!modelName) { fail(t().no_model); return; }   // connect a model first (the card below)
-      start(ref);
+      // queued: the box is free for the next link. A link that was refused (bad, no model) stays in it to be
+      // fixed; one the reader has already typed over while it waited is his, and stays
+      if (await start(ref) && input.value.trim() === ref) input.value = '';
     };
     // a file, from the drop zone or dropped anywhere on the page: one the engine reads is converted (no model is
     // needed to read it); a Markdown or text file is stored by the server, then generated
