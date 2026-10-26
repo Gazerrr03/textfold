@@ -41,7 +41,7 @@ The recipe and the snapshot are made so that the same work can run in a reader's
 - **The recipe is written onto the page** (`data-tf-article`, `data-tf-drop`, `data-tf-mark`/`data-tf-note`,
   `data-tf-content`, `data-tf-figure`), and the reading follows the marks: what a content script would do on the live
   DOM, before folding the paragraphs in place.
-- **A snapshot is what the reader's browser shows** (`snapshot.js` in the trial, run in the page): shadow roots spelled
+- **A snapshot is what the reader's browser shows** (`tools/web-snapshot.js`, run in the page): shadow roots spelled
   out with their slots filled, frames put in place, an element the browser does not show (computed `display: none`,
   `visibility: hidden`, `opacity: 0`) marked `data-tf-css-hidden`. Hidden words hanging on a mark become a note; the
   rest stays out. This is the general answer to text hidden by a page's own CSS, which a fetched page cannot give.
@@ -118,4 +118,4 @@ Found on the way:
 - Recipes kept per site and used by `webpage.fetch`; the reader's "Adapt this page" button; an agent run from the
   app with the command above as its only tool.
 - The rendered snapshot in the app (Electron, scripts on, in a partition of its own) and in an extension.
-- Tests for `snapshot.js` itself (it lives with the trial's tools).
+- Tests for `tools/web-snapshot.js` itself. The trial's recipes are in `tools/web-recipes/`.
