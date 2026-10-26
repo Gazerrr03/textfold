@@ -6,6 +6,7 @@
   python -m textfold export <arxiv id>                   one self-contained HTML file in out/<id>/
   python3 -m textfold get <link or file> [--level topic] [--section 3] [--json]   a document at one level (for a person or an agent)
   python3 -m textfold engine status | install | remove              the PDF engine (MinerU, about 3.4 GB)
+  python3 -m textfold adapt <url> [--snapshot page.html] [--try recipe.json [--keep]]   a web page read with a recipe
 """
 import argparse
 import shutil
@@ -106,6 +107,36 @@ def engine_cmd(args):
     return 0
 
 
+def adapt_cmd(a):
+    """A web page and a recipe for its site (adapt.py): with no recipe, what an agent is given to write one; with one,
+    the page read with it and checked; --keep stores it so read, its snapshot beside it."""
+    import re
+    from . import adapt, store, webpage
+    page, final, how = adapt.snapshot(a.url, a.snapshot, a.rendered)
+    if not a.recipe:
+        print(adapt.brief(a.url, page, final, how))
+        return 0
+    try:
+        recipe = adapt.recipe_of(Path(a.recipe).read_text(encoding="utf-8"))
+        text, html = adapt.tried(page, final, recipe)
+    except ValueError as e:
+        print(f"the recipe: {e}")
+        return 2
+    print(text)
+    if a.keep:
+        pid = webpage.pid_of(final)
+        if (store.pdir(pid) / "meta.json").exists():
+            print(f"{pid} is in the library already: delete it first")
+            return 2
+        store.pdir(pid).mkdir(parents=True, exist_ok=True)
+        info = webpage.about(webpage.visible(page, final), final)
+        meta = {**webpage.meta_of(pid, final, info), "recipe": recipe, "snapshot_kind": how}
+        pre = local.prefetch(re.findall(r'<img[^>]*\ssrc="([^"]+)"', html))
+        local.store_doc(pid, html, meta, "snapshot.html", page, lambda folder: local.Images(folder, None, pre=pre).resolve, sizes=True)
+        print(f"kept: {pid}")
+    return 0
+
+
 def main():
     _utf8_streams()
     if sys.argv[1:2] == ["--version"]:
@@ -127,6 +158,14 @@ def main():
         ap.add_argument("--json", action="store_true", help="the whole document in the TextFold format (docs/format.md)")
         ap.add_argument("--no-generate", action="store_true", help="call no model: the levels already written, or the local ones")
         return sys.exit(get(ap.parse_args(sys.argv[2:])))
+    if len(sys.argv) > 1 and sys.argv[1] == "adapt":
+        ap = argparse.ArgumentParser(prog="python3 -m textfold adapt", description="A web page read with a recipe for its site (docs/web-adapt.md).")
+        ap.add_argument("url", help="the page's address")
+        ap.add_argument("--snapshot", help="the page saved before (as fetched, or as a browser rendered it) instead of fetching it now")
+        ap.add_argument("--rendered", action="store_true", help="the snapshot is a browser's, after the page's scripts ran")
+        ap.add_argument("--try", dest="recipe", help="a recipe (JSON): the page read with it, and checked")
+        ap.add_argument("--keep", action="store_true", help="with --try: store the page so read in the library, its snapshot beside it")
+        return sys.exit(adapt_cmd(ap.parse_args(sys.argv[2:])))
     if len(sys.argv) > 1 and sys.argv[1] == "engine":
         return sys.exit(engine_cmd(sys.argv[2:]))
     if len(sys.argv) > 1 and sys.argv[1] == "export":

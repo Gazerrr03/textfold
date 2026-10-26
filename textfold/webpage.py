@@ -131,12 +131,15 @@ def _notes(root):
     mark that names it (aria-describedby); DPUB-ARIA's doc-footnote within a paragraph, under its doc-noteref;
     Distill's <d-footnote> and Tufte's sidenote, numbered as their pages number them; Tufte's marginnote. Each is taken
     out of its sentence, its mark's place kept (NOTE), and given back: [(the mark as the page shows it, its words as
-    HTML, as text)]. A tooltip without a mark (a figure's, a button's, a word's) is not the article's text, and goes."""
+    HTML, as text)]. A tooltip without a mark (a figure's, a button's, a word's) is not the article's text, and goes.
+    A site's recipe (adapt.py) names the others: a note data-tf-note="k", its mark data-tf-mark="k"."""
     named = {}
     for el in root.iter():
         if isinstance(el.tag, str):
             for i in (el.get("aria-describedby") or "").split():
                 named.setdefault(i, el)
+            if el.get("data-tf-mark"):
+                named.setdefault("tf:" + el.get("data-tf-mark"), el)
             if el.get("role") == "doc-noteref" and urllib.parse.urldefrag(el.get("href") or "")[1]:
                 named.setdefault(urllib.parse.urldefrag(el.get("href"))[1], el)
     inside = lambda el: any(a.tag in IN_TEXT for a in el.iterancestors())  # noqa: E731
@@ -145,7 +148,7 @@ def _notes(root):
         if not isinstance(el.tag, str):
             continue
         role, cls = el.get("role") or "", (el.get("class") or "").split()
-        kind = ("tip" if role == "tooltip" else "dpub" if role in ("doc-footnote", "doc-endnote") and inside(el)
+        kind = ("given" if el.get("data-tf-note") else "tip" if role == "tooltip" else "dpub" if role in ("doc-footnote", "doc-endnote") and inside(el)
                 else "distill" if el.tag == "d-footnote" else "side" if el.tag == "span" and "sidenote" in cls and inside(el)
                 else "margin" if el.tag == "span" and "marginnote" in cls and inside(el) else None)
         if kind:
@@ -155,7 +158,8 @@ def _notes(root):
         if not _within(el, root):   # (in a note taken out already: its words went with it)
             continue
         count[kind] = count.get(kind, 0) + 1
-        mark_el = named.get(el.get("id")) if el.get("id") else None
+        mark_el = (named.get("tf:" + el.get("data-tf-note")) if kind == "given"
+                   else named.get(el.get("id")) if el.get("id") else None)
         if kind in ("side", "margin"):   # Tufte's toggle beside it: a label (⊕ for a margin note) and its checkbox
             for sib in list(el.itersiblings(preceding=True))[:2]:
                 if "margin-toggle" in (sib.get("class") or "").split():
@@ -181,6 +185,39 @@ def _notes(root):
             _swap(el, NOTE.format(len(notes)))
         notes.append((mark, *words))
     return notes
+
+
+def _hover_marks(root):
+    """In a browser's snapshot (the app's, an extension's), what the browser did not show is marked data-tf-css-hidden.
+    One that hangs on a mark (the element just before it, or the one holding it, reads 1, [10] or *) is a note shown
+    on hover, whatever the page calls it: marked for _notes as a recipe's note is. The rest goes (_hidden_out)."""
+    k = 0
+    for el in root.xpath('//*[@data-tf-css-hidden]'):
+        if el.get("role") == "tooltip" or el.get("data-tf-note") or el.tag == "d-footnote" or not _within(el, root) \
+                or any(a.get("data-tf-css-hidden") for a in el.iterancestors()):
+            continue
+        prev = el.getprevious()
+        while prev is not None and not isinstance(prev.tag, str):
+            prev = prev.getprevious()
+        mark = None
+        if prev is not None and not prev.get("data-tf-css-hidden") and MARK.fullmatch(re.sub(r"\s+", "", prev.text_content())) \
+                and not (el.getprevious() is prev and (prev.tail or "").strip()):
+            mark = prev
+        else:
+            parent = el.getparent()
+            rest = re.sub(r"\s+", "", parent.text_content().replace(el.text_content(), "", 1)) if parent is not None else ""
+            if parent is not None and parent is not root and MARK.fullmatch(rest):
+                mark = parent
+        if mark is not None and el.text_content().strip():
+            k += 1
+            mark.set("data-tf-mark", f"h{k}")
+            el.set("data-tf-note", f"h{k}")
+
+
+def _hidden_out(root):
+    for el in root.xpath('//*[@data-tf-css-hidden]'):
+        if _within(el, root):
+            _swap(el, "")
 
 
 def _noted(html, notes):
@@ -226,37 +263,56 @@ def _clean(md, title):
     return "\n".join(lines).strip() + "\n"
 
 
-def fetch(pid, progress=None):
-    """Store a web page's article (once)."""
+def read(page, final):
+    """A page's article as TextFold reads it with no recipe (adapt.py has the ones written for a site): its Markdown,
+    its HTML, and what the page says of itself (title, site, authors, date, license)."""
     import warnings
     # (macOS's own Python is built with LibreSSL; urllib3, which trafilatura brings, says so on import, harmlessly)
     warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
     import trafilatura
-    d = store.pdir(pid)
-    if (d / "meta.json").exists() and (d / "source.html").exists():
-        return pid
-    url = store.read_text(d / "url.txt").strip()
-    data, final, charset = _get(url)
-    page = data.decode(charset or "utf-8", "replace") if charset else data
     tree = visible(page, final)
+    _hover_marks(tree)
     notes = _notes(tree)
+    _hidden_out(tree)
     md = trafilatura.extract(tree, url=final, output_format="markdown", include_images=True, include_links=True,
                              include_tables=True, include_formatting=True, favor_recall=True) or ""
     if len(md.split()) < MIN_WORDS:
         raise ValueError("web-notext")
+    info = about(tree, final)
+    md = _clean(md, info["title"])
+    html, _ = markdown.to_html(md)
+    return _md_noted(md, notes), _noted(html, notes), info
+
+
+def about(tree, final):
+    """What a page says of itself: its title (the site's name off its end), site, authors, date and license."""
+    import trafilatura
     m = trafilatura.extract_metadata(tree, default_url=final)
     host = re.sub(r"^www\.", "", urllib.parse.urlparse(final).hostname or "")
     site = (m.sitename if m and m.sitename else "") or host
     title = NOTE_AT.sub("", (m.title if m and m.title else "") or host)
     for name in {site, host}:   # "How to Do Great Work - Paul Graham": the site's name off the end
         title = re.sub(rf"\s*[-|–—·:]\s*{re.escape(name)}\s*$", "", title, flags=re.I) if name else title
-    md = _clean(md, title)
-    html, _ = markdown.to_html(md)
-    html, md = _noted(html, notes), _md_noted(md, notes)
     authors = [a.strip() for a in re.split(r";|\band\b", (m.author if m and m.author else "")) if a.strip()]
-    meta = {"id": pid, "version": "", "title": title.strip() or host, "authors": authors[:12], "date": (m.date if m and m.date else "") or "",
-            "snapshot": time.strftime("%Y-%m-%d"), "abs_url": final, "html_url": "",
-            "license": m.license if m and m.license and re.match(r"https?://", m.license) else "",
-            "source": {"kind": "web", "site": site, "url": final}, "label": site}
+    return {"title": title.strip() or host, "site": site, "authors": authors[:12], "date": (m.date if m and m.date else "") or "",
+            "license": m.license if m and m.license and re.match(r"https?://", m.license) else ""}
+
+
+def meta_of(pid, final, info):
+    return {"id": pid, "version": "", "title": info["title"], "authors": info["authors"], "date": info["date"],
+            "snapshot": time.strftime("%Y-%m-%d"), "abs_url": final, "html_url": "", "license": info["license"],
+            "source": {"kind": "web", "site": info["site"], "url": final}, "label": info["site"]}
+
+
+def fetch(pid, progress=None):
+    """Store a web page's article (once)."""
+    d = store.pdir(pid)
+    if (d / "meta.json").exists() and (d / "source.html").exists():
+        return pid
+    url = store.read_text(d / "url.txt").strip()
+    data, final, charset = _get(url)
+    page = data.decode(charset or "utf-8", "replace") if charset else data
+    md, html, info = read(page, final)
     pre = local.prefetch(re.findall(r'<img[^>]*\ssrc="([^"]+)"', html))
-    return local.store_doc(pid, html, meta, "source.md", md, lambda folder: local.Images(folder, None, pre=pre).resolve, sizes=True)
+    return local.store_doc(pid, html, meta_of(pid, final, info), "source.md", md,
+                           lambda folder: local.Images(folder, None, pre=pre).resolve, sizes=True)
