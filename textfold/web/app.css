@@ -519,10 +519,13 @@ dialog.settings.zlib { width: min(980px, calc(100vw - 32px)); }
 .zl-body { display: grid; grid-template-columns: minmax(200px, 280px) 1fr; gap: 14px; height: min(62vh, 640px); }
 .zl-tree, .zl-items { overflow: auto; border: 1px solid var(--line-2); border-radius: 10px; padding: 6px; }
 .zl-tree ul { list-style: none; margin: 0; padding: 0 0 0 12px; } .zl-tree > ul { padding-left: 0; }
-.zl-col { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 7px; font-size: 13.5px; cursor: pointer; color: var(--ink-2); }
+.zl-col { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-radius: 7px; font-size: 13.5px; cursor: pointer; color: var(--ink-2); user-select: none; }
 .zl-col span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zl-col:hover { background: var(--surface); } .zl-col.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.st.zlb button.zl-tw:not(.primary) { width: 18px; height: 18px; flex: none; border: 0; background: none; box-shadow: none; appearance: none; color: var(--faint); cursor: pointer; font-size: 11px; padding: 0; }
+.st.zlb button.zl-tw:not(.primary) { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border: 0; border-radius: 6px; background: none; box-shadow: none; appearance: none; color: var(--muted); cursor: pointer; padding: 0; }
+.st.zlb button.zl-tw:not(.primary):not(:disabled):hover { background: var(--line-2); color: var(--ink); }
+.zl-tw .sb-chev { width: 20px; height: 20px; stroke-width: 2.2; transition: transform .15s var(--ease); }
+.zl-tw.open .sb-chev { transform: rotate(90deg); }
 .zl-item { display: flex; align-items: center; gap: 12px; padding: 9px 8px; border-bottom: 1px dashed var(--line-2); }
 .zl-tx { flex: 1; min-width: 0; }
 .zl-t { font: 550 14px/1.35 var(--serif); color: var(--ink); overflow-wrap: anywhere; }

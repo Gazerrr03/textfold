@@ -1416,7 +1416,7 @@
       return cols.filter((c) => c.parent === parent).map((c) => {
         const kids = cols.some((x) => x.parent === c.key), open = opened.has(c.key);
         return `<li><div class="zl-col${c.key === col && !query ? ' on' : ''}" data-col="${esc(c.key)}">` +
-          `<button type="button" class="zl-tw" data-tw="${esc(c.key)}"${kids ? '' : ' disabled'}>${kids ? (open ? '▾' : '▸') : ''}</button>` +
+          `<button type="button" class="zl-tw${open ? ' open' : ''}" data-tw="${esc(c.key)}"${kids ? ` aria-expanded="${open}"` : ' disabled'}>${kids ? CHEV : ''}</button>` +
           `<span>${esc(c.name)}</span></div>${kids && open ? `<ul>${tree(c.key)}</ul>` : ''}</li>`;
       }).join('');
     }
@@ -1440,12 +1440,14 @@
     }
     function renderTree() { const n = q('.zl-tree'); if (!n) return; n.innerHTML = treeHtml(); wireTree(); }
     function wireTree() {
-      dlg.querySelectorAll('.zl-col').forEach((n) => { n.onclick = () => {
+      const twist = (key) => { if (opened.has(key)) opened.delete(key); else opened.add(key); renderTree(); };
+      dlg.querySelectorAll('.zl-col').forEach((n) => { n.onclick = (e) => {
+        // a double click opens or closes a collection that holds others, as in Zotero (the first click chose it)
+        if (e.detail === 2 && n.dataset.col && cols.some((c) => c.parent === n.dataset.col)) { twist(n.dataset.col); return; }
+        if (e.detail > 1) return;
         col = n.dataset.col; store.set(COL, col); query = ''; if (q('.zl-q')) q('.zl-q').value = ''; renderTree(); list();
       }; });
-      dlg.querySelectorAll('.zl-tw').forEach((b) => { b.onclick = (e) => {
-        e.stopPropagation(); if (opened.has(b.dataset.tw)) opened.delete(b.dataset.tw); else opened.add(b.dataset.tw); renderTree();
-      }; });
+      dlg.querySelectorAll('.zl-tw').forEach((b) => { b.onclick = (e) => { e.stopPropagation(); twist(b.dataset.tw); }; });
     }
     function renderItems() {
       const box = q('.zl-items');
