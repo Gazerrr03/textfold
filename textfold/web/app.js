@@ -897,6 +897,26 @@
   const sign = (k, tone) => `<span class="g-ico${tone ? ` ${tone}` : ''}">${k === 'mark' ? MARK : svg(k)}</span>`;
   const shut = (label) => `<button type="button" class="g-x" aria-label="${esc(label)}" title="${esc(label)}">${svg('x')}</button>`;
 
+  // a file dragged over the page, for as long as it is: `on` when it comes, `off` when it leaves the window, is
+  // dropped, or stops coming by (dragover comes every few hundred milliseconds while it is here). Not a count of
+  // dragenter against dragleave: an element drawn again under the pointer (a paragraph, a job's card, the toast that
+  // says drop it here) takes its dragleave with it, the count never came back to 0, and "Drop it here" stayed.
+  function whileDragged(on, off) {
+    let here = false, gone = 0;
+    const files = (e) => [...((e.dataTransfer && e.dataTransfer.types) || [])].includes('Files');
+    const leave = () => { clearTimeout(gone); if (here) { here = false; off(); } };
+    const come = (e) => {
+      if (!files(e)) return;
+      if (e.type === 'dragover') e.preventDefault();   // (so it can be dropped here)
+      if (!here) { here = true; on(); }
+      clearTimeout(gone); gone = setTimeout(leave, 1000);
+    };
+    document.addEventListener('dragenter', come);
+    document.addEventListener('dragover', come);
+    document.addEventListener('dragleave', (e) => { if (here && !e.relatedTarget) { clearTimeout(gone); gone = setTimeout(leave, 50); } });   // (out of the window)
+    addEventListener('drop', leave, true);   // (first: the page's own drop then says what comes of it)
+  }
+
   // ── a delete's Undo: for ten seconds the corner says what went, with a button that brings it back as it was (in
   //    its folder, under its name); the paper being read, deleted, is offered back on the page it goes to ──
   const UNDO = 'textfold.undo', UNDO_MS = 10000;
@@ -968,16 +988,14 @@
   if (PAPER) {
     const toast = h('div', 'gen-toast'); toast.hidden = true; toasts.append(toast);
     // a Markdown file dropped on a paper's page: stored, then generated from the landing (?start=)
-    let over = 0;
-    const hasFile = (e) => [...((e.dataTransfer && e.dataTransfer.types) || [])].includes('Files');
     const say = (msg, ms) => {   // (ms: a message that goes by itself, which says what went wrong)
       toast.hidden = false;
-      toast.innerHTML = `${ms ? sign('warn', 'warn') : sign(msg === t().drop_md ? 'down' : 'mark')}<b>${esc(msg)}</b>`;
+      toast.innerHTML = `${ms ? sign('warn', 'warn') : sign('mark')}<b>${esc(msg)}</b>`;
       if (ms) setTimeout(() => { toast.hidden = true; }, ms);
     };
-    document.addEventListener('dragenter', (e) => { if (hasFile(e)) { over++; say(t().drop_md); } });
-    document.addEventListener('dragleave', () => { if (--over <= 0) { over = 0; if (toast.textContent === t().drop_md) toast.hidden = true; } });
-    document.addEventListener('dragover', (e) => { if (hasFile(e)) e.preventDefault(); });
+    // "Drop it here" in a toast of its own, below a generation's, which it leaves as it is
+    const hint = h('div', 'gen-toast drop-toast'); hint.hidden = true; toasts.append(hint);
+    whileDragged(() => { hint.innerHTML = `${sign('down')}<b>${esc(t().drop_md)}</b>`; hint.hidden = false; }, () => { hint.hidden = true; });
     // several dropped here: they go in from this page, which stays open, and the toast says what came of them
     async function dropFiles(files) {
       const T = t();
@@ -998,7 +1016,7 @@
     }
     document.addEventListener('drop', async (e) => {
       if (!e.dataTransfer.files.length) return;
-      e.preventDefault(); over = 0;
+      e.preventDefault();
       if (e.dataTransfer.files.length > 1) { dropFiles([...e.dataTransfer.files]); return; }
       const file = e.dataTransfer.files[0];
       if (forEngine(file)) {
@@ -1351,14 +1369,11 @@
     zone.title = [...ENGINE_EXT, ...TEXT_EXT].filter((x) => !['htm', 'mht', 'jpeg', 'tif', 'markdown', 'mdown'].includes(x)).map((x) => `.${x}`).join(' ');
     zone.onclick = () => fileIn.click();
     fileIn.onchange = () => { openFiles(fileIn.files); fileIn.value = ''; };   // (openFiles copies the list first)
-    let depth = 0;   // dragenter and dragleave fire for every child the file passes over
     const dropping = (on) => { zone.classList.toggle('dragging', on); document.getElementById('dropzone-t').textContent = on ? t().drop_md : t().drop_zone; };
-    document.addEventListener('dragenter', (e) => { if ([...e.dataTransfer.types].includes('Files')) { depth++; dropping(true); } });
-    document.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; dropping(false); } });
-    document.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+    whileDragged(() => dropping(true), () => dropping(false));
     document.addEventListener('drop', (e) => {
       if (!e.dataTransfer.files.length) return;
-      e.preventDefault(); depth = 0; dropping(false);
+      e.preventDefault();
       openFiles(e.dataTransfer.files);
     });
     renderLanding();
