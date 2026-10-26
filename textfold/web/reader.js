@@ -455,12 +455,13 @@
 
   function unitNode(uid, tag) {
     const u = U[uid];
-    const el = h(tag, `u ${u.role} r-${u.lad.role}${u.lad.model === 'local' ? ' is-local' : ''}`);
+    const labeled = u.role === 'item' && u.marker && /[\p{L}\p{N}]/u.test(u.marker);
+    const el = h(tag, `u ${u.role} r-${u.lad.role}${u.lad.model === 'local' ? ' is-local' : ''}${labeled ? ' numbered' : ''}`);
     el.dataset.u = uid;
     el.id = uid;
     const dot = h('span', 'dot'); dot.dataset.id = `dot:${uid}`;
     el.append(dot);
-    if (u.role === 'item' && u.marker) { const mk = h('span', 'mk', u.marker); mk.dataset.id = `mk:${uid}`; el.append(mk); }
+    if (u.role === 'item' && u.marker) { const mk = h('span', labeled ? 'mk mk-labeled' : 'mk', u.marker); mk.dataset.id = `mk:${uid}`; el.append(mk); }
     el._tx = h(tag === 'li' || tag === 'figcaption' ? 'div' : 'p', 'tx');
     el.append(el._tx);
     unitEl.set(uid, el); spans.set(uid, new Map()); order.set(uid, order.size);
