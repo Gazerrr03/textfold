@@ -68,9 +68,10 @@ def visible(page, url):
     from lxml import html as lhtml
     root = lhtml.fromstring(page)
     root.make_links_absolute(url, resolve_base_href=True)
-    gone = [el for el in root.iter() if isinstance(el.tag, str) and (
-        el.get("hidden") is not None or el.get("aria-hidden") == "true" or HIDDEN_STYLE.search(el.get("style") or "")
-        or HIDDEN_CLASS.search(el.get("class") or "") or el.tag in ("template", "noscript"))]
+    # (one a browser's snapshot marked as not shown is left for _hover_marks: a note on its mark, or out after)
+    gone = [el for el in root.iter() if isinstance(el.tag, str) and (el.get("aria-hidden") == "true" or el.tag in ("template", "noscript") or (
+        not el.get("data-tf-css-hidden") and (el.get("hidden") is not None or HIDDEN_STYLE.search(el.get("style") or "")
+                                              or HIDDEN_CLASS.search(el.get("class") or ""))))]
     for el in gone:
         if el.getparent() is not None:
             el.drop_tree()
