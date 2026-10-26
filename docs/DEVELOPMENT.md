@@ -164,13 +164,18 @@ and the links in the right. Full and Brief show whole cards, Key shows them comp
 mark, with the notes on hover. Highlights zoom with the words. `#n=<note id>` opens the reader at a note (`&t=<turn>`: a conversation at that turn), `#u=<id>` at a paragraph (`&to=<id>`: the run of them to that one, flashed together), `#s=<id>` at a section (the whole of it flashed; with `#level=`, at a level), `&eq=<id>` with either at an equation set apart; one no longer in the text opens the
 section it was in, else the top, and the page says so (`ids.py`). ⌘F (Ctrl+F) finds words in the text (reader.js, `findAll`): in each paragraph's pieces at its level (the model's line at Key, Takeaway and Topic), then in its Full pieces for what that level leaves out, and in section titles, case and accents aside. The words found are marked through `pieces()` (`fd`, the one stepped to `fdc`), so a redraw keeps them; a step to words left out opens their paragraph at Full in place, one paragraph at a time, and a level or language changed finds them again. A paragraph, a heading, a section's summary or a message of a conversation (by the handle beside it on hover), a card of the Topic map (grabbed anywhere), a note's card or a selection, dragged into another app, carries its words and a `textfold://` link back to it ([drag-format.md](drag-format.md)).
 
-What the model is given for a question (`textfold/notes.py`, `prompt`): the title, the abstract and a line per section
-(with where the reader is); the level they read at and whose words it shows (at Key and below, a warning that the
-selection is the model's wording, not the authors'); the selection and its paragraph in the authors' words (or, for a
-section, its summary and each paragraph's point); up to five passages from anywhere in the paper that share the
-question's telling words (IDF over the text's own and the reading-language text; symbols such as D=4 kept whole, CJK
-matched by character pairs, question words dropped); the earlier turns; and the paragraphs it may cite. The system
-prompt asks it to answer from the paper, say where, and keep general knowledge apart.
+What the model is given for a question (`textfold/notes.py`, `prompt`): first, the paper in full, each paragraph in the
+authors' words after its number, when it comes to at most `FULL_TOKENS` (60,000, counted roughly: a CJK character one
+token, four other characters one), the same beginning for every question about it, which a service that keeps a
+prompt's beginning (DeepSeek, OpenAI) reads once; then a line per section (with where the reader is); the level they
+read at and whose words it shows (at Key and below, a warning that the selection is the model's wording, not the
+authors'); the selection and its paragraph in the authors' words (or, for a section, its summary and each paragraph's
+point); the earlier turns; and the paragraphs it may cite (any, in the paper in full). A paper longer than that, or one
+the model says is too long for it (`TOO_LONG`, asked again at once), is given as its title, abstract and a line per
+section, the selection's paragraph, and up to five passages from anywhere in it that share the question's telling
+words (IDF over the text's own and the reading-language text; symbols such as D=4 kept whole, CJK matched by
+character pairs, question words dropped), with the paragraphs it may cite listed. The system prompt asks it to
+answer from the paper, say where, and keep general knowledge apart.
 
 An agent on this computer answers as a one-shot text generator, with no tools, unless the switch beside the question
 is on: in a passage's question and its follow-ups, and in **Ask the whole text** (`reader.js` composer; off whenever a
@@ -204,8 +209,9 @@ for a whole text with its PDF), the mark folds and unfolds in place of the dialo
 (saved, or published) has its mark lead to the repository and ends with it.
 
 The chat (the button in the corner, in the app) asks about the whole paper. Each conversation is a note with
-`on: "paper"`; the model is given the abstract, every paragraph's point section by section (at most 60,000
-characters: a long paper keeps every section and fewer paragraphs each) and eight passages found for the question.
+`on: "paper"`; the model is given the paper in full, or, for a paper longer than `FULL_TOKENS`, the abstract, every
+paragraph's point section by section (at most 60,000 characters: a long paper keeps every section and fewer
+paragraphs each) and eight passages found for the question.
 The answer cites up to five paragraphs; a cite opens its paragraph in place.
 
 In the app the mark (in the bar and in the sidebar's rail) leads home; the rail's second button opens the list of
