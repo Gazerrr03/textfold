@@ -228,6 +228,18 @@ def heading(el):
     return num, re.sub(r"\s+", " ", text_of(h)).strip(), html
 
 
+def in_appendix(el):
+    """An appendix is one LaTeXML named (ltx_appendix), or a section sitting inside one: the element's own
+    class, or an ancestor's — never the section read just before it (a plain sibling after the appendices, a
+    NeurIPS checklist, is body all the same)."""
+    node = el
+    while isinstance(node, Tag):
+        if "ltx_appendix" in (node.get("class") or []):
+            return True
+        node = node.parent
+    return False
+
+
 def section(el, doc):
     cls = el.get("class", [])
     level = next((v for k, v in SECTION_LEVEL.items() if k in cls), 5)
@@ -238,8 +250,7 @@ def section(el, doc):
         doc.targets.setdefault(el["id"], {"k": "chunk", "id": cid})
     if doc.made is not None and el.get("data-tf-k"):
         doc.made["chunks"][el["data-tf-k"]] = cid
-    # an appendix is one LaTeXML named (ltx_appendix), or a section inside one; a plain section does not end it
-    doc.open_chunk(cid, num, title, html, level, app="ltx_appendix" in cls or bool(doc.chunk and doc.chunk.get("app")))
+    doc.open_chunk(cid, num, title, html, level, app=in_appendix(el))
     walk(el, doc)
 
 

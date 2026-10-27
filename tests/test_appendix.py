@@ -197,5 +197,74 @@ class FormatStability(unittest.TestCase):
         self.assertEqual(sec_fields, {frozenset({"id", "num", "title", "depth", "takeaway", "topic", "units"})})
 
 
+class AppendixAncestry(unittest.TestCase):
+    """The flag comes from the section itself or its DOM ancestors — never from the section read just before it.
+    A plain section after the appendices (a NeurIPS checklist, acknowledgments) is body, and reads as body."""
+
+    SIBLINGS = """
+        <article class="ltx_document">
+        <section class="ltx_section" id="S1"><h2 class="ltx_title"><span class="ltx_tag">1</span>Intro</h2>
+          <div class="ltx_para"><p class="ltx_p">Body text.</p></div></section>
+        <section class="ltx_appendix" id="A1"><h2 class="ltx_title"><span class="ltx_tag">A</span>Proofs</h2>
+          <div class="ltx_para"><p class="ltx_p">Proof text.</p></div>
+          <section class="ltx_subsection" id="A1.SS1"><h3 class="ltx_title"><span class="ltx_tag">A.1</span>Lemmas</h3>
+            <div class="ltx_para"><p class="ltx_p">Lemma text.</p></div></section>
+        </section>
+        <section class="ltx_section" id="S2"><h2 class="ltx_title">NeurIPS Checklist</h2>
+          <div class="ltx_para"><p class="ltx_p">Answered yes.</p></div></section>
+        <section class="ltx_section" id="S3"><h2 class="ltx_title">Acknowledgments</h2>
+          <div class="ltx_para"><p class="ltx_p">Thanks.</p></div></section>
+        </article>"""
+
+    def test_a_plain_section_after_the_appendices_is_not_an_appendix(self):
+        cs = chunks_of(self.SIBLINGS)
+        self.assertEqual([(cid, cs[cid]["app"]) for cid in ("S1", "A1", "A1.SS1", "S2", "S3")],
+                         [("S1", False), ("A1", True), ("A1.SS1", True), ("S2", False), ("S3", False)])
+
+    def test_a_plain_section_inside_the_appendix_is(self):
+        cs = chunks_of("""
+        <article class="ltx_document">
+        <section class="ltx_appendix" id="A1"><h2 class="ltx_title"><span class="ltx_tag">A</span>Proofs</h2>
+          <section class="ltx_section" id="A1.S0"><h3 class="ltx_title">A note on the proofs</h3>
+            <div class="ltx_para"><p class="ltx_p">Note text.</p></div></section>
+        </section>
+        <section class="ltx_section" id="S1"><h2 class="ltx_title">Checklist</h2>
+          <div class="ltx_para"><p class="ltx_p">Body text.</p></div></section>
+        </article>""")
+        self.assertTrue(cs["A1.S0"]["app"])   # inside the appendix's element, whatever its own class says
+        self.assertFalse(cs["S1"]["app"])
+
+    def test_two_appendices_do_not_carry_the_flag_between_them(self):
+        cs = chunks_of("""
+        <article class="ltx_document">
+        <section class="ltx_appendix" id="A1"><h2 class="ltx_title">Proofs</h2>
+          <div class="ltx_para"><p class="ltx_p">Proof text.</p></div></section>
+        <section class="ltx_section" id="S1"><h2 class="ltx_title">Back Matter</h2>
+          <div class="ltx_para"><p class="ltx_p">Body text.</p></div></section>
+        <section class="ltx_appendix" id="A2"><h2 class="ltx_title">Extra Tables</h2>
+          <div class="ltx_para"><p class="ltx_p">Table text.</p></div></section>
+        </article>""")
+        self.assertEqual([(cid, cs[cid]["app"]) for cid in ("A1", "S1", "A2")],
+                         [("A1", True), ("S1", False), ("A2", True)])
+
+
+class SemanticAncestry(unittest.TestCase):
+    def test_after_an_appendix_heading_a_plain_sibling_stays_body(self):
+        # the same trap through semantic.normalize: an appendix heading, then a plain one at the same depth
+        cs = chunks_of(normalized("""
+        <h2>Results</h2><p>Body text.</p>
+        <h2>Appendix A: Proofs</h2><p>Proof text.</p>
+        <h2>NeurIPS Checklist</h2><p>Answered yes.</p>
+        <h3>Inside the checklist</h3><p>Still body.</p>
+        """))
+        app = {c["title"]: c["app"] for c in cs.values()}
+        proofs = next(t for t in app if "Derivations" in t or "Proofs" in t)
+        check = next(t for t in app if "Checklist" in t)
+        inside = next(t for t in app if "Inside the checklist" in t)
+        self.assertTrue(app[proofs])
+        self.assertFalse(app[check])
+        self.assertFalse(app[inside])   # and the checklist's own subsection stays body too
+
+
 if __name__ == "__main__":
     unittest.main()
