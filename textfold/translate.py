@@ -185,8 +185,8 @@ def _ask(doc, lang, tasks, cfg, cache_dir, jobs, log, tick, force, stop, again=F
         except Exception as e:
             return task, None, e
 
-    with ThreadPoolExecutor(jobs) as ex:
-        for (c, k, us), res, err in ex.map(run, tasks):
+    with ThreadPoolExecutor(jobs) as ex:   # (each part as its reply comes)
+        for (c, k, us), res, err in llm.as_answered(ex, run, tasks, log, llm.label(cfg)):
             tick()
             if stop is not None and stop.is_set():
                 raise llm.Stopped()

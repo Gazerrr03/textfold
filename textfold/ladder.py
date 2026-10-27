@@ -726,8 +726,8 @@ def build(doc, cfg, cache_dir, jobs=4, log=print, progress=None, force=False, st
 
     if progress:
         progress(0, len(chunks))
-    with ThreadPoolExecutor(jobs) as ex:
-        for n_done, (c, res, err) in enumerate(ex.map(run, chunks), 1):
+    with ThreadPoolExecutor(jobs) as ex:   # (each section as its reply comes: what is done with one reads only its own)
+        for n_done, (c, res, err) in enumerate(llm.as_answered(ex, run, chunks, log, model), 1):
             if progress:
                 progress(n_done, len(chunks))
             if stop is not None and stop.is_set():

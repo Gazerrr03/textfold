@@ -113,6 +113,24 @@ def call(prompt, schema, model, cache_dir: Path, force=False, timeout=900, syste
     return {**rec, "file": str(f)}, False
 
 
+WAIT_NOTE = 60   # seconds with no reply before a job's log says how many calls are still out, and to which model
+
+
+def as_answered(ex, fn, items, log=None, model=""):
+    """fn(item) for each item on the executor ex, the results as each comes back rather than in the order asked: a
+    job's progress then counts every reply, where one slow call first in line held it at 0 while the others were in
+    (reported: ladder 0/14 for minutes). While none comes back, the log says so once a minute, the model named."""
+    from concurrent.futures import FIRST_COMPLETED, wait
+    import time
+    pending, since = {ex.submit(fn, x) for x in items}, time.time()
+    while pending:
+        done, pending = wait(pending, timeout=WAIT_NOTE, return_when=FIRST_COMPLETED)
+        if not done and log:
+            log(f"  … {len(pending)} of {len(items)} still asked of {model or 'the model'}, {int(time.time() - since) // 60} min on")
+        for f in done:
+            yield f.result()
+
+
 def forget(rec):
     """A kept reply its caller could not read, dropped: the next generation asks the model again, without a force."""
     if rec.get("file"):
