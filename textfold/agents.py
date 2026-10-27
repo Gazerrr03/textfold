@@ -299,6 +299,14 @@ def workbuddy_app(path):
     return alone
 
 
+def workbuddy_lite(path):
+    """Is the CodeBuddy at `path` the copy WorkBuddy 5.8 and later bring: its lite bundle beside its launcher
+    (cli/dist/codebuddy-lite-wb.mjs), which the launcher runs only when CODEBUDDY_FORCE_LITE_WB_BUNDLE is 1, as
+    WorkBuddy runs it (else it looks for the full bundle, which is gone, and stops on MODULE_NOT_FOUND)? Such a copy
+    has no sign-in for another program: WorkBuddy keeps its token encrypted and hands the key to its own runs alone."""
+    return bool(path) and workbuddy_app(path) is not None and (Path(path).parent.parent / "dist" / "codebuddy-lite-wb.mjs").is_file()
+
+
 FUSE_WIRE = b"dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX"   # Electron's fuses: this, a version byte, a count, a byte a fuse ('1' on)
 
 
@@ -371,8 +379,8 @@ CODEBUDDY_QUIET = {k: "1" for k in ("CODEBUDDY_DISABLE_AUTO_MEMORY", "CODEBUDDY_
 
 def env_for(path):
     """The environment an agent found at `path` runs in: child_env(), and for CodeBuddy its quiet switches; WorkBuddy's
-    copy on the app's Electron as node (without it the app itself would open) and with WorkBuddy's own settings, where
-    its sign-in is."""
+    copy on the app's Electron as node (without it the app itself would open), with WorkBuddy's own settings, where
+    its sign-in is (WorkBuddy 5.3's), and its lite bundle chosen where that is all it brings (workbuddy_lite)."""
     env = child_env()
     if path and Path(path).name.split(".")[0] == "codebuddy":
         env.update(CODEBUDDY_QUIET)
@@ -381,6 +389,8 @@ def env_for(path):
             conf = Path(os.environ.get("WORKBUDDY_CONFIG_DIR") or HOME / ".workbuddy")
             if conf.is_dir():
                 env["CODEBUDDY_CONFIG_DIR"] = str(conf)
+            if workbuddy_lite(path):
+                env["CODEBUDDY_FORCE_LITE_WB_BUNDLE"] = "1"
     return env
 
 
@@ -425,8 +435,10 @@ def _help_levels(path, flag, pattern):
 
 
 def codebuddy_candidates():
-    """WorkBuddy's copies of CodeBuddy, wherever WorkBuddy is, then one installed on its own (npm's)."""
-    out = [c for r in workbuddy_roots() for c in find_cli(r)] + [locate("codebuddy")]
+    """WorkBuddy's copies of CodeBuddy, wherever WorkBuddy is, then one installed on its own (npm's), signed in on its
+    own; WorkBuddy 5.8's copies after that one, since another program cannot use their sign-in (workbuddy_lite)."""
+    ours = [c for r in workbuddy_roots() for c in find_cli(r)]
+    out = [c for c in ours if not workbuddy_lite(c)] + [locate("codebuddy")] + [c for c in ours if workbuddy_lite(c)]
     return list(dict.fromkeys(c for c in out if c))
 
 
@@ -704,6 +716,14 @@ def run_pi(model, prompt, schema, system, effort, timeout, tools=False):
                 raise
 
 
+# (WorkBuddy 5.8 and later signed in, its copy of CodeBuddy all the same not: workbuddy_lite)
+LITE_SIGNED_OUT = ("WorkBuddy 5.8 and later keep their sign-in to themselves, so TextFold cannot use it. Install CodeBuddy on its own "
+                   "(npm install -g @tencent-ai/codebuddy-code), run codebuddy once and use /login, then restart TextFold: it uses "
+                   "that one. Or choose another model in Settings. (WorkBuddy 5.8 起不把登录交给其他程序，TextFold 用不了。请单独安装 "
+                   "CodeBuddy：npm install -g @tencent-ai/codebuddy-code，运行一次 codebuddy 并用 /login 登录，再重启 TextFold；"
+                   "或在设置里换一个模型。)")
+
+
 def run_codebuddy(model, prompt, schema, system, effort, timeout, tools=False):
     """claude -p's way, with CodeBuddy's differences: no --setting-sources (without the user's settings it has no
     sign-in and waits), the one tool its structured output needs (with none it has no StructuredOutput to answer
@@ -729,6 +749,8 @@ def run_codebuddy(model, prompt, schema, system, effort, timeout, tools=False):
             r = subprocess.run(args, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=timeout, env=env, cwd=tmp)
     said = (r.stderr or r.stdout)[-800:]
+    if signed_out(r) and workbuddy_lite(path):
+        raise RuntimeError(LITE_SIGNED_OUT)
     if signed_out(r):
         raise RuntimeError("WorkBuddy is not signed in: open WorkBuddy and sign in (WorkBuddy 没有登录：打开 WorkBuddy 登录)"
                            if workbuddy_app(path) else "CodeBuddy is not signed in: run codebuddy once and use /login")
