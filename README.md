@@ -6,7 +6,7 @@
 
 **Fold any text, from a one-screen map to every word**
 
-<sub>Formerly PaperFold</sub>
+You read the original, not an AI rewrite. AI only folds it into levels, so you read more efficiently.
 
 <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-6B5CE7?style=flat-square">
 <img alt="Runs on your computer" src="https://img.shields.io/badge/runs-on_your_computer-E08A3C?style=flat-square">

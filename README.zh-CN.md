@@ -6,7 +6,7 @@
 
 **折叠任何文字，从一屏地图到每一个字**
 
-<sub>原名 PaperFold</sub>
+你读的是原文，不是 AI 改写的版本。AI 只负责把它折叠成层级，帮你更高效地阅读。
 
 <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-6B5CE7?style=flat-square">
 <img alt="在你的电脑上运行" src="https://img.shields.io/badge/runs-on_your_computer-E08A3C?style=flat-square">
