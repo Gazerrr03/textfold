@@ -328,6 +328,11 @@ li.u[data-l="2"] { padding-left: 34px; }
 li.u[data-l="2"] .dot { left: 14px; }
 li.u[data-l="1"] { padding-left: 38px; }
 li.u[data-l="2"] .mk, li.u[data-l="1"] .mk, li.u[data-l="0"] .mk { display: none; }
+/* Numbered and named list entries keep their labels when their text folds. Unlabeled bullets still give way to dots. */
+li.u[data-l="2"] .mk.mk-labeled, li.u[data-l="1"] .mk.mk-labeled, li.u[data-l="0"] .mk.mk-labeled {
+  display: inline; position: static; margin-right: .3em; font-variant-numeric: tabular-nums;
+}
+li.u.numbered[data-l="2"] .tx, li.u.numbered[data-l="1"] .tx, li.u.numbered[data-l="0"] .tx { display: inline; }
 
 /* ── figures, tables, equations ─────────────────────────── */
 figure.fig { margin: 26px 0; }
