@@ -745,6 +745,19 @@ def _holds(el, text, share=0.6):
     return bool(want) and len(want & runs(el.text_content())) >= share * len(want)
 
 
+def _told(tree):
+    """The page's article as trafilatura reads it, as plain text, on a copy of the tree without its HTML comments
+    (trafilatura 2.0 stops on one inside a heading: MDN's, Hugging Face's pages); "" when it reads nothing or stops."""
+    import trafilatura
+    from lxml import etree
+    box = copy.deepcopy(tree)
+    etree.strip_elements(box, etree.Comment, with_tail=False)
+    try:
+        return trafilatura.extract(box, include_comments=False, include_tables=True) or ""
+    except Exception:   # (a page it cannot read is read as before: its first <article>, or <main>)
+        return ""
+
+
 def _page(data, doc, files=None, url=None):
     """A saved web page: its article (trafilatura's, as on the web), and its pictures, from inside the file when it
     holds them (files: address -> bytes), else from where they are on the web."""
@@ -766,8 +779,9 @@ def _page(data, doc, files=None, url=None):
     # its article, where it marks one (the longest); else its main part; else its body, without the site's
     # header, footer and side columns. An <article> or <main> is taken only when it holds most of the text trafilatura
     # finds the page's article to be (#82: a page whose one <article> is an advert's box read as that box, or as
-    # nothing at all); a page trafilatura reads nothing in keeps the first there is
-    told = trafilatura.extract(copy.deepcopy(tree), favor_recall=True, include_tables=True) or ""
+    # nothing at all); a page trafilatura reads nothing in keeps the first there is. Its readers' comments are not
+    # that text: a blog's comments, outside its <article> and longer than it, would have it judged no article
+    told = _told(tree)
     arts = [a for a in tree.iter("article")]
     longest = max(arts, key=lambda a: len(a.text_content())) if arts else None
     root = next((c for c in (longest, next(tree.iter("main"), None)) if c is not None and (not told or _holds(c, told))), None)
@@ -776,8 +790,9 @@ def _page(data, doc, files=None, url=None):
         for el in [e for e in root.iter("header", "footer", "aside") if e.getparent() is not None]:
             el.drop_tree()
         size = lambda s: len(re.sub(r"\s", "", s))   # noqa: E731  (characters: a text in Chinese leaves no spaces)
-        for el in [a for a in arts if a.getparent() is not None and size(a.text_content()) < size(told) / 5]:
-            el.drop_tree()   # (the advert's box itself)
+        for el in [a for a in arts if a.getparent() is not None and size(a.text_content()) < size(told) / 5
+                   and not _holds(a, told, 0.1)]:
+            el.drop_tree()   # (the advert's box itself: small, and none of the article's text in it)
     h1s = list(root.iter("h1"))
     if len(h1s) == 1:   # its one top heading: its title
         h1s[0].set("class", "tf-title")

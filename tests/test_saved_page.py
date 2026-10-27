@@ -53,6 +53,22 @@ class SavedPage(unittest.TestCase):
         self.assertNotIn("Home World Sport", got)
         self.assertNotIn("Most read today", got)
 
+    def test_a_blog_with_more_comments_than_article(self):
+        # (its comments outside the <article>, longer than it: they are not part of the text it must hold)
+        comments = "".join(f'<li class="comment"><div class="comment-content"><p>Comment {k}. I read this twice and I still '
+                           "wonder whether the floods were measured the same way before the war, since the gauges were moved "
+                           "and the records from those years look different from the ones that came after.</p></div></li>"
+                           for k in range(1, 9))
+        got = self.read(page(f'<article class="post">{ARTICLE}</article><div id="comments" class="comments-area">'
+                             f'<h2 class="comments-title">8 comments</h2><ol class="comment-list">{comments}</ol></div>'))
+        self.assertIn("first paragraph of the real article", got)
+        self.assertNotIn("Comment 3.", got)
+
+    def test_a_comment_in_a_heading(self):
+        # (trafilatura stops on it: MDN's and Hugging Face's pages, saved, read before the change and must still)
+        got = self.read(page(f"<main><h2>Overview<!-- toc --></h2>{ARTICLE.replace('<h1>', '<h2>').replace('</h1>', '<!-- x --></h2>')}</main>"))
+        self.assertIn("first paragraph of the real article", got)
+
     def test_an_article_in_chinese(self):
         zh = ("<h1>河流的记录</h1>" + "".join(f"<p>第{k}段：河务局保存水位计已有一百年，记录显示春汛随山上的积雪起落，年复一年，"
                                               "这座小城至今仍按同样缓慢的节奏生活。</p>" for k in range(1, 5)))
