@@ -1,7 +1,9 @@
 """A generation's progress counts each reply as it comes (reported, from TextFold Bridge in Obsidian: "ladder 0/14" for
 minutes). The sections were taken back in the order they were asked, so one slow call first in line held the count at 0
 while the others were in; and nothing said a model was slow or silent. Now each section is counted and folded as its
-reply comes, and while none comes the job's log says how many are still out and with which model. A model that stands
+reply comes, and while none comes the job's log says how many are still out and with which model; a translation's
+parts are counted as they come and read in the paper's order, so what they bring (the paper's title) does not change
+with which came first (as #70 has it). A model that stands
 in for one, a data folder of its own; no network.
 
 Run from the repo root:
@@ -15,7 +17,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
-from textfold import ladder, llm, local, store
+import re
+
+from textfold import ladder, llm, local, store, translate
 
 TEXT = """# Notes on folding
 
@@ -83,6 +87,28 @@ class Ladder(unittest.TestCase):
         self.assertIn((1, total, False), seen)   # (counted before the first section's reply was in)
         self.assertEqual(seen[-1][:2], (total, total))
         self.assertTrue(all("lad" in u for u in self.doc["units"].values()))
+
+
+    def test_a_translation_counted_as_it_comes_and_read_in_order(self):
+        counted, seen = threading.Event(), []
+
+        def model(prompt, schema, cfg, cache_dir, force=False, timeout=900, system=None):
+            if "titles" in schema["properties"]:
+                return {"out": {"titles": []}, "cost": 0}, False
+            sec = re.sub(r"^[\d.]+\s+", "", re.search(r"^This section: (.*)$", prompt, re.M).group(1))
+            if sec == "Introduction":   # (the first part: back only once another one is counted)
+                counted.wait(5)
+            return {"out": {"section": {"title": f"节：{sec}", "takeaway": "要点", "topic": "要点"}, "units": [],
+                            "paper_title": f"标题来自 {sec}"}, "cost": 0}, False
+
+        def progress(done, total):
+            seen.append(done)
+            if done >= 1:
+                counted.set()
+        with mock.patch.object(llm, "call", model):
+            translate.build(self.doc, "zh", CFG, self.tmp / "cache", jobs=3, log=lambda *a: None, progress=progress)
+        self.assertTrue(counted.is_set())
+        self.assertEqual(self.doc["meta"]["titles"]["zh"], "标题来自 Results")   # (the paper's order: its last section's)
 
 
 if __name__ == "__main__":
