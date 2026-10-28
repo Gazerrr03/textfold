@@ -2,10 +2,9 @@
 
 LaTeXML marks an appendix with the ltx_appendix class, but parse.py read it only as a heading level, so nothing
 downstream (the scheduler that will defer appendix work, the reader, an export) could tell a paper's body from its
-appendix. The parse now keeps the flag on the chunk ("app"), and the sources that reach the parser through
-semantic.normalize carry it too: JATS's <app>, and a conservative title rule for Markdown, PDF and web pages, whose
-headings say "Appendix" (or 附录, Anhang, ...) in so many words. References, acknowledgments and supplementary
-material are not appendices, and nothing is guessed from a bare letter.
+appendix. The parse now keeps the flag on the chunk ("app"), and JATS's <app> carries it through
+semantic.normalize. Only the source's own mark makes an appendix: a heading's words are not read for it. An
+appendix's subsections keep their level (the flag on them once made them sections).
 
 Run from the repo root:
     python3 -m unittest discover tests
@@ -108,8 +107,7 @@ def doc_units(cs):
 
 class SemanticSources(unittest.TestCase):
     """JATS, Markdown, PDF and web pages reach parse.py through semantic.normalize: the appendix has to survive
-    that road, by JATS's own <app> where the source says so, else by what the heading says."""
-
+    that road where the source says so, by JATS's own <app>."""
 
     def test_jats_app_marks_appendix_even_when_its_title_does_not_say_appendix(self):
         xml = """<article>
@@ -135,54 +133,30 @@ class SemanticSources(unittest.TestCase):
         cs = chunks_of(normalized(html))
         self.assertEqual([c["title"] for c in cs.values() if c["app"]], ["Appendix A: Proofs"])
 
-    def test_heading_says_appendix(self):
-        cs = chunks_of(normalized("""
-        <h2>Results</h2><p>Body text.</p>
-        <h2>Appendix A: Derivations</h2><p>Proof text.</p>
-        """))
-        body = next(c for c in cs.values() if c["title"] == "Results")
-        app = next(c for c in cs.values() if "Derivations" in c["title"])
-        self.assertFalse(body["app"])
-        self.assertTrue(app["app"])
+    def test_an_appendix_s_subsection_keeps_its_level(self):
+        xml = """<article>
+        <body><sec id="s1"><title>Results</title><p>Body text.</p>
+          <sec id="s1a"><title>Ablations</title><p>More text.</p></sec></sec></body>
+        <back>
+          <app-group><app id="app1"><label>A</label><title>Proofs</title><p>Proof text.</p>
+            <sec id="app1s1"><title>Lemmas</title><p>Lemma text.</p></sec></app></app-group>
+          <ack><title>Acknowledgments</title><p>Thanks.</p></ack>
+        </back>
+        </article>"""
+        html, _ = jats.to_html(xml)
+        cs = chunks_of(normalized(html))
+        self.assertEqual([(c["title"], c["level"], c["app"]) for c in cs.values()],
+                         [("Results", 2, False), ("Ablations", 3, False), ("A Proofs", 2, True), ("Lemmas", 3, True),
+                          ("Acknowledgments", 2, False)])
 
-    def test_subsection_after_appendix_heading_inherits(self):
+    def test_a_heading_s_words_make_no_appendix(self):
         cs = chunks_of(normalized("""
         <h2>Results</h2><p>Body text.</p>
         <h2>Appendix A: Derivations</h2><p>Proof text.</p>
         <h3>A.1 The bound</h3><p>Detail text.</p>
         """))
-        sub = next(c for c in cs.values() if "The bound" in c["title"])
-        self.assertTrue(sub["app"])
-
-    def test_supplementary_material_is_not_called_an_appendix(self):
-        cs = chunks_of(normalized("""
-        <h2>Results</h2><p>Body text.</p>
-        <h2>Supplementary Material</h2><p>Extra text.</p>
-        """))
-        sup = next(c for c in cs.values() if "Supplementary" in c["title"])
-        self.assertFalse(sup["app"])
-
-    def test_references_stay_a_bibliography(self):
-        cs = chunks_of(normalized("""
-        <h2>Results</h2><p>Body text.</p>
-        <h2>References</h2><p>Someone. A paper.</p>
-        """))
-        self.assertFalse(any(c["app"] for c in cs.values()))
-
-    def test_titles_in_other_languages(self):
-        for head in ("附录A 证明", "附錄A 證明", "付録A 証明", "부록 A: 증명", "Anhang A: Beweise",
-                     "Apéndice A: Demostraciones", "Приложение А. Доказательства"):
-            with self.subTest(head=head):
-                cs = chunks_of(normalized(f"<h2>Results</h2><p>Body text.</p>\n<h2>{head}</h2><p>Proof text.</p>"))
-                app = [c for c in cs.values() if c["app"]]
-                self.assertEqual(len(app), 1, cs)
-
-    def test_a_lone_letter_names_no_appendix(self):
-        cs = chunks_of(normalized("""
-        <h2>Results</h2><p>Body text.</p>
-        <h2>A Further notes</h2><p>More text.</p>
-        """))
-        self.assertFalse(any(c["app"] for c in cs.values()))
+        self.assertEqual({c["app"] for c in cs.values()}, {False})
+        self.assertEqual(next(c for c in cs.values() if "The bound" in c["title"])["level"], 3)
 
 
 class FormatStability(unittest.TestCase):
@@ -246,24 +220,6 @@ class AppendixAncestry(unittest.TestCase):
         </article>""")
         self.assertEqual([(cid, cs[cid]["app"]) for cid in ("A1", "S1", "A2")],
                          [("A1", True), ("S1", False), ("A2", True)])
-
-
-class SemanticAncestry(unittest.TestCase):
-    def test_after_an_appendix_heading_a_plain_sibling_stays_body(self):
-        # the same trap through semantic.normalize: an appendix heading, then a plain one at the same depth
-        cs = chunks_of(normalized("""
-        <h2>Results</h2><p>Body text.</p>
-        <h2>Appendix A: Proofs</h2><p>Proof text.</p>
-        <h2>NeurIPS Checklist</h2><p>Answered yes.</p>
-        <h3>Inside the checklist</h3><p>Still body.</p>
-        """))
-        app = {c["title"]: c["app"] for c in cs.values()}
-        proofs = next(t for t in app if "Derivations" in t or "Proofs" in t)
-        check = next(t for t in app if "Checklist" in t)
-        inside = next(t for t in app if "Inside the checklist" in t)
-        self.assertTrue(app[proofs])
-        self.assertFalse(app[check])
-        self.assertFalse(app[inside])   # and the checklist's own subsection stays body too
 
 
 if __name__ == "__main__":

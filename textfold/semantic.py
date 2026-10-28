@@ -38,10 +38,6 @@ ABSTRACT = re.compile(r"^(abstract|summary|tl;?dr|摘要|概要|zusammenfassung|
 REFERENCES = re.compile(r"^(references|bibliography|works cited|literature( cited)?|sources|参考文献|參考文獻|"
                         r"literatur(verzeichnis)?|références|referencias|bibliografia|riferimenti( bibliografici)?|"
                         r"список литературы|литература)$", re.I)
-# a heading that names an appendix, in so many words (LaTeXML says it with the ltx_appendix class, JATS with <app>;
-# the other sources only have the words). Supplementary material is its own thing, and a bare letter is nothing.
-APPENDIX = re.compile(r"^\s*(?:appendix(?:es)?|appendices|annexe?s?|apéndices?|apêndices?|appendici|appendice|"
-                      r"anhänge|anhang|приложени[ея]|부록)\b|^\s*(?:附录|附錄|付録)", re.I)
 
 
 def normalize(html, resolve_img=None, sizes=False):
@@ -699,10 +695,10 @@ def _sections(soup, art, blocks):
                 if b.get("id"):   # a source's own id for the section (JATS: <sec id="sec2">), which its links use
                     anchors[b["id"]] = sid
                 cls = SECTION_CLASS[depth]
-                # an appendix: the source said so (JATS's <app> reaches the heading as ltx_title_appendix), the
-                # heading says so, or the section this one sits in is one
-                if ("ltx_title_appendix" in (b.get("class") or []) or APPENDIX.match(text)
-                        or "ltx_appendix" in (stack[-1][1].get("class") or [])):
+                # an appendix where the source says so (JATS's <app> reaches the heading as ltx_title_appendix), not
+                # where a heading's words seem to. Its subsections sit inside it, as parse.in_appendix finds them;
+                # the class on them would take their level (SECTION_LEVEL: ltx_appendix is a section's)
+                if "ltx_title_appendix" in (b.get("class") or []):
                     cls = [cls, "ltx_appendix"]
                 sec = soup.new_tag("section", attrs={"class": cls, "id": sid})
             h = soup.new_tag(f"h{rank}", attrs={"class": "ltx_title ltx_title_section"})
