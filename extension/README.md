@@ -3,7 +3,7 @@
 A button that sends the page you are reading to TextFold on this computer, as you see it: signed in, past a paywall
 you pay for, drawn by the page's scripts, with what it keeps in shadow roots and frames. Its article is read in the
 browser the way reading views read a page (Defuddle, Obsidian's Web Clipper's, and Readability, Firefox's: in
-vendor/), and TextFold folds it. Status: a first version (docs/web-capture.md); not in the Chrome Web Store yet.
+vendor/), and TextFold folds it. Status: in TextFold 0.10.40; on its way to the Chrome Web Store (docs/web-capture.md).
 
 ## Use it (Chrome, Edge, Brave)
 

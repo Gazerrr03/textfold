@@ -1,6 +1,6 @@
 # A page from the reader's own browser
 
-Status: a first version (branches `capture`, `reader-mode`, then `extension-store`), tried locally. Not in a release.
+Status: in TextFold 0.10.40; the extension on its way to the Chrome Web Store (lkfemlafmabkdjedldmjebdpccdaeglf).
 
 TextFold fetches a web page without running its scripts and without the reader's sign-in. That misses a page the
 reader can read and TextFold cannot: signed in, past a paywall they pay for, behind a bot wall (Medium, Stack

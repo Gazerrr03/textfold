@@ -21,7 +21,7 @@
 
 **粘贴链接：** 任意网页 · arXiv · PubMed Central · bioRxiv · medRxiv · 维基百科 · GitHub<br>
 **拖入文件（一个或多个）：** PDF · Word · PowerPoint · Excel · EPUB · HTML · CSV · 图片 · Markdown · 纯文本<br>
-**接上你的工具：** [Claude Code](#在-claude-code-和-pi-里) · [Pi](#在-claude-code-和-pi-里) · [Zotero](#直接读你的-zotero) · [Obsidian](#接上你的-obsidian)
+**接上你的工具：** [Claude Code](#在-claude-code-和-pi-里) · [Pi](#在-claude-code-和-pi-里) · [Zotero](#直接读你的-zotero) · [Obsidian](#接上你的-obsidian) · [浏览器](#在浏览器里用)
 
 **[试用演示 →](https://chenxiachan.github.io/textfold/gallery/)** 或者 **[下载软件 ↓](#开始使用)** · [最新 ↓](#最新)
 
@@ -104,6 +104,16 @@ Agent 写的，总比你有空读的多。一个 [Claude Code mod](https://code.
 2. **打开 TextFold**（app，或者 `python3 -m textfold serve`），用插件的时候它要开着。需要 TextFold 0.10.18 或更新的版本，插件只通过 127.0.0.1 和它通信。
 3. **在 Obsidian 里：** **设置 › 第三方插件 › 关闭安全模式 › 浏览**，搜 **TextFold Bridge**，然后**安装**、**启用**。
 4. **用的是桌面版 app 的话，** 建议把 **设置 › TextFold Bridge › Links › Open links in** 改成 **TextFold app**，默认是用浏览器打开。
+
+## 在浏览器里用
+
+Chrome、Edge 和 Brave 上的一个按钮，把你正在读的网页按你看到的样子发给 TextFold：登录后的、你付费订阅的、由网页脚本画出来的、放在框架里的内容都一样。浏览器像阅读模式那样找出正文（用 Obsidian Web Clipper 的 Defuddle 和 Firefox 的 Readability），保留标题、图、公式、脚注和参考文献，再由 TextFold 折叠。TextFold 正在运行时，阅读器会在网页旁边打开，各层随即开始生成。
+
+1. **安装 TextFold**，打开一次：App 每次启动都会自动连上浏览器。用 Python 包的话，运行一次 `python3 -m textfold capture install`。
+2. **添加按钮。** 它正在上架 Chrome 网上应用店。在那之前，打开 `chrome://extensions`，打开 **开发者模式**，点 **加载未打包的扩展程序**，选克隆下来的 [extension/](https://github.com/chenxiachan/textfold/tree/main/extension) 文件夹。
+3. **在任何网页上点它。** 按钮上出现 ✓，说明网页已存进文献库。浏览器连不上 TextFold 时，按钮会打开一页，说明该怎么做。
+
+按钮只在你点它时读取网页，只交给本机的 TextFold，不交给任何别处（[隐私政策](https://chenxiachan.github.io/textfold/privacy.html#zh)）。原理见 [docs/web-capture.md](https://github.com/chenxiachan/textfold/blob/main/docs/web-capture.md)。
 
 ## 开始使用
 
@@ -264,16 +274,17 @@ pi install ./textfold/plugins/pi-textfold
 
 ## 最新
 
+- **2026 年 10 月 28 日：浏览器里的按钮。** 在 Chrome、Edge 或 Brave 里点一下，就把正在读的网页按你看到的样子发给 TextFold，登录后、订阅后、由脚本画出来的内容都一样，阅读器在网页旁边打开。正文在浏览器里像阅读模式那样找出来，保留标题、图、公式和脚注：ScienceDirect 上的一篇论文保留了 32 个标题和 9 张图。App 每次启动都会自动连上浏览器，按钮正在上架 Chrome 网上应用店。另外，论文的每一节都知道自己是不是附录，依据是论文本身的标记。感谢 [@minatomugino864-lgtm](https://github.com/minatomugino864-lgtm)。[在浏览器里用 ↑](#在浏览器里用)
 - **2026 年 10 月 27 日：标签留作标签。** 不属于正文论述的一行，比如“Keywords:”、PDF 引擎读成正文的标题、作者的地址或日期，在每一层都保留原文。以前模型会为它写一句话，比这一行本身还长（“Section one is the Introduction.”）；现在它照原样留着。已经生成过的文档，在语言菜单里选 **重新生成** 后就会这样显示。
 - **2026 年 10 月 27 日：WorkBuddy 5.8、会走的进度，存下的网页读出正文。** WorkBuddy 5.8 带了一个精简版的 CodeBuddy，TextFold 现在按 WorkBuddy 自己的方式运行它。这个精简版的登录只供 WorkBuddy 自己使用，所以 TextFold 用不了时会直接说明，并告诉你怎么办：单独安装 CodeBuddy 并在那里登录，TextFold 就会用它。生成时每一节回来就计一节，不会再因为一节慢就停在 0。存下的网页如果唯一的 `<article>` 是广告，或者读者评论比文章还长，现在读到的是文章本身。编号列表折叠后保留编号。感谢 [@HamiltonZeng](https://github.com/HamiltonZeng)、[@Yanksi](https://github.com/Yanksi)、[@Nombah501](https://github.com/Nombah501) 和 [@minatomugino864-lgtm](https://github.com/minatomugino864-lgtm)。
 - **2026 年 10 月 26 日：提问从全文回答，网页的脚注单独保留，下载会再试。** 对一段话或整篇提问时，模型拿到的是全文，不只是那一段和几段与问题用词相同的段落，所以能用上远处换了说法讲同一件事的部分。太长放不下的文本仍按原来的方式提问。鼠标指向编号才显示脚注和参考文献的网页，现在把它们保留为脚注，用网页自己的标记，不再把内容混进正文的句子：全文层读起来和网页一样。下载中断或服务器忙时会再试，试了五次仍不行，TextFold 会说明连不上哪个网站，并给出 **继续**。“放在这里”的提示在文件移出窗口时立刻消失。感谢 [@RocStone](https://github.com/RocStone)、[@QZGao](https://github.com/QZGao)、[@minatomugino864-lgtm](https://github.com/minatomugino864-lgtm) 和 [@QAbot-zh](https://github.com/QAbot-zh)。
-- **2026 年 10 月 25 日：公式和表格像 Typora 那样显示。** Markdown 文档里的公式由 KaTeX 排版，字体和间距与 TeX 一致。单独成行的公式按 Typora 的方式在右边编号 (1)、(2)：`\tag{A}` 给出它自己的编号，`\notag` 和带星号的环境不编号，`\eqref{…}` 显示 `\label{…}` 那条公式的编号，点它就跳过去。多行的公式（`aligned`）分行显示。论文里的公式改用 LaTeX 的字体 Latin Modern Math。来自 Markdown、网页或文档的表格，每一格都有边框，隔行有底色。单独成行的公式也能像文字一样选中，用来高光、写笔记或提问；也能像段落一样用左边的手柄拖出去，带着编号和指回原处的链接。书库里已有的 Markdown 文档也会这样显示，层级和笔记都保持原样。
-- **2026 年 10 月 25 日：文档用它自己的语言，提问可以上网查，加入泰语。** 文档的各层级用它本身的语言写，语言菜单也用这个名字：中文文档显示为“简体中文”，用中文读时不再让模型把它再翻译成中文一遍。英文和其他语言一样，是一份翻译。提问时打开 **上网查找**，本机的 Agent（Claude Code、Codex、CodeBuddy，或装了网页扩展的 Pi）会搜索、打开网页来回答，用到的网页附上链接；它不会改动任何文件。在设置里选好的文献库文件夹会立刻保存。泰语加入可读的语言。感谢 [@mingrath1](https://github.com/mingrath1)、[@MacMillan1225](https://github.com/MacMillan1225)、[@RocStone](https://github.com/RocStone) 和 [@QAbot-zh](https://github.com/QAbot-zh)。
-- **2026 年 10 月 25 日：在文中查找，画出图表，文献库放在你选的文件夹。** ⌘F（Ctrl+F）在文中查找：查当前层级显示的文字，也查这一层折叠掉的原文，跳到这样一处时，那一段原地展开到全文。Markdown 文件或网页里用 Mermaid 写的图会画出来，页面是浅色就画成浅色，是深色就画成深色。在设置的 **文献库位置** 里，可以把文献库复制到另一个文件夹，以后用那里的；也可以打开一个文件夹里已有的文献库。TextFold 下次启动时切换，原来那份文献库保持原样。感谢 [@adalach](https://github.com/adalach)、[@Yanksi](https://github.com/Yanksi) 和 [@kvistgaard](https://github.com/kvistgaard)。
 
 <details>
 <summary>更早</summary>
 
+- **2026 年 10 月 25 日：公式和表格像 Typora 那样显示。** Markdown 文档里的公式由 KaTeX 排版，字体和间距与 TeX 一致。单独成行的公式按 Typora 的方式在右边编号 (1)、(2)：`\tag{A}` 给出它自己的编号，`\notag` 和带星号的环境不编号，`\eqref{…}` 显示 `\label{…}` 那条公式的编号，点它就跳过去。多行的公式（`aligned`）分行显示。论文里的公式改用 LaTeX 的字体 Latin Modern Math。来自 Markdown、网页或文档的表格，每一格都有边框，隔行有底色。单独成行的公式也能像文字一样选中，用来高光、写笔记或提问；也能像段落一样用左边的手柄拖出去，带着编号和指回原处的链接。书库里已有的 Markdown 文档也会这样显示，层级和笔记都保持原样。
+- **2026 年 10 月 25 日：文档用它自己的语言，提问可以上网查，加入泰语。** 文档的各层级用它本身的语言写，语言菜单也用这个名字：中文文档显示为“简体中文”，用中文读时不再让模型把它再翻译成中文一遍。英文和其他语言一样，是一份翻译。提问时打开 **上网查找**，本机的 Agent（Claude Code、Codex、CodeBuddy，或装了网页扩展的 Pi）会搜索、打开网页来回答，用到的网页附上链接；它不会改动任何文件。在设置里选好的文献库文件夹会立刻保存。泰语加入可读的语言。感谢 [@mingrath1](https://github.com/mingrath1)、[@MacMillan1225](https://github.com/MacMillan1225)、[@RocStone](https://github.com/RocStone) 和 [@QAbot-zh](https://github.com/QAbot-zh)。
+- **2026 年 10 月 25 日：在文中查找，画出图表，文献库放在你选的文件夹。** ⌘F（Ctrl+F）在文中查找：查当前层级显示的文字，也查这一层折叠掉的原文，跳到这样一处时，那一段原地展开到全文。Markdown 文件或网页里用 Mermaid 写的图会画出来，页面是浅色就画成浅色，是深色就画成深色。在设置的 **文献库位置** 里，可以把文献库复制到另一个文件夹，以后用那里的；也可以打开一个文件夹里已有的文献库。TextFold 下次启动时切换，原来那份文献库保持原样。感谢 [@adalach](https://github.com/adalach)、[@Yanksi](https://github.com/Yanksi) 和 [@kvistgaard](https://github.com/kvistgaard)。
 - **2026 年 10 月 24 日：高光分深浅；印地语按印地语来读。** 高光仍是划它的那一层的颜色，再分浅、中、深三档：在选中文字上方的工具条里点 **高光** 旁边的圆点，或者打开笔记再改。**Aa** 里每一层的颜色可以从八种里选。把主题卡片拖进笔记时，标题下面的摘要也一起带过去。印地语的词不再被拆开，句子在 danda（।）处结束。公式里 `\text{}` 中的文字照原样显示（50% off，而不是 `50\% off`），Word 公式里的普通文本也不会再让整个公式出错。Markdown 文档的 front matter 按 Quarto 的写法给出作者，不再把作者单位当成作者。Python 包在 Python 3.9、3.10 和 3.11 上又能启动了。感谢 [@vcdim](https://github.com/vcdim)、[@Pharex38](https://github.com/Pharex38) 和 [@adalach](https://github.com/adalach)。
 - **2026 年 10 月 23 日：链接一直指得准；Windows 上找得到 WorkBuddy。** 段落和章节的 id 在文档的整个生命周期里都不变：改了文字、PDF 重新转换、TextFold 升级以后都一样。所以从 Obsidian 或笔记里点过来的链接，还能打开原来的地方。指向已经不在文中的段落的链接，会打开它原来所在的章节，并提示一句。在 Windows 上，WorkBuddy 5.8 又能找到了，装在哪个盘都行。感谢 [@adalach](https://github.com/adalach) 和 [@LyotoDS](https://github.com/LyotoDS)。
 - **2026 年 10 月 23 日：划了什么就亮什么。** 在关键句和要点层划的高光，选中的字全部亮起，模型写的词也亮。以前只亮由原文来的词，只选了模型的话时一个都不亮。每层一种颜色：全文和简述是黄色，关键句是紫色，要点是蓝色。层与层不再互相点亮，**保留我的高光** 照旧把原文的高光带到关键句和要点层。笔记框里按 Enter 保存并关闭，Shift+Enter 换行（手机上按 Enter 换行）。换一篇文档时不再重新下载应用的脚本和样式，在服务器上部署、用手机读时最明显。感谢 [@adalach](https://github.com/adalach) 和 [@LumenYoung](https://github.com/LumenYoung)。
