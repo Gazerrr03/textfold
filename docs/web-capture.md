@@ -1,6 +1,6 @@
 # A page from the reader's own browser
 
-Status: a first version (branches `capture`, then `reader-mode`), tried locally. Not in a release.
+Status: a first version (branches `capture`, `reader-mode`, then `extension-store`), tried locally. Not in a release.
 
 TextFold fetches a web page without running its scripts and without the reader's sign-in. That misses a page the
 reader can read and TextFold cannot: signed in, past a paywall they pay for, behind a bot wall (Medium, Stack
@@ -14,14 +14,14 @@ the reader clicks TextFold's button  ->  extension/background.js
   asks the page's MathJax, in the page's own world, for each formula's source (mathSources)
   runs extension/snapshot.js in the tab's frames (activeTab, scripting)
   reads the snapshot's article in the tab, as reading views do (extension/reader.js: Defuddle and Readability)
-  sends {format: textfold/snapshot, url, title, html, read, taken} by native messaging
+  sends {format: textfold/snapshot, version, url, title, html, read, taken} by native messaging
 the browser starts TextFold's host  ->  python3 -m textfold capture-host (textfold/capture.py)
-  checks it (a web page's address, a page, at most 64 MB)
+  checks it (a web page's address, a page, at most 64 MB, a make of message it knows)
   stores it as a web page of the library: web-<host>-<hash>, snapshot.html beside it, never over a page already there;
     its article the reading view's (webpage.view_of, read_view; article.html beside it), else TextFold's own reading
   asks the TextFold that runs for its levels, in the reader's language, as its landing does
   answers {ok, paper, new, open, job}: open is the reader's address when TextFold is running (server.json)
-the extension shows ✓ (or ! and why) and opens the reader beside the page
+the extension shows ✓ (or ! and why) and opens the reader beside the page; no TextFold to reach: setup.html
 ```
 
 The snapshot (`extension/snapshot.js`): shadow roots spelled out, closed ones too (`chrome.dom.openOrClosedShadowRoot`,
@@ -57,6 +57,30 @@ formulas are kept where TextFold's own reading lost them (transformer-circuits: 
 one figure (goodfire's) keeps few of them, sspai's news digest takes a quarter more words than its article, and a
 paywall's teaser seen without a subscription (The New Yorker's) is read as the other text on its page.
 
+## Reaching TextFold
+
+The browser starts a native messaging host by its manifest, which names the program and the extensions it lets in.
+On macOS and Linux the manifest is a file in each browser's folder for it; on Windows it is one file, which a key of the
+registry names for each browser (HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\app.textfold.capture,
+and Edge's, Chromium's, Brave's). The program is a launcher in ~/.textfold: a shell script, or on Windows a batch
+file, which cmd.exe reads in the console's code page rather than UTF-8, so the reader's own folders in it are written
+as %LOCALAPPDATA%, %APPDATA% and %USERPROFILE% (a user name in Chinese would otherwise be lost).
+
+The desktop app registers the host each time it starts (`capture install --app`), with its own Python, run as it runs
+its server (its own packages alone, UTF-8) and under its name for its runtime, which says where the library was moved
+to in Settings: wherever the app was moved, and whichever version it is now, the browser starts that copy. A copy of
+the app not yet moved out of the Downloads folder (a Mac's App Translocation, gone when it quits) does not register.
+TextFold from pip registers once, by hand. Every install lets in the extension as the store gives it (`STORE`, its id
+fixed by the key in extension/manifest.json, so that a copy loaded unpacked has it too) and keeps the extensions a
+manifest written before let in.
+
+Each message says the make it is of (`version`, capture.py's `PROTOCOL`): a newer one than this TextFold knows is
+refused with `update-textfold`. A hello (`textfold/hello`) is answered with TextFold's version, its make of message,
+and whether it runs. When the browser cannot reach the host (no manifest, a manifest that does not let this extension
+in, a program that did not run) or TextFold is older, the extension opens a page of its own that says what to do, in
+the browser's language, and asks again (setup.html, also its options); it opens once the extension is installed, when
+no TextFold answers.
+
 ## Why this way
 
 - **Only an extension reaches the session the reader is using.** Since Chrome 136 the remote-debugging port no
@@ -72,19 +96,22 @@ paywall's teaser seen without a subscription (The New Yorker's) is read as the o
 
 ## Tried
 
-`tools/capture_e2e.py`: the extension in Playwright's Chromium, its host registered in that browser's own profile,
-pages served locally: a subscriber's article (a cookie; without it, a teaser too short to read), a page drawn by its
+`tools/capture_e2e.py`: the extension in Playwright's Chromium; before its host is registered, setup.html opened once
+it is installed and again by a click, saying what to do; then the host registered in that browser's own profile as the
+app registers it, setup.html saying it answers, and pages served locally: a subscriber's article (a cookie; without it, a teaser too short to read), a page drawn by its
 script, text in an open and in a closed shadow root with a hidden note on a mark, a page in a frame, a publisher's
 article as Elsevier draws one, formulas MathJax 4 drew, the same page again (not written over), and the reader opened
 beside the page while TextFold runs, its levels asked for. `tests/test_capture.py` and `tests/extension.test.cjs`
-hold the rest without a browser.
+hold the rest without a browser; among them the app's launcher run as the browser runs it, a hello in and TextFold's
+answer out, which the app's build runs with the Python it ships on each system (on Windows by cmd.exe, as Chrome starts
+a batch file, its key in the registry read back).
 
 ## Not yet
 
-- Windows (the host is registered in the registry there) and the desktop app registering the host itself, with its
-  own Python, when it starts.
-- The extension in the Chrome Web Store (its id fixed), Firefox (`browser.runtime.connectNative`, the same host),
-  Safari (an extension inside a signed app).
+- The extension in the Chrome Web Store: its id (`STORE`, the manifest's key) once its item is made. Edge's Add-ons
+  give an id of their own, to let in beside it. Firefox (`browser.runtime.connectNative`, the same host, its manifest
+  naming allowed_extensions), Safari (an extension inside a signed app).
+- Chrome on Windows itself: the registry and the batch file are tried by the tests, not yet by a browser there.
 - A page read again: a newer snapshot of a page already in the library (kept beside the old, or replacing it).
 - Deciding whether a page is an article at all (a feed, a front page) before reading it.
 - A page sent while TextFold is not running: its levels wait until it is opened and asked for.

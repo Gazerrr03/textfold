@@ -5,20 +5,33 @@ you pay for, drawn by the page's scripts, with what it keeps in shadow roots and
 browser the way reading views read a page (Defuddle, Obsidian's Web Clipper's, and Readability, Firefox's: in
 vendor/), and TextFold folds it. Status: a first version (docs/web-capture.md); not in the Chrome Web Store yet.
 
-## Try it (Chrome, Edge, Brave; macOS or Linux)
+## Use it (Chrome, Edge, Brave)
 
-1. Open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick this folder.
-2. Copy the extension's id from its card (32 letters).
-3. Let it reach TextFold:
+1. Install TextFold for macOS or Windows (https://chenxiachan.github.io/textfold/) and open it once. Each time it
+   starts, it registers the program the browser starts to reach it (TextFold's native messaging host,
+   `app.textfold.capture`) for your user, with its own Python, and lets the extension in.
+   With TextFold from pip instead (Linux too): `python3 -m textfold capture install`, once.
+2. Add the extension. Until it is in the store: open `chrome://extensions`, turn on **Developer mode**, choose
+   **Load unpacked** and pick this folder.
+3. On any page, click the TextFold button. A ✓ on it says the page is in your library; when TextFold is running, its
+   reader opens beside the page. A ! says why not (hover the button). When the browser cannot reach TextFold (not
+   installed, older than the extension, moved since it last ran), a page of the extension says what to do and checks
+   again (setup.html; also the extension's options).
 
-   ```bash
-   python3 -m textfold capture install --extension <id>
-   ```
+Its words are in the browser's language when TextFold's own interface has it (`_locales`), else in English.
 
-   This writes the manifest of TextFold's native messaging host (`app.textfold.capture`) where each browser looks
-   for it, for your user, and allows that extension alone.
-4. On any page, click the TextFold button. A ✓ on it says the page is in your library; when TextFold is running, its
-   reader opens beside the page. A ! says why not (hover the button).
+## A copy of your own
+
+The store's extension is let in by every install. A copy loaded unpacked has the store's id once the manifest holds the
+store's key (`key`, the public half: what the store's dashboard shows); a copy without it has an id of its own (its card
+in `chrome://extensions`), let in with
+
+```bash
+python3 -m textfold capture install --extension <id>
+```
+
+An install keeps the extensions a manifest written before let in. `python3 tools/pack_extension.py` makes the zip the
+stores take (dist/textfold-extension-<version>.zip): this folder without README.md and without the key.
 
 ## What it asks for
 
@@ -27,7 +40,7 @@ vendor/), and TextFold folds it. Status: a first version (docs/web-capture.md); 
 - `scripting`: to run its own `snapshot.js` and `reader.js` in that tab, and to ask the page's MathJax, if it has
   one, for the source of each formula it drew. It runs no code it did not ship with.
 - `nativeMessaging`: to hand the page to TextFold through the browser. No port is opened on this computer, and only
-  this extension can reach TextFold's host.
+  the extensions TextFold lets in can reach it.
 
 Your cookies stay in the browser: what is sent is the page as it was drawn. It goes to your library on this computer
-and nowhere else.
+and nowhere else. TextFold writes its levels with the model you chose in its settings, as for any other document.

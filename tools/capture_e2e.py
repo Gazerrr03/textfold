@@ -1,7 +1,9 @@
 """The browser's button end to end (extension/, textfold/capture.py): the extension loaded in Playwright's Chromium, pages
-served here, TextFold's native host registered in that browser's own profile, six pages sent and read (a publisher's
-article by the reading views of reader.js), and the levels of one asked of a TextFold standing in as running. Nothing
-here touches the reader's own browser, settings or library.
+served here; before TextFold's native host is registered, the page that says what to do (setup.html), opened once the
+extension is installed and again by a click; then the host registered in that browser's own profile, as the app
+registers it, the page saying it answers, six pages sent and read (a publisher's article by the reading views of
+reader.js), and the levels of one asked of a TextFold standing in as running. Nothing here touches the reader's own
+browser, settings or library.
 
     python3 tools/capture_e2e.py <repo> <a scratch folder>     (playwright installed)
 """
@@ -101,7 +103,18 @@ with sync_playwright() as p:
     sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker")
     ext_id = sw.url.split("/")[2]
     print("extension:", ext_id)
-    print("host manifest:", capture.install([ext_id], dirs={"chromium": prof / "NativeMessagingHosts"}, home=home))
+    for _ in range(40):   # (installed, no TextFold yet: the page that says what to do opens by itself)
+        if any("setup.html" in x.url for x in ctx.pages): break
+        sw.evaluate("() => new Promise((r) => setTimeout(r, 250))")   # (a wait in which Playwright hears of new pages)
+    print("installed, no TextFold ->", [x.url.split("/")[-1] for x in ctx.pages if "setup.html" in x.url])
+    pg, reply = send(ctx, sw, "/article?before=install")
+    pg.wait_for_timeout(400)
+    print("clicked, no TextFold ->", reply, "| tabs:", [x.url.split("/")[-1] for x in ctx.pages if "setup.html" in x.url])
+    setup = ctx.pages[-1]; setup.wait_for_timeout(600)
+    print("  the page says:", setup.eval_on_selector("#state", "e => [e.dataset.state, document.getElementById('title').textContent, document.getElementById('steps').children.length]"))
+    print("host manifest:", capture.install([ext_id], dirs={"chromium": prof / "NativeMessagingHosts"}, home=home, app=True))
+    setup.click("#check"); setup.wait_for_timeout(1500)
+    print("  checked again:", setup.eval_on_selector("#state", "e => [e.dataset.state, document.getElementById('text').textContent]"))
     ctx.add_cookies([{"name": "session", "value": "reader", "url": base}])
     results = {}
     for path in ("/article", "/drawn", "/shadow", "/framed", "/press", "/mathjax"):

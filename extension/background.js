@@ -1,9 +1,19 @@
 // TextFold's button in the browser: the page in the tab, as its reader sees it (snapshot.js, in each frame the tab
 // lets it into), and its article as reading views read it (reader.js, on that snapshot), sent to TextFold on this
 // computer by native messaging (textfold/capture.py). The extension asks for the tab only when the reader clicks
-// (activeTab): no page is read otherwise, and no port is opened on this computer.
-const HOST = 'app.textfold.capture';
+// (activeTab): no page is read otherwise, and no port is opened on this computer. When TextFold cannot be reached
+// (not installed, too old to let this extension in, its helper gone), a page of the extension says what to do
+// (setup.html); its words, and the button's, are in the browser's language (_locales).
+importScripts('connect.js');   // (HOST, PROTOCOL, unreachable, reach: setup.html's too)
 const READERS = ['vendor/defuddle/defuddle.js', 'vendor/readability/Readability.js', 'reader.js'];
+const say = (key, subs) => (chrome.i18n && chrome.i18n.getMessage(key, subs)) || key;
+// TextFold's errors the reader can do something about, in the reader's words; the rest as TextFold said them
+const ERRORS = { 'web-notext': 'err_notext', 'not-a-web-page': 'err_notweb', 'no-page': 'err_nopage', 'update-textfold': 'err_update' };
+
+function setup(why, tab) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(`setup.html#${why}`), ...(tab ? { index: tab.index + 1 } : {}) });
+}
+
 
 const badge = (tabId, text, color) => {
   chrome.action.setBadgeText({ tabId, text });
@@ -66,6 +76,7 @@ async function readings(tabId, html, url) {
 
 async function capture(tab) {
   badge(tab.id, '…', '#6b6f76');
+  chrome.action.setTitle({ tabId: tab.id, title: say('sending') });
   try {
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, world: 'MAIN', func: mathSources });
@@ -75,21 +86,40 @@ async function capture(tab) {
     if (!top || !top.html) throw new Error('no-page');
     const frames = got.filter((r) => r.frameId !== 0 && r.result && r.result.html).map((r) => r.result);
     const html = withFrames(top, frames);
-    const reply = await chrome.runtime.sendNativeMessage(HOST, {
-      format: 'textfold/snapshot', version: 1, url: top.url, title: top.title, html,
-      read: await readings(tab.id, html, top.url), taken: new Date().toISOString(), how: 'extension',
-    });
-    if (!reply || !reply.ok) throw new Error((reply && reply.error) || 'no-reply');
+    const message = { format: 'textfold/snapshot', version: PROTOCOL, url: top.url, title: top.title, html,
+                      read: await readings(tab.id, html, top.url), taken: new Date().toISOString(), how: 'extension' };
+    let reply;
+    try {
+      reply = await chrome.runtime.sendNativeMessage(HOST, message);
+    } catch (e) {
+      const why = unreachable(e && e.message);
+      if (why) { setup(why, tab); throw new Error(why); }
+      throw e;
+    }
+    if (!reply || !reply.ok) {
+      if (reply && reply.error === 'update-textfold') setup('update', tab);
+      throw new Error((reply && reply.error) || 'no-reply');
+    }
     badge(tab.id, '✓', '#3f7d52');
+    chrome.action.setTitle({ tabId: tab.id, title: say(!reply.open ? 'saved_closed' : reply.new === false ? 'already' : 'saved') });
     if (reply.open) chrome.tabs.create({ url: reply.open, index: tab.index + 1 });
     return reply;
   } catch (e) {
+    const code = e && e.message;
     badge(tab.id, '!', '#b3412e');
-    chrome.action.setTitle({ tabId: tab.id, title: `TextFold: ${e.message}` });
-    return { ok: false, error: e.message };
+    const said = ERRORS[code] ? say(ERRORS[code]) : ['missing', 'forbidden', 'exited'].includes(code) ? say('err_setup') : say('err_other', [String(code)]);
+    chrome.action.setTitle({ tabId: tab.id, title: `TextFold: ${said}` });
+    return { ok: false, error: code };
   }
 }
 
 chrome.action.onClicked.addListener(capture);
+// once installed, a reader who has no TextFold yet (or one that does not let this extension in) is told what to do
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== 'install') return;
+  const { why } = await reach();
+  if (why) setup(why);
+});
 self.capture = capture;   // (TextFold's tests call it as a click would, and mathSources on pages of their own)
 self.mathSources = mathSources;
+self.reach = reach;   // (and setup.html's check)

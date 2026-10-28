@@ -217,20 +217,134 @@ class ReadingView(unittest.TestCase):
 
 
 class Install(unittest.TestCase):
+    EXT = "hgmpkjklkepgaeppbpaphfjpkicgicbb"
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        p = mock.patch.object(store, "DATA", self.tmp / "data")
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_only_the_extensions_named(self):
-        ext = "hgmpkjklkepgaeppbpaphfjpkicgicbb"
-        with tempfile.TemporaryDirectory() as tmp:
-            out = capture.install([ext], dirs={"chrome": Path(tmp) / "c", "edge": Path(tmp) / "e"}, home=Path(tmp) / "home")
-            self.assertEqual(len(out), 2)
-            m = json.loads(out[0].read_text())
-            self.assertEqual((m["name"], m["type"], m["allowed_origins"]), (capture.HOST, "stdio", [f"chrome-extension://{ext}/"]))
-            launcher = Path(m["path"]).read_text()
-            self.assertIn("-m textfold capture-host", launcher)
-            self.assertTrue(os.access(m["path"], os.X_OK))
-            self.assertEqual(len(capture.install([ext], ["edge"], dirs={"chrome": Path(tmp) / "c", "edge": Path(tmp) / "e"}, home=Path(tmp) / "home")), 1)
+        tmp, ext = self.tmp, self.EXT
+        out = capture.install([ext], dirs={"chrome": tmp / "c", "edge": tmp / "e"}, home=tmp / "home")
+        self.assertEqual(len(out), 2)
+        m = json.loads(out[0].read_text())
+        self.assertEqual((m["name"], m["type"], m["allowed_origins"]), (capture.HOST, "stdio", [f"chrome-extension://{ext}/"]))
+        launcher = Path(m["path"]).read_text()
+        self.assertIn("-m textfold capture-host", launcher)
+        self.assertTrue(os.access(m["path"], os.X_OK) or os.name == "nt")
+        self.assertEqual(len(capture.install([ext], ["edge"], dirs={"chrome": tmp / "c", "edge": tmp / "e"}, home=tmp / "home")), 1)
         for bad in ([], ["not-an-id"], ["HGMPKJKLKEPGAEPPBPAPHFJPKICGICBB"]):
             with self.assertRaisesRegex(ValueError, "32 letters"):
-                capture.install(bad, dirs={"chrome": "/nowhere"})
+                capture.install(bad, dirs={"chrome": tmp / "none"})
+
+    def test_the_store_s_extension_and_those_let_in_before(self):
+        tmp, mine, store_id = self.tmp, self.EXT, "a" * 32
+        dirs = {"chrome": tmp / "c"}
+        capture.install([mine], dirs=dirs, home=tmp / "home")
+        with mock.patch.object(capture, "STORE", (store_id,)):
+            out = capture.install([], dirs=dirs, home=tmp / "home")   # (as the app does: none named)
+        self.assertEqual(json.loads(out[0].read_text())["allowed_origins"], [f"chrome-extension://{e}/" for e in (store_id, mine)])
+
+    def test_the_app_s_host_runs_as_the_app_does(self):
+        out = capture.install([self.EXT], dirs={"chrome": self.tmp / "c"}, home=self.tmp / "home", app=True)
+        launcher = Path(json.loads(out[0].read_text())["path"]).read_text()
+        for said in ("TEXTFOLD_RUNTIME_ID=desktop", "PYTHONNOUSERSITE=1", "PYTHONUTF8=1", " -s -m textfold capture-host"):
+            self.assertIn(said, launcher)
+        self.assertIn(str(store.ROOT), launcher)   # (the app's code, where Python would not look)
+        self.assertIn(str(self.tmp / "data"), launcher)
+
+    def test_what_the_browser_starts_answers(self):
+        """The app's launcher run as the browser runs it (Windows: by cmd.exe, as Chrome starts a batch file), a hello
+        in and TextFold's answer out: the app's build runs this with the Python it ships (desktop/scripts/smoke.py)."""
+        import subprocess
+        from textfold import __version__
+        reg = rf"Software\TextFoldTest{os.getpid()}"
+        if os.name == "nt":
+            self.addCleanup(self._unregister, reg)
+        else:
+            mock.patch.object(capture, "_name_in_registry", lambda key, value: None).start()
+            self.addCleanup(mock.patch.stopall)
+        out = capture.install([self.EXT], home=self.tmp / "home", keys={"chrome": reg + r"\Chrome"}, app=True) if os.name == "nt" else \
+            capture.install([self.EXT], dirs={"chrome": self.tmp / "c"}, home=self.tmp / "home", app=True)
+        path = json.loads(Path(out[0]).read_text())["path"]
+        run = ["cmd.exe", "/d", "/c", path] if os.name == "nt" else [path]
+        r = subprocess.run(run + [f"chrome-extension://{self.EXT}/"], input=framed({"format": "textfold/hello", "version": 1}),
+                           capture_output=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr.decode(errors="replace")[-2000:])
+        self.assertEqual(capture.read_message(io.BytesIO(r.stdout)),
+                         {"ok": True, "textfold": __version__, "protocol": capture.PROTOCOL, "running": False})
+        if os.name == "nt":
+            import winreg
+            self.assertEqual(winreg.QueryValue(winreg.HKEY_CURRENT_USER, reg + rf"\Chrome\{capture.HOST}"), str(out[0]))
+
+    @staticmethod
+    def _unregister(reg):
+        import winreg
+        for key in (rf"{reg}\Chrome\{capture.HOST}", rf"{reg}\Chrome", reg):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except OSError:
+                pass
+
+    def test_on_windows_one_manifest_named_in_each_browser_s_key(self):
+        named = []
+        with mock.patch.object(capture, "_name_in_registry", lambda key, value: named.append((key, value))):
+            out = capture.install([self.EXT], ["chrome", "edge"], home=self.tmp / "home", keys=capture.KEYS)
+        f = self.tmp / "home" / f"{capture.HOST}.json"
+        self.assertEqual(out[0], f)
+        self.assertEqual(named, [(rf"Software\Google\Chrome\NativeMessagingHosts\{capture.HOST}", str(f)),
+                                 (rf"Software\Microsoft\Edge\NativeMessagingHosts\{capture.HOST}", str(f))])
+
+    def test_a_batch_file_names_the_reader_s_folders_by_their_variables(self):
+        with mock.patch.dict(os.environ, {"LOCALAPPDATA": "C:\\Users\\张三\\AppData\\Local", "USERPROFILE": "C:\\Users\\张三"}):
+            self.assertEqual(capture._batch("C:\\Users\\张三\\AppData\\Local\\Programs\\TextFold\\python.exe"),
+                             "%LOCALAPPDATA%\\Programs\\TextFold\\python.exe")
+            self.assertEqual(capture._batch("c:\\users\\张三\\.textfold"), "%USERPROFILE%\\.textfold")
+            self.assertEqual(capture._batch("D:\\100%\\TextFold"), "D:\\100%%\\TextFold")
+
+
+class Versions(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.data = Path(tmp.name)
+        p = mock.patch.object(store, "DATA", self.data)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_a_hello_says_which_textfold_answers(self):
+        from textfold import __version__
+        self.assertEqual(capture.receive({"format": "textfold/hello", "version": 1}),
+                         {"ok": True, "textfold": __version__, "protocol": capture.PROTOCOL, "running": False})
+
+    def test_a_newer_extension_s_message_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "update-textfold"):
+            capture.receive(dict(SNAP, version=capture.PROTOCOL + 1))
+        self.assertFalse((self.data / "papers").exists())
+
+
+class Pack(unittest.TestCase):
+    def test_the_store_s_zip(self):
+        import importlib.util
+        import zipfile
+        spec = importlib.util.spec_from_file_location("pack_extension", store.ROOT / "tools" / "pack_extension.py")
+        pack = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pack)
+        with tempfile.TemporaryDirectory() as tmp:
+            out, n = pack.pack(tmp)
+            with zipfile.ZipFile(out) as z:
+                names = z.namelist()
+                m = json.loads(z.read("manifest.json"))
+            self.assertEqual(out.name, f"textfold-extension-{m['version']}.zip")
+            self.assertNotIn("key", m)
+            self.assertNotIn("README.md", names)
+            self.assertLessEqual(pack.named(m), set(names))
+            self.assertTrue(any(x.startswith("_locales/zh_CN/") for x in names))
+            self.assertEqual(out.read_bytes(), pack.pack(Path(tmp) / "again")[0].read_bytes())   # (the same files, the same zip)
 
 
 if __name__ == "__main__":

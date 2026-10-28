@@ -7,7 +7,7 @@
   python3 -m textfold get <link or file> [--level topic] [--section 3] [--json]   a document at one level (for a person or an agent)
   python3 -m textfold engine status | install | remove              the PDF engine (MinerU, about 3.4 GB)
   python3 -m textfold adapt <url> [--snapshot page.html] [--try recipe.json [--keep]]   a web page read with a recipe
-  python3 -m textfold capture install --extension <id>               the browser's button (extension/) reaches TextFold
+  python3 -m textfold capture install                                the browser's button (extension/) reaches TextFold
 """
 import argparse
 import shutil
@@ -173,12 +173,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "capture":
         ap = argparse.ArgumentParser(prog="python3 -m textfold capture", description="The browser's button (extension/) and TextFold on this computer.")
         ap.add_argument("what", choices=["install"])
-        ap.add_argument("--extension", action="append", required=True, help="the extension's id (chrome://extensions), once or more")
+        ap.add_argument("--extension", action="append", default=[], help="another extension's id (chrome://extensions), once or more: "
+                        "the store's is let in always")
         ap.add_argument("--browser", action="append", choices=["chrome", "chromium", "edge", "brave"], help="only these (default: each)")
+        ap.add_argument("--app", action="store_true", help=argparse.SUPPRESS)   # (the desktop app's, each time it starts: desktop/main.js)
         a = ap.parse_args(sys.argv[2:])
         from . import capture
         try:
-            for f in capture.install(a.extension, a.browser):
+            for f in capture.install(a.extension, a.browser, app=a.app):
                 print(f)
         except ValueError as e:
             _say(str(e))

@@ -158,6 +158,20 @@ function startServer(port) {
   server.stderr.pipe(log);
   server.stdout.on('data', heard);
   server.on('exit', (code) => { server = null; if (code && win && !win.isDestroyed()) win.webContents.send?.('server-exit', code); });
+  registerHost(env, log);
+}
+
+// The browser's button (extension/) reaches TextFold through its native messaging host, which each start registers
+// for this user, with this app's Python, code and library, so that the browser starts this copy of TextFold, wherever
+// the app was moved and whichever version it is now (textfold/capture.py: install --app). A copy run from the code
+// registers only when asked to (TEXTFOLD_REGISTER_HOST), so that no build of the repository takes the installed app's.
+function registerHost(env, log) {
+  if (!app.isPackaged && !process.env.TEXTFOLD_REGISTER_HOST) return;
+  if (process.execPath.includes('/AppTranslocation/')) return;   // (a Mac's copy of an app not yet moved out of Downloads: gone when it quits)
+  const p = spawn(PYTHON, ['-s', '-m', 'textfold', 'capture', 'install', '--app'], { cwd: CODE, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  p.stdout.pipe(log, { end: false });
+  p.stderr.pipe(log, { end: false });
+  p.on('error', () => {});   // (said in the log; the app itself goes on)
 }
 
 async function open() {
