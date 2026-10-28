@@ -108,8 +108,8 @@ a batch file, its key in the registry read back).
 
 ## Not yet
 
-- The extension in the Chrome Web Store: its id (`STORE`, the manifest's key) once its item is made. Edge's Add-ons
-  give an id of their own, to let in beside it. Firefox (`browser.runtime.connectNative`, the same host, its manifest
+- The extension in the Chrome Web Store (its id lkfemlafmabkdjedldmjebdpccdaeglf, `STORE`, given by the manifest's
+  key): its review. Edge's Add-ons give an id of their own, to let in beside it. Firefox (`browser.runtime.connectNative`, the same host, its manifest
   naming allowed_extensions), Safari (an extension inside a signed app).
 - Chrome on Windows itself: the registry and the batch file are tried by the tests, not yet by a browser there.
 - A page read again: a newer snapshot of a page already in the library (kept beside the old, or replacing it).

@@ -41,7 +41,7 @@ PROTOCOL = 1   # the make of the messages this TextFold reads (each message's "v
 MAX = 64 * 2**20   # what a browser sends a native host at most
 # The extension as the stores give it, which every install lets in: its id is fixed by the key in
 # extension/manifest.json, so that a copy loaded unpacked has it too (the Chrome Web Store's; Edge's store gives its own)
-STORE = ()
+STORE = ("lkfemlafmabkdjedldmjebdpccdaeglf",)
 EXTENSION_ID = re.compile(r"[a-p]{32}")
 # where each browser looks for a host's manifest, for this user: a folder on macOS and Linux; on Windows, a key of the
 # registry (HKEY_CURRENT_USER) that names the manifest's file

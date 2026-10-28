@@ -223,9 +223,9 @@ class Install(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
-        p = mock.patch.object(store, "DATA", self.tmp / "data")
-        p.start()
-        self.addCleanup(p.stop)
+        for p in (mock.patch.object(store, "DATA", self.tmp / "data"), mock.patch.object(capture, "STORE", ())):   # (the store's, where a test names it)
+            p.start()
+            self.addCleanup(p.stop)
 
     def test_only_the_extensions_named(self):
         tmp, ext = self.tmp, self.EXT
@@ -325,6 +325,17 @@ class Versions(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "update-textfold"):
             capture.receive(dict(SNAP, version=capture.PROTOCOL + 1))
         self.assertFalse((self.data / "papers").exists())
+
+
+class StoreId(unittest.TestCase):
+    def test_the_manifest_s_key_gives_the_store_s_id(self):
+        """A copy loaded unpacked is the extension every install lets in: Chrome's id is the first 128 bits of the
+        key's SHA-256, its hex digits written a to p."""
+        import base64
+        import hashlib
+        m = json.loads((store.ROOT / "extension" / "manifest.json").read_text(encoding="utf-8"))
+        digest = hashlib.sha256(base64.b64decode(m["key"])).hexdigest()[:32]
+        self.assertEqual("".join(chr(ord("a") + int(c, 16)) for c in digest), capture.STORE[0])
 
 
 class Pack(unittest.TestCase):

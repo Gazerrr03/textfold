@@ -22,9 +22,9 @@ Its words are in the browser's language when TextFold's own interface has it (`_
 
 ## A copy of your own
 
-The store's extension is let in by every install. A copy loaded unpacked has the store's id once the manifest holds the
-store's key (`key`, the public half: what the store's dashboard shows); a copy without it has an id of its own (its card
-in `chrome://extensions`), let in with
+The store's extension (lkfemlafmabkdjedldmjebdpccdaeglf) is let in by every install. A copy of this folder loaded
+unpacked has the same id, given by the manifest's `key` (the public half of the store's, as its dashboard shows it); a
+copy without the key has an id of its own (its card in `chrome://extensions`), let in with
 
 ```bash
 python3 -m textfold capture install --extension <id>
