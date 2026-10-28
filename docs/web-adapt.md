@@ -1,6 +1,6 @@
 # A web page read with a recipe for its site
 
-Status: a first version, tried locally (branch `web-adapt`). Not in a release.
+Status: a first version, in TextFold 0.10.40, for agents (`python3 -m textfold adapt`).
 
 TextFold reads any web page with one generic reader (`webpage.py`: hidden text out, notes made footnotes, the article
 taken out by trafilatura). Some pages it reads badly: a table whose numbers are buttons comes out empty, a chart's
