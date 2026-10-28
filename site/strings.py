@@ -94,6 +94,8 @@ S = {
         '格式'),
     "foot_releases": ('Releases',
         '所有版本'),
+    "foot_privacy": ('Privacy',
+        '隐私'),
     "foot_demo": ('Demo gallery',
         '在线试用'),
     "notes": ('Release notes',
